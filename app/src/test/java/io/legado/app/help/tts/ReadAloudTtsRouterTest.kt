@@ -1,10 +1,13 @@
 package io.legado.app.help.tts
 
+import io.legado.app.data.entities.BookCharacterTtsBinding
 import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReadAloudTtsRouterTest {
@@ -103,6 +106,35 @@ class ReadAloudTtsRouterTest {
                 characterGenderIndex = emptyMap(),
                 globalBindings = defaults
             )
+        )
+    }
+
+    @Test
+    fun bookDialogueBinding_mustMatchCurrentMultiRoleEngine() {
+        val narrator = BookCharacterTtsBinding.narrator("book").apply {
+            engineId = narratorEngine.id
+            voiceId = "narrator_voice"
+        }
+        val current = BookCharacterTtsBinding.character("book", 1L).apply {
+            engineId = dialogueEngine.id
+            voiceId = "male_voice"
+        }
+        val stale = BookCharacterTtsBinding.character("book", 2L).apply {
+            engineId = "old_dialogue_engine"
+            voiceId = "old_voice"
+        }
+
+        assertTrue(
+            ReadAloudTtsRouter.isBookBindingCompatible(narrator, dialogueEngine.id)
+        )
+        assertTrue(
+            ReadAloudTtsRouter.isBookBindingCompatible(current, dialogueEngine.id)
+        )
+        assertFalse(
+            ReadAloudTtsRouter.isBookBindingCompatible(stale, dialogueEngine.id)
+        )
+        assertFalse(
+            ReadAloudTtsRouter.isBookBindingCompatible(current, null)
         )
     }
 

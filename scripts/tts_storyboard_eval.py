@@ -27,7 +27,12 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_FILE = ROOT / "app/src/main/assets/skills/tts_storyboard.md"
+SKILL_ROOT = ROOT / "app/src/main/assets/skills/tts_storyboard"
+MODE_SKILL_FILES = {
+    "basic": SKILL_ROOT / "modes/basic.md",
+    "performance": SKILL_ROOT / "modes/performance.md",
+}
+SCENE_SKILL_FILE = SKILL_ROOT / "modes/performance-scenes.md"
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 DEFAULT_MODEL = "Qwen/Qwen3-8B"
 DEFAULT_OUT_DIR = Path("build/tts_storyboard_eval")
@@ -69,6 +74,7 @@ UNIT_KEYS = {
     "status",
     "confidence",
     "evidence",
+    "performanceContext",
 }
 ROOT_KEYS = {"units", "newCharacters"}
 ROLE_TYPES = {"narrator", "character", "thought", "other"}
@@ -178,6 +184,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-key-env", default="SILICONFLOW_API_KEY")
     parser.add_argument("--out", default=str(DEFAULT_OUT_DIR))
     parser.add_argument("--max-chars", type=int, default=7000)
+    parser.add_argument(
+        "--mode",
+        choices=("basic", "performance"),
+        default="basic",
+        help="Storyboard output mode. Performance mode requires per-unit scene context.",
+    )
+    parser.add_argument(
+        "--scene-pass",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Run a first model pass that supplies explicit full-scene boundaries to performance mode.",
+    )
     parser.add_argument("--max-tokens", type=int)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float)
@@ -217,8 +235,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_system_prompt() -> str:
-    return extract_skill_body(SKILL_FILE.read_text(encoding="utf-8"))
+def build_system_prompt(mode: str) -> str:
+    skill_file = MODE_SKILL_FILES.get(mode)
+    if skill_file is None:
+        raise ValueError(f"unsupported storyboard mode: {mode}")
+    return extract_skill_body(skill_file.read_text(encoding="utf-8"))
 
 
 def extract_skill_body(content: str) -> str:
@@ -238,6 +259,20 @@ def read_text(path: Path) -> str:
         except UnicodeDecodeError:
             continue
     raise UnicodeDecodeError("unknown", data, 0, min(len(data), 32), "unsupported encoding")
+
+
+def load_repo_env() -> None:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value.strip()
 
 
 def split_chapters(text: str) -> list[Chapter]:
@@ -282,11 +317,12 @@ def request_storyboard(
     thinking_state: str,
     retries: int,
     retry_sleep: float,
+    system_prompt: str | None = None,
 ) -> tuple[dict[str, Any], str]:
     request_payload: dict[str, Any] = {
         "model": model,
         "messages": [
-            {"role": "system", "content": build_system_prompt()},
+            {"role": "system", "content": system_prompt or build_system_prompt("basic")},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ],
         "temperature": temperature,
@@ -330,6 +366,94 @@ def request_storyboard(
     raise RuntimeError("request failed") from last_error
 
 
+def build_scene_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    paragraphs = payload.get("contextParagraphs") or []
+    indexes = [
+        item.get("paragraphIndex")
+        for item in paragraphs
+        if isinstance(item, dict) and isinstance(item.get("paragraphIndex"), int)
+    ]
+    return {
+        "chapter": payload.get("chapter") or {},
+        "paragraphCount": len(indexes),
+        "firstParagraphIndex": indexes[0] if indexes else None,
+        "lastParagraphIndex": indexes[-1] if indexes else None,
+        "contextParagraphs": paragraphs,
+    }
+
+
+def validate_scene_result(payload: dict[str, Any], result: dict[str, Any]) -> list[dict[str, Any]]:
+    if set(result) != {"scenes"} or not isinstance(result.get("scenes"), list):
+        raise ValueError("scene result must contain only a scenes array")
+    paragraph_indexes = [
+        item.get("paragraphIndex")
+        for item in payload.get("contextParagraphs") or []
+        if isinstance(item, dict) and isinstance(item.get("paragraphIndex"), int)
+    ]
+    if not paragraph_indexes:
+        return []
+    normalized: list[dict[str, Any]] = []
+    scene_ids: set[str] = set()
+    for index, item in enumerate(result["scenes"], 1):
+        if not isinstance(item, dict) or set(item) != {
+            "sceneId",
+            "startParagraphIndex",
+            "endParagraphIndex",
+        }:
+            raise ValueError(f"scene {index} has invalid fields")
+        scene_id = str(item.get("sceneId") or "").strip()
+        start = item.get("startParagraphIndex")
+        end = item.get("endParagraphIndex")
+        if not scene_id or scene_id in scene_ids:
+            raise ValueError(f"scene {index} has invalid sceneId")
+        if not isinstance(start, int) or not isinstance(end, int) or start > end:
+            raise ValueError(f"scene {scene_id} has invalid range")
+        scene_ids.add(scene_id)
+        normalized.append(
+            {
+                "sceneId": scene_id,
+                "startParagraphIndex": start,
+                "endParagraphIndex": end,
+            }
+        )
+    normalized.sort(key=lambda item: item["startParagraphIndex"])
+    coverage = {
+        paragraph_index: [
+            scene
+            for scene in normalized
+            if scene["startParagraphIndex"] <= paragraph_index <= scene["endParagraphIndex"]
+        ]
+        for paragraph_index in paragraph_indexes
+    }
+    invalid = [index for index, scenes in coverage.items() if len(scenes) != 1]
+    if invalid:
+        raise ValueError(f"scene ranges do not cover paragraphs exactly once: {invalid[:8]}")
+    if normalized[0]["startParagraphIndex"] != paragraph_indexes[0]:
+        raise ValueError("scene ranges do not start at the first paragraph")
+    if normalized[-1]["endParagraphIndex"] != paragraph_indexes[-1]:
+        raise ValueError("scene ranges do not end at the last paragraph")
+    return normalized
+
+
+def attach_scene_ranges(payload: dict[str, Any], scenes: list[dict[str, Any]]) -> None:
+    payload["scenes"] = scenes
+    for unit in payload.get("units") or []:
+        ranges = unit.get("ranges") or []
+        paragraph_index = ranges[0].get("paragraphIndex") if ranges else None
+        scene = next(
+            (
+                item
+                for item in scenes
+                if isinstance(paragraph_index, int)
+                and item["startParagraphIndex"] <= paragraph_index <= item["endParagraphIndex"]
+            ),
+            None,
+        )
+        if scene is None:
+            raise ValueError(f"unit {unit.get('unitId')} does not belong to a scene")
+        unit["sceneId"] = scene["sceneId"]
+
+
 def extract_json(text: str) -> str:
     clean = text.strip()
     if clean.startswith("```"):
@@ -346,12 +470,14 @@ def build_storyboard_payload(
     chapter: Chapter,
     max_chars: int,
     known_characters: list[dict[str, Any]] | None = None,
+    mode: str = "basic",
 ) -> dict[str, Any]:
     paragraphs = build_context_paragraphs(chapter, max_chars)
     units = build_candidate_units(paragraphs)
     return {
         "book": {"name": "", "author": ""},
         "chapter": {"index": chapter.index, "title": chapter.title},
+        "mode": mode,
         "allowNewCharacters": False,
         "knownCharacters": known_characters or [],
         "contextParagraphs": [
@@ -654,6 +780,7 @@ def validate_storyboard_result(
     target_ids = list(payload.get("targetUnitIds") or [])
     target_set = set(target_ids)
     known_ids = {unit["unitId"]: unit for unit in payload.get("units") or []}
+    mode = str(payload.get("mode") or "basic")
     invalid_schema: list[str] = []
     text_leaks: list[str] = []
     root_extra_keys = set(result) - ROOT_KEYS
@@ -705,8 +832,17 @@ def validate_storyboard_result(
             invalid_schema.append(f"units[{index}]:bad_confidence={confidence}")
         character_name = str(item.get("characterName") or "")
         character_id = item.get("characterId")
+        performance_context = item.get("performanceContext")
         if not isinstance(character_id, int):
             invalid_schema.append(f"units[{index}]:bad_characterId={character_id}")
+        validate_performance_context(
+            payload=payload,
+            unit=item,
+            unit_index=index,
+            mode=mode,
+            context=performance_context,
+            invalid_schema=invalid_schema,
+        )
         if role_type in ("narrator", "other"):
             if character_name or character_id not in (0, None):
                 invalid_schema.append(f"units[{index}]:character_must_be_blank")
@@ -726,6 +862,11 @@ def validate_storyboard_result(
     missing_ids = [unit_id for unit_id in target_ids if unit_id not in seen]
     unknown_ids = [unit_id for unit_id in seen if unit_id and unit_id not in target_set]
     cacheable = not invalid_schema and not text_leaks and not missing_ids and not duplicate_ids and not unknown_ids
+    performance_context_count = sum(
+        1
+        for item in model_units
+        if isinstance(item, dict) and bool(item.get("performanceContext"))
+    )
     return {
         "counts": counts,
         "target_count": len(target_ids),
@@ -740,9 +881,81 @@ def validate_storyboard_result(
         "text_leak_samples": text_leaks[:10],
         "invalid_schema_count": len(invalid_schema),
         "invalid_schema_samples": invalid_schema[:20],
+        "performance_context_count": performance_context_count,
+        "performance_context_coverage": (
+            round(performance_context_count / len(model_units), 4) if model_units else 0.0
+        ),
         "cacheable": cacheable,
         "accepted_units": valid_units if cacheable else [],
     }
+
+
+def validate_performance_context(
+    payload: dict[str, Any],
+    unit: dict[str, Any],
+    unit_index: int,
+    mode: str,
+    context: Any,
+    invalid_schema: list[str],
+) -> None:
+    prefix = f"units[{unit_index}]:performanceContext"
+    if not isinstance(context, list):
+        invalid_schema.append(f"{prefix}_not_array")
+        return
+    if any(not isinstance(value, str) or not value.strip() for value in context):
+        invalid_schema.append(f"{prefix}_has_blank_or_non_string")
+        return
+    role_type = unit.get("roleType")
+    requires_context = mode == "performance" and role_type in ("character", "thought")
+    if not requires_context:
+        if context:
+            invalid_schema.append(f"{prefix}_must_be_empty")
+        return
+    if context and not 1 <= len(context) <= 3:
+        invalid_schema.append(f"{prefix}_count={len(context)}")
+    if any(len(value.strip()) > 80 for value in context):
+        invalid_schema.append(f"{prefix}_item_too_long")
+    if sum(len(value.strip()) for value in context) > 220:
+        invalid_schema.append(f"{prefix}_too_long")
+    source_unit = next(
+        (item for item in payload.get("units") or [] if item.get("unitId") == unit.get("unitId")),
+        None,
+    )
+    cue_after = normalize_comparison_text(str((source_unit or {}).get("cueAfter") or ""))
+    if len(cue_after) >= 8 and any(cue_after in normalize_comparison_text(value) for value in context):
+        invalid_schema.append(f"{prefix}_copies_cue_after")
+    target_text = normalize_comparison_text(str((source_unit or {}).get("textPreview") or ""))
+    if len(target_text) >= 12 and any(target_text in normalize_comparison_text(value) for value in context):
+        invalid_schema.append(f"{prefix}_repeats_target")
+
+
+def normalize_comparison_text(value: str) -> str:
+    return re.sub(r"[\s“”‘’\"'，。！？!?；;：:、…—-]+", "", value)
+
+
+def build_source_window(payload: dict[str, Any], source_unit: dict[str, Any] | None) -> str:
+    if not source_unit:
+        return ""
+    paragraphs = payload.get("contextParagraphs") or []
+    paragraph_indexes = [
+        item.get("paragraphIndex")
+        for item in source_unit.get("ranges") or []
+        if isinstance(item, dict) and isinstance(item.get("paragraphIndex"), int)
+    ]
+    if not paragraph_indexes:
+        return "\n".join(
+            str(source_unit.get(key) or "") for key in ("cueBefore", "textPreview", "cueAfter")
+        )
+    start = min(paragraph_indexes) - 2
+    end = max(paragraph_indexes) + 2
+    nearby = [
+        str(item.get("text") or "")
+        for item in paragraphs
+        if isinstance(item, dict)
+        and isinstance(item.get("paragraphIndex"), int)
+        and start <= item["paragraphIndex"] <= end
+    ]
+    return "\n".join(nearby)
 
 
 def find_text_leaks(value: Any, path: str) -> list[str]:
@@ -777,6 +990,17 @@ def reconstruct_unit_text(payload: dict[str, Any], unit_id: str) -> str:
     return ""
 
 
+def target_restatement_terms(text: str) -> set[str]:
+    terms: set[str] = set()
+    for chunk in re.findall(r"[\u4e00-\u9fff]+", text):
+        if len(chunk) >= 2:
+            for size in range(2, min(6, len(chunk)) + 1):
+                terms.update(chunk[index : index + size] for index in range(len(chunk) - size + 1))
+        if len(chunk) >= 2 and re.fullmatch(r"[零一二三四五六七八九十百千万两]+", chunk):
+            terms.add(chunk)
+    return terms
+
+
 def write_report(
     out_dir: Path,
     chapter: Chapter,
@@ -802,6 +1026,8 @@ def write_report(
         f"duplicate_unit_count: {validation['duplicate_unit_count']}",
         f"text_leak_count: {validation['text_leak_count']}",
         f"invalid_schema_count: {validation['invalid_schema_count']}",
+        f"performance_context_count: {validation['performance_context_count']}",
+        f"performance_context_coverage: {validation['performance_context_coverage']}",
         "",
         "## Counts",
         "",
@@ -835,6 +1061,10 @@ def write_report(
                 f"{resolution.get('speakerGender') or '-'} / "
                 f"{resolution.get('confidence')} / {resolution.get('evidence') or '-'}"
             )
+            lines.append(
+                "   performance: "
+                + (" | ".join(str(value) for value in resolution.get("performanceContext") or []) or "-")
+            )
         else:
             lines.append("   result: MISSING")
         lines.append("")
@@ -846,6 +1076,7 @@ def write_report(
 
 def main() -> int:
     args = parse_args()
+    load_repo_env()
     api_key = os.getenv(args.api_key_env)
     if not api_key:
         print(f"missing env: {args.api_key_env}", file=sys.stderr)
@@ -865,10 +1096,59 @@ def main() -> int:
         known_characters = parse_known_characters(args.character)
         for index in indexes:
             chapter = chapters[index - 1]
-            payload = build_storyboard_payload(chapter, args.max_chars, known_characters)
+            payload = build_storyboard_payload(chapter, args.max_chars, known_characters, args.mode)
             cases.append((chapter, payload))
     summary: list[dict[str, Any]] = []
     for chapter, payload in cases:
+        if args.scene_pass and args.mode == "performance" and payload.get("contextParagraphs"):
+            print(f"request scene boundaries chapter {chapter.index}: {chapter.title}", flush=True)
+            scene_payload = build_scene_payload(payload)
+            try:
+                scene_raw, scene_content_text = request_storyboard(
+                    api_url=args.api_url,
+                    api_key=api_key,
+                    model=args.model,
+                    payload=scene_payload,
+                    max_tokens=args.max_tokens,
+                    temperature=args.temperature,
+                    top_p=args.top_p,
+                    timeout=args.timeout,
+                    json_mode=args.json_mode,
+                    enable_thinking=args.enable_thinking,
+                    thinking_param=args.thinking_param,
+                    thinking_state=args.thinking_state,
+                    retries=args.retries,
+                    retry_sleep=args.retry_sleep,
+                    system_prompt=SCENE_SKILL_FILE.read_text(encoding="utf-8").strip(),
+                )
+                (out_dir / f"chapter_{chapter.index:03d}.scene.raw.json").write_text(
+                    json.dumps(scene_raw, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                (out_dir / f"chapter_{chapter.index:03d}.scene.content.txt").write_text(
+                    scene_content_text,
+                    encoding="utf-8",
+                )
+                scene_result = json.loads(extract_json(scene_content_text))
+                (out_dir / f"chapter_{chapter.index:03d}.scene.json").write_text(
+                    json.dumps(scene_result, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                scenes = validate_scene_result(payload, scene_result)
+                attach_scene_ranges(payload, scenes)
+            except Exception as error:
+                error_payload = {
+                    "chapter": chapter.index,
+                    "title": chapter.title,
+                    "error": f"scene pass failed: {error}",
+                }
+                (out_dir / f"chapter_{chapter.index:03d}.scene.error.json").write_text(
+                    json.dumps(error_payload, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                summary.append(error_payload)
+                print(json.dumps(error_payload, ensure_ascii=False), flush=True)
+                continue
         print(f"request chapter {chapter.index}: {chapter.title}", flush=True)
         (out_dir / f"chapter_{chapter.index:03d}.payload.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -895,6 +1175,7 @@ def main() -> int:
                 thinking_state=args.thinking_state,
                 retries=args.retries,
                 retry_sleep=args.retry_sleep,
+                system_prompt=build_system_prompt(args.mode),
             )
         except Exception as error:
             error_payload = {

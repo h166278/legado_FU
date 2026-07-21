@@ -382,7 +382,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var readAloudStoryboardMode: Int
         get() = appCtx.getPrefInt(PreferKey.readAloudStoryboardMode, 0)
         set(value) {
-            appCtx.putPrefInt(PreferKey.readAloudStoryboardMode, value.coerceIn(0, 3))
+            appCtx.putPrefInt(PreferKey.readAloudStoryboardMode, value.coerceIn(0, 1))
         }
 
     var chineseConverterType: Int

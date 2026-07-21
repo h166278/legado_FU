@@ -22,6 +22,29 @@ def unit_text(payload: dict, unit_id: str) -> str:
 
 class TtsStoryboardEvalTest(unittest.TestCase):
 
+    def test_each_mode_loads_its_own_prompt_resource(self) -> None:
+        basic = storyboard.build_system_prompt("basic")
+        performance = storyboard.build_system_prompt("performance")
+
+        self.assertNotEqual(basic, performance)
+        self.assertIn("# 基础分镜", basic)
+        self.assertNotIn("## 演绎上下文", basic)
+        self.assertIn("# 场景演绎分镜", performance)
+        self.assertIn("## 演绎场景", performance)
+        self.assertNotIn("你不是", basic)
+        self.assertNotIn("你不是", performance)
+
+    def test_performance_scene_pass_loads_shared_skill_resource(self) -> None:
+        prompt = storyboard.SCENE_SKILL_FILE.read_text(encoding="utf-8").strip()
+
+        self.assertIn("场景边界分析器", prompt)
+        self.assertIn("scene_1", prompt)
+        self.assertNotIn("你不是", prompt)
+
+    def test_unknown_mode_has_no_prompt_fallback(self) -> None:
+        with self.assertRaises(ValueError):
+            storyboard.build_system_prompt("unknown")
+
     def test_quote_units_do_not_include_surrounding_narration(self) -> None:
         chapter = storyboard.Chapter(
             1,
@@ -95,6 +118,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "assigned",
                     "confidence": 0.9,
                     "evidence": "后文声音: 陈小杏",
+                    "performanceContext": [],
                     "text": "“谁啊？”",
                 },
                 {
@@ -106,6 +130,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "assigned",
                     "confidence": 0.8,
                     "evidence": "",
+                    "performanceContext": [],
                 },
             ],
             "newCharacters": [],
@@ -133,6 +158,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "assigned",
                     "confidence": 0.9,
                     "evidence": "后文声音: 陈小杏",
+                    "performanceContext": [],
                 }
             ],
             "newCharacters": [],
@@ -160,6 +186,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "unknown",
                     "confidence": 0.72,
                     "evidence": "后文声音: 年轻男声",
+                    "performanceContext": [],
                 }
             ],
             "newCharacters": [],
@@ -185,6 +212,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "unknown",
                     "confidence": 0.95,
                     "evidence": "前文动作: 柳烟儿",
+                    "performanceContext": [],
                 }
             ],
             "newCharacters": [],
@@ -210,6 +238,408 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "assigned",
                     "confidence": 0.9,
                     "evidence": "前文声音: 身后下属",
+                    "performanceContext": [],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_accepts_target_specific_context(self) -> None:
+        chapter = storyboard.Chapter(
+            1,
+            "手机",
+            "陈升拿出手机问她的号码。\n“QQ1314……，我……我没有手机。”安秋月窘迫地回答。",
+        )
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 7, "name": "安秋月", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 7,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "后文主语: 安秋月",
+                    "performanceContext": [
+                        "当前说话人是安秋月，她独自在陌生城市丢了仅有的生活费，身无分文。",
+                        "陈升拿出手机，向她询问QQ号和手机号。",
+                        "她仍在擦哭红的眼睛，回答时断断续续。",
+                    ],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_accepts_empty_context_for_neutral_dialogue(self) -> None:
+        chapter = storyboard.Chapter(1, "金额", "“丢了多少？”陈升问。")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 1, "name": "陈升", "aliases": [], "gender": "male", "role": "男主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "陈升",
+                    "characterId": 1,
+                    "speakerGender": "male",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "后文: 陈升问",
+                    "performanceContext": [],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_accepts_single_grounded_context(self) -> None:
+        chapter = storyboard.Chapter(1, "哽咽", "安秋月还在哽咽。\n“听……听到。”")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 7, "name": "安秋月", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 7,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "前文: 安秋月哽咽",
+                    "performanceContext": ["当前说话人是安秋月，她还在哽咽。"],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_accepts_director_interpretation(self) -> None:
+        chapter = storyboard.Chapter(1, "拒绝", "陈升瞪了她一眼。\n“不……不是……”安秋月擦了擦眼泪。")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 7, "name": "安秋月", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 7,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "后文动作: 安秋月擦泪",
+                    "performanceContext": ["当前说话人是安秋月，她担心陈升不让自己工作。"],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_rejects_repeated_target_text(self) -> None:
+        chapter = storyboard.Chapter(
+            1,
+            "手机",
+            "陈升拿出手机问她的号码。\n“QQ1314……，我……我没有手机。”安秋月窘迫地回答。",
+        )
+        payload = storyboard.build_storyboard_payload(chapter, max_chars=1000, mode="performance")
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 0,
+                    "speakerGender": "female",
+                    "status": "unknown",
+                    "confidence": 0.9,
+                    "evidence": "后文主语: 安秋月",
+                    "performanceContext": [
+                        "当前说话人是陈升，他拿出手机询问联系方式。",
+                        "QQ1314……，我……我没有手机。",
+                    ],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertFalse(audit["cacheable"])
+        self.assertTrue(any("repeats_target" in value for value in audit["invalid_schema_samples"]))
+
+    def test_performance_mode_accepts_scene_emotion_summary(self) -> None:
+        chapter = storyboard.Chapter(
+            1,
+            "丢钱",
+            "陈升催她快点说，但没有太大声。\n“我……生活费丢了……”安秋月浑身一颤，嘴巴一瘪，哭了起来。",
+        )
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 7, "name": "安秋月", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 7,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "后文动作: 安秋月",
+                    "performanceContext": [
+                        "当前说话人是安秋月，她终于鼓起勇气说出原因。",
+                        "她刚被陈升严厉催促，情绪崩溃。",
+                        "她说完后继续哭泣。",
+                    ],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_accepts_scene_based_motive(self) -> None:
+        chapter = storyboard.Chapter(
+            1,
+            "递酥饺",
+            "沈言卿脸红着偷看陈升，又捏起一个酥饺递过去。\n“你吃。”",
+        )
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 2, "name": "沈言卿", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "沈言卿",
+                    "characterId": 2,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "前文动作: 沈言卿",
+                    "performanceContext": [
+                        "当前说话人是沈言卿，她感到害羞。",
+                        "她忍不住想继续互动。",
+                    ],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_accepts_natural_scene_summary(self) -> None:
+        chapter = storyboard.Chapter(1, "确认", "“是我，陈升。”安秋月认出了他。")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 1, "name": "陈升", "aliases": [], "gender": "male", "role": "男主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "陈升",
+                    "characterId": 1,
+                    "speakerGender": "male",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "后文: 安秋月认出陈升",
+                    "performanceContext": [
+                        "当前说话人是陈升，他在路灯下认出独自哭泣的安秋月。",
+                        "安秋月抬头询问来人身份，但背着路灯看不清他的脸。",
+                        "他说完后安秋月认出了他。",
+                    ],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_performance_mode_rejects_copied_cue_after(self) -> None:
+        chapter = storyboard.Chapter(
+            1,
+            "确认",
+            "陈升走到她面前。\n“是我，陈升。”安秋月慌忙擦了擦眼泪，适应光线后认出了他。",
+        )
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 1, "name": "陈升", "aliases": [], "gender": "male", "role": "男主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "陈升",
+                    "characterId": 1,
+                    "speakerGender": "male",
+                    "status": "assigned",
+                    "confidence": 0.96,
+                    "evidence": "后文: 安秋月认出陈升",
+                    "performanceContext": [
+                        "当前说话人是陈升，他走到独自哭泣的安秋月面前。",
+                        "安秋月慌忙擦了擦眼泪，适应光线后认出了他。",
+                    ],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertFalse(audit["cacheable"])
+        self.assertTrue(any("copies_cue_after" in value for value in audit["invalid_schema_samples"]))
+
+    def test_scene_ranges_cover_paragraphs_and_attach_to_units(self) -> None:
+        chapter = storyboard.Chapter(
+            1,
+            "场景",
+            "“第一句。”甲说。\n两人继续交谈。\n夜里他去了操场。\n“第二句。”乙说。",
+        )
+        payload = storyboard.build_storyboard_payload(chapter, max_chars=1000, mode="performance")
+        scenes = storyboard.validate_scene_result(
+            payload,
+            {
+                "scenes": [
+                    {"sceneId": "scene_1", "startParagraphIndex": 0, "endParagraphIndex": 1},
+                    {"sceneId": "scene_2", "startParagraphIndex": 2, "endParagraphIndex": 3},
+                ]
+            },
+        )
+
+        storyboard.attach_scene_ranges(payload, scenes)
+
+        self.assertEqual(payload["scenes"], scenes)
+        self.assertEqual([unit["sceneId"] for unit in payload["units"]], ["scene_1", "scene_2"])
+
+    def test_scene_ranges_reject_gap(self) -> None:
+        chapter = storyboard.Chapter(1, "场景", "第一段。\n第二段。\n第三段。")
+        payload = storyboard.build_storyboard_payload(chapter, max_chars=1000, mode="performance")
+
+        with self.assertRaisesRegex(ValueError, "cover paragraphs exactly once"):
+            storyboard.validate_scene_result(
+                payload,
+                {
+                    "scenes": [
+                        {"sceneId": "scene_1", "startParagraphIndex": 0, "endParagraphIndex": 0},
+                        {"sceneId": "scene_2", "startParagraphIndex": 2, "endParagraphIndex": 2},
+                    ]
+                },
+            )
+
+    def test_performance_mode_accepts_condensed_scene_context(self) -> None:
+        chapter = storyboard.Chapter(1, "困境", "安秋月浑身一颤。\n“我……生活费丢了……呜……”")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 3, "name": "安秋月", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 3,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.98,
+                    "evidence": "前文动作: 安秋月颤抖",
+                    "performanceContext": ["当前说话人是安秋月，她的生活费丢了。"],
                 }
             ],
             "newCharacters": [],

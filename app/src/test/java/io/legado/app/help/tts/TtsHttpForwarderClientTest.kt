@@ -208,6 +208,45 @@ class TtsHttpForwarderClientTest {
     }
 
     @Test
+    fun audioCacheKey_changesWithSynthesisContext() {
+        val key1 = TtsScriptEngineClient.audioCacheKey(engine, "文本", "voice-a")
+        val key2 = TtsScriptEngineClient.audioCacheKey(
+            engine = engine,
+            text = "文本",
+            voiceId = "voice-a",
+            synthesisContext = TtsSynthesisContext(
+                mode = TtsSynthesisContext.Mode.PERFORMANCE,
+                role = TtsRoleContext(name = "安秋月", gender = "female"),
+                scene = TtsSceneContext(title = "丢失生活费", text = "她低着头抽泣。")
+            )
+        )
+
+        assertNotEquals(key1, key2)
+    }
+
+    @Test
+    fun synthesisContext_serializesApprovedItemsForScript() {
+        val json = Gson().toJson(
+            TtsSynthesisContext(
+                mode = TtsSynthesisContext.Mode.PERFORMANCE,
+                role = TtsRoleContext(name = "安秋月", gender = "female"),
+                scene = TtsSceneContext(
+                    title = "丢失生活费",
+                    text = "安秋月独自在陌生城市丢失生活费。\n陈升追问后，她忍不住哭起来。",
+                    contextTexts = listOf(
+                        "安秋月独自在陌生城市丢失生活费。",
+                        "陈升追问后，她忍不住哭起来。"
+                    )
+                )
+            )
+        )
+        val scene = JsonParser.parseString(json).asJsonObject.getAsJsonObject("scene")
+
+        assertEquals(2, scene.getAsJsonArray("context_texts").size())
+        assertEquals("安秋月独自在陌生城市丢失生活费。", scene.getAsJsonArray("context_texts")[0].asString)
+    }
+
+    @Test
     fun engineJson_persistsStaticVoicesButNotRuntimeVoiceCache() {
         val json = Gson().toJson(
             engine.copy(
@@ -367,6 +406,42 @@ class TtsHttpForwarderClientTest {
         assertEquals(60, engine.defaultVolume)
         assertEquals(55, engine.defaultPitch)
         assertEquals("试听文本", engine.sampleText)
+    }
+
+    @Test
+    fun scriptEngineFromScript_parsesCapabilities() {
+        val engine = TtsEngineStore.scriptEngineFromScript(
+            """
+            // @name 场景演绎示例
+            // @uuid performance_tts
+            // @capabilities persona，scene_context|casting_metadata
+            function synthesize(text, voice, params, options, ctx) { return {}; }
+            """.trimIndent()
+        )!!
+
+        assertTrue(engine.supportsCapability(TtsEngineCapability.PERSONA))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.CASTING_METADATA))
+        assertFalse(engine.supportsCapability("emotion"))
+    }
+
+    @Test
+    fun normalizeEditedEngine_restoresCapabilitiesFromScriptHeader() {
+        val script = """
+            // @name 场景演绎示例
+            // @uuid performance_tts_normalized
+            // @capabilities persona,scene_context,casting_metadata
+            function synthesize(text, voice, params, options, ctx) { return {}; }
+        """.trimIndent()
+        val source = TtsEngineStore.scriptEngineFromScript(script)!!
+        val restored = TtsEngineStore.normalizeEditedEngine(
+            parsed = source.copy(capabilities = emptySet()),
+            source = source
+        ).getOrThrow()
+
+        assertTrue(restored.supportsCapability(TtsEngineCapability.PERSONA))
+        assertTrue(restored.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertTrue(restored.supportsCapability(TtsEngineCapability.CASTING_METADATA))
     }
 
     @Test

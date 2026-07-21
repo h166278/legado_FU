@@ -34,6 +34,7 @@ import io.legado.app.databinding.DialogReadAloudTimerSheetBinding
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.TtsEngineStore
+import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.view.ThemeSwitch
 import io.legado.app.model.ReadAloud
@@ -127,8 +128,9 @@ class ReadAloudSpeedSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_spee
                 val safeContext = this@ReadAloudSpeedSheet.context ?: return
                 AppConfig.ttsFlowSys = false
                 AppConfig.ttsSpeechRate = seekBar.progress
+                (activity as? ReadAloudPlayerActivity)?.refreshPlaybackSpeedLabel()
                 ReadAloud.upTtsSpeechRate(safeContext)
-                if (BaseReadAloudService.isPlay()) {
+                if (BaseReadAloudService.isPlay() && ReadAloud.httpTtsEngineV2 == null) {
                     ReadAloud.pause(safeContext)
                     ReadAloud.resume(safeContext)
                 }
@@ -137,7 +139,7 @@ class ReadAloudSpeedSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_spee
     }
 
     private fun upTitle(progress: Int) {
-        binding.tvTitle.text = "语速 ${(progress + 5) / 10f}x"
+        binding.tvTitle.text = "播放速度 ${TtsSpeedPolicy.playbackLabel(progress)}"
     }
 }
 
@@ -148,8 +150,6 @@ class ReadAloudModeSheet(
     private val binding by viewBinding(DialogReadAloudModeSheetBinding::bind)
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
-        seekStoryboardMode.applyReadAloudSliderStyle()
-        seekStoryboardMode.tickMarkTintList = ColorStateList.valueOf(view.context.accentColor)
         renderState()
         switchMultiRole.setOnUserCheckedChangeListener { isChecked ->
             activity.setMultiRoleEnabled(isChecked)
@@ -163,22 +163,12 @@ class ReadAloudModeSheet(
             activity.openStoryboardResult()
             dismissAllowingStateLoss()
         }
-        seekStoryboardMode.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                updateStoryboardModeText(StoryboardTtsMode.from(progress))
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                val mode = StoryboardTtsMode.from(seekBar.progress)
-                if (mode.available) {
-                    AppConfig.readAloudStoryboardMode = mode.value
-                } else {
-                    toastOnUi("该分镜模式暂未实现")
-                    AppConfig.readAloudStoryboardMode = StoryboardTtsMode.BASIC.value
-                }
-                renderState()
-            }
-        })
+        segmentStoryboardModeBasic.setOnClickListener {
+            selectStoryboardMode(StoryboardTtsMode.BASIC)
+        }
+        segmentStoryboardModeScene.setOnClickListener {
+            selectStoryboardMode(StoryboardTtsMode.SCENE)
+        }
     }
 
     private fun renderState() = binding.run {
@@ -190,47 +180,76 @@ class ReadAloudModeSheet(
             "关闭时使用单人朗读"
         }
         val storedMode = StoryboardTtsMode.from(AppConfig.readAloudStoryboardMode)
-        val mode = if (storedMode.available) storedMode else StoryboardTtsMode.BASIC
-        if (mode != storedMode) {
-            AppConfig.readAloudStoryboardMode = mode.value
-        }
-        seekStoryboardMode.progress = mode.value
-        updateStoryboardModeText(mode)
+        segmentStoryboardModeBasic.isSelected = storedMode == StoryboardTtsMode.BASIC
+        segmentStoryboardModeScene.isSelected = storedMode == StoryboardTtsMode.SCENE
+        applyStoryboardModeSegmentStyles()
+        tvStoryboardModeSummary.text = storedMode.summary
         val storyboardAlpha = if (multiRole) 1f else 0.42f
         listOf(itemStoryboardResult, layoutStoryboardMode).forEach { row ->
             row.isEnabled = multiRole
             row.alpha = storyboardAlpha
         }
-        seekStoryboardMode.isEnabled = multiRole
+        segmentStoryboardModeBasic.isEnabled = multiRole
+        segmentStoryboardModeScene.isEnabled = multiRole
     }
 
-    private fun updateStoryboardModeText(mode: StoryboardTtsMode) = binding.run {
-        tvStoryboardModeTitle.text = mode.title
-        tvStoryboardModeSummary.text = mode.summary
-        val safeContext = tvStoryboardModeTitle.context
+    private fun applyStoryboardModeSegmentStyles() = binding.run {
+        val safeContext = root.context
         val activeColor = safeContext.accentColor
-        val inactiveColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface_variant)
-        listOf(
-            tvStoryboardModeBasic to StoryboardTtsMode.BASIC,
-            tvStoryboardModeAdvanced to StoryboardTtsMode.ADVANCED,
-            tvStoryboardModeDirector to StoryboardTtsMode.DIRECTOR,
-            tvStoryboardModeActor to StoryboardTtsMode.ACTOR
-        ).forEach { (label, labelMode) ->
-            label.setTextColor(if (mode == labelMode) activeColor else inactiveColor)
+        val outlineColor = ContextCompat.getColor(safeContext, R.color.ng_outline_strong)
+        val textColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface)
+        val selectedBackground = androidx.core.graphics.ColorUtils.setAlphaComponent(activeColor, 22)
+        val segments = listOf(segmentStoryboardModeBasic, segmentStoryboardModeScene)
+        groupStoryboardMode.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
+        groupStoryboardMode.dividerDrawable = GradientDrawable().apply {
+            setColor(outlineColor)
+            setSize(1.dpToPx(), 1.dpToPx())
         }
+        groupStoryboardMode.setPadding(1.dpToPx(), 1.dpToPx(), 1.dpToPx(), 1.dpToPx())
+        groupStoryboardMode.background = GradientDrawable().apply {
+            cornerRadius = 22.dpToPx().toFloat()
+            setColor(Color.TRANSPARENT)
+            setStroke(1.dpToPx(), outlineColor)
+        }
+        segments.forEachIndexed { index, segment ->
+            val rawText = segment.text.toString().removePrefix("✓ ").trim()
+            segment.text = if (segment.isSelected) "✓ $rawText" else rawText
+            segment.setTextColor(textColor)
+            segment.typeface = Typeface.defaultFromStyle(Typeface.NORMAL)
+            segment.background = GradientDrawable().apply {
+                setColor(if (segment.isSelected) selectedBackground else Color.TRANSPARENT)
+                cornerRadii = when (index) {
+                    0 -> floatArrayOf(
+                        21.dpToPx().toFloat(), 21.dpToPx().toFloat(),
+                        0f, 0f, 0f, 0f,
+                        21.dpToPx().toFloat(), 21.dpToPx().toFloat()
+                    )
+                    else -> floatArrayOf(
+                        0f, 0f,
+                        21.dpToPx().toFloat(), 21.dpToPx().toFloat(),
+                        21.dpToPx().toFloat(), 21.dpToPx().toFloat(),
+                        0f, 0f
+                    )
+                }
+            }
+        }
+    }
+
+    private fun selectStoryboardMode(mode: StoryboardTtsMode) {
+        if (AppConfig.readAloudStoryboardMode != mode.value) {
+            AppConfig.readAloudStoryboardMode = mode.value
+            ReadAloud.refreshTtsRoute(activity)
+        }
+        renderState()
     }
 }
 
 private enum class StoryboardTtsMode(
     val value: Int,
-    val title: String,
-    val summary: String,
-    val available: Boolean
+    val summary: String
 ) {
-    BASIC(0, "基础模式", "只做对白拆分和角色音色路由", true),
-    ADVANCED(1, "进阶模式", "对白前加入短风格标签，后续实现", false),
-    DIRECTOR(2, "导演模式", "附加角色、场景和表演指导，后续实现", false),
-    ACTOR(3, "演员模式", "逐句生成表演标签，后续实现", false);
+    BASIC(0, "拆分旁白、对白和说话人"),
+    SCENE(1, "结合人物与场景自然演绎(需TTS引擎支持)");
 
     companion object {
         fun from(value: Int): StoryboardTtsMode {

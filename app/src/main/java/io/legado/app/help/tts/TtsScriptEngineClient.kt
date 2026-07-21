@@ -83,6 +83,7 @@ object TtsScriptEngineClient {
         speed: Int = engine.effectiveSpeed(),
         volume: Int = engine.effectiveVolume(),
         pitch: Int = engine.effectivePitch(),
+        synthesisContext: TtsSynthesisContext? = null,
         coroutineContext: CoroutineContext = EmptyCoroutineContext
     ): Response {
         return executeSynthesis(
@@ -93,6 +94,7 @@ object TtsScriptEngineClient {
             speed = speed,
             volume = volume,
             pitch = pitch,
+            synthesisContext = synthesisContext,
             coroutineContext = coroutineContext,
             aggregateResponse = true
         )
@@ -106,6 +108,7 @@ object TtsScriptEngineClient {
         speed: Int,
         volume: Int,
         pitch: Int,
+        synthesisContext: TtsSynthesisContext?,
         coroutineContext: CoroutineContext,
         aggregateResponse: Boolean
     ): Response {
@@ -125,7 +128,7 @@ object TtsScriptEngineClient {
                 GSON.toJson(voice.toScriptVoiceArg(voice?.styleById(styleId))),
                 GSON.toJson(params),
                 GSON.toJson(options),
-                GSON.toJson(extensionContext(engine))
+                GSON.toJson(extensionContext(engine, synthesisContext))
             )
         ) ?: throw NoStackTraceException("脚本未实现 synthesize(text, voice, params, options, ctx)")
         val request = parseSynthesisRequest(synthesis, engine)
@@ -247,6 +250,7 @@ object TtsScriptEngineClient {
         speed: Int = engine.effectiveSpeed(),
         volume: Int = engine.effectiveVolume(),
         pitch: Int = engine.effectivePitch(),
+        synthesisContext: TtsSynthesisContext? = null,
         coroutineContext: CoroutineContext = EmptyCoroutineContext
     ): InputStream {
         val response = executeSynthesis(
@@ -257,6 +261,7 @@ object TtsScriptEngineClient {
             speed = speed,
             volume = volume,
             pitch = pitch,
+            synthesisContext = synthesisContext,
             coroutineContext = coroutineContext,
             aggregateResponse = false
         )
@@ -284,7 +289,8 @@ object TtsScriptEngineClient {
         styleId: String? = null,
         speed: Int = engine.effectiveSpeed(),
         volume: Int = engine.effectiveVolume(),
-        pitch: Int = engine.effectivePitch()
+        pitch: Int = engine.effectivePitch(),
+        synthesisContext: TtsSynthesisContext? = null
     ): String {
         return listOf(
             engine.id,
@@ -295,6 +301,7 @@ object TtsScriptEngineClient {
             speed.coerceIn(0, 100).toString(),
             volume.coerceIn(0, 100).toString(),
             pitch.coerceIn(0, 100).toString(),
+            GSON.toJson(synthesisContext),
             text
         ).joinToString("-|-")
     }
@@ -327,7 +334,10 @@ object TtsScriptEngineClient {
         return engine.evalJS(js)?.toString()?.takeIf { it.isNotBlank() && it != "null" }
     }
 
-    private fun extensionContext(engine: TtsEngineSetting): Map<String, Any?> {
+    private fun extensionContext(
+        engine: TtsEngineSetting,
+        synthesisContext: TtsSynthesisContext? = null
+    ): Map<String, Any?> {
         return mapOf(
             "engine" to mapOf(
                 "id" to engine.id,
@@ -336,7 +346,8 @@ object TtsScriptEngineClient {
             "app" to mapOf(
                 "packageName" to appCtx.packageName,
                 "versionName" to BuildConfig.VERSION_NAME
-            )
+            ),
+            "synthesis" to synthesisContext
         )
     }
 

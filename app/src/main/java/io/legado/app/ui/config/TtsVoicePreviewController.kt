@@ -13,9 +13,11 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import io.legado.app.R
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsScriptEngineClient
+import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.help.tts.TtsVoice
 import io.legado.app.help.tts.previewText
 import io.legado.app.utils.toastOnUi
@@ -178,6 +180,7 @@ class TtsVoicePreviewController(
                 }
             })
             setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+            setPlaybackSpeed(TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay))
             prepare()
             play()
         }

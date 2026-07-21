@@ -104,8 +104,12 @@ class ReadAloudTtsRouter private constructor(
             val characters = appDb.bookCharacterDao.getCharacters(workKey)
                 .filter { it.enabled && it.name.isNotBlank() }
             val bindings = appDb.bookCharacterDao.getTtsBindings(workKey)
+            val multiRoleEngineId = AppConfig.multiRoleTtsEngineId
             val bindingMap = bindings.mapNotNull { binding ->
-                binding.toRouteBinding()?.let { (binding.targetType to binding.targetId) to it }
+                binding
+                    .takeIf { isBookBindingCompatible(it, multiRoleEngineId) }
+                    ?.toRouteBinding()
+                    ?.let { (binding.targetType to binding.targetId) to it }
             }.toMap()
             val globalBindings = resolveGlobalBindings(
                 multiRoleEngineId = AppConfig.multiRoleTtsEngineId,
@@ -161,6 +165,14 @@ class ReadAloudTtsRouter private constructor(
                 dialogueMale = dialogueEngine?.toGlobalRouteBinding(dialogueMaleVoiceId),
                 dialogueFemale = dialogueEngine?.toGlobalRouteBinding(dialogueFemaleVoiceId)
             )
+        }
+
+        internal fun isBookBindingCompatible(
+            binding: BookCharacterTtsBinding,
+            multiRoleEngineId: String?
+        ): Boolean {
+            return binding.targetType == BookCharacterTtsBinding.TargetType.NARRATOR ||
+                (!multiRoleEngineId.isNullOrBlank() && binding.engineId == multiRoleEngineId)
         }
 
         internal fun createResolved(

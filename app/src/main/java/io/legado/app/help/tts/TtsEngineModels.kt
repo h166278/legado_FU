@@ -34,6 +34,46 @@ data class TtsVoice(
     val extra: JsonObject? = null
 )
 
+data class TtsSynthesisContext(
+    @SerializedName("mode")
+    val mode: String = Mode.BASIC,
+    @SerializedName("role")
+    val role: TtsRoleContext? = null,
+    @SerializedName("scene")
+    val scene: TtsSceneContext? = null
+) {
+    object Mode {
+        const val BASIC = "basic"
+        const val PERFORMANCE = "performance"
+    }
+}
+
+data class TtsRoleContext(
+    @SerializedName("id")
+    val id: Long? = null,
+    @SerializedName("name")
+    val name: String? = null,
+    @SerializedName("gender")
+    val gender: String? = null,
+    @SerializedName("role_tag")
+    val roleTag: String? = null
+)
+
+data class TtsSceneContext(
+    @SerializedName("title")
+    val title: String? = null,
+    @SerializedName("text")
+    val text: String = "",
+    @SerializedName("context_texts")
+    val contextTexts: List<String> = emptyList()
+)
+
+object TtsEngineCapability {
+    const val PERSONA = "persona"
+    const val SCENE_CONTEXT = "scene_context"
+    const val CASTING_METADATA = "casting_metadata"
+}
+
 data class TtsVoiceStyle(
     @SerializedName("id")
     val id: String,
@@ -184,6 +224,8 @@ data class TtsEngineSetting(
     val voices: List<TtsVoice> = emptyList(),
     @SerializedName("disabled_voice_ids")
     val disabledVoiceIds: List<String> = emptyList(),
+    @SerializedName("capabilities")
+    val capabilities: Set<String> = emptySet(),
     @Transient
     val runtimeSpeed: Int? = null,
     @Transient
@@ -212,6 +254,10 @@ data class TtsEngineSetting(
 
     fun supportsVoiceFetch(): Boolean {
         return isScriptEngine && script.contains(Regex("""function\s+voices\s*\("""))
+    }
+
+    fun supportsCapability(capability: String): Boolean {
+        return capabilities.any { it.equals(capability, ignoreCase = true) }
     }
 
     fun effectiveSpeed(): Int {

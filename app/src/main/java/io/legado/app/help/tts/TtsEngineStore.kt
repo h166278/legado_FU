@@ -12,6 +12,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.TtsEngineRuntimeEntity
 import io.legado.app.data.entities.TtsVoiceEntity
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadAloud
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -421,11 +422,22 @@ object TtsEngineStore {
             )
         )
         val updated = engine(engineId)
-        if (activeEngineId() == engineId) {
+        val isActiveEngine = activeEngineId() == engineId
+        if (isActiveEngine) {
             ReadAloud.httpTtsEngineV2 = updated?.takeIf {
                 it.type == TtsEngineType.SCRIPT
             }
-            ReadAloud.upTtsSpeechRate(appCtx)
+        }
+        when {
+            updated?.type == TtsEngineType.SYSTEM && isActiveEngine -> {
+                ReadAloud.upTtsSpeechRate(appCtx)
+            }
+            updated?.type == TtsEngineType.SCRIPT && (
+                isActiveEngine ||
+                    AppConfig.readAloudMultiRole && AppConfig.multiRoleTtsEngineId == engineId
+                ) -> {
+                ReadAloud.refreshTtsRoute(appCtx)
+            }
         }
         return updated
     }
@@ -460,6 +472,16 @@ object TtsEngineStore {
     private fun TtsEngineSetting.normalizedOrNull(): TtsEngineSetting? {
         val safeId = safeString { id }.takeIf { it.isNotBlank() } ?: return null
         val safeType = runCatching { type }.getOrNull() ?: TtsEngineType.SCRIPT
+        val safeScript = safeString { script }
+        val declaredCapabilities = parseScriptMetadata(safeScript)["capabilities"]
+            .orEmpty()
+            .split(',', '，', '|')
+        val safeCapabilities = (
+            runCatching { capabilities }.getOrNull().orEmpty() + declaredCapabilities
+            )
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
         return TtsEngineSetting(
             id = safeId,
             name = safeString { name }.ifBlank { "未命名朗读引擎" },
@@ -468,7 +490,7 @@ object TtsEngineStore {
             builtIn = runCatching { builtIn }.getOrDefault(false),
             enginePackage = safeNullableString { enginePackage },
             url = safeString { url },
-            script = safeString { script },
+            script = safeScript,
             optionValues = safeOptionValues(),
             contentType = safeString { contentType }.ifBlank { "audio/x-wav" },
             concurrentRate = safeNullableString { concurrentRate },
@@ -495,6 +517,7 @@ object TtsEngineStore {
             pitchParam = safeString { pitchParam }.ifBlank { "pitch" },
             voices = safeVoices(),
             disabledVoiceIds = safeStringList { disabledVoiceIds },
+            capabilities = safeCapabilities,
         )
     }
 
@@ -884,6 +907,12 @@ object TtsEngineStore {
             defaultSpeed = metadata["defaultspeed"].toScriptInt(defaultValue = 50),
             defaultVolume = metadata["defaultvolume"].toScriptInt(defaultValue = 50),
             defaultPitch = metadata["defaultpitch"].toScriptInt(defaultValue = 50),
+            capabilities = metadata["capabilities"]
+                .orEmpty()
+                .split(',', '，', '|')
+                .map { it.trim().lowercase() }
+                .filter { it.isNotBlank() }
+                .toSet(),
             baseUrl = url.takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty(),
             synthesisPath = "/forward"
         )

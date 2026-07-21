@@ -43,6 +43,8 @@ import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsScriptEngineClient
+import io.legado.app.help.tts.TtsSpeedPolicy
+import io.legado.app.help.tts.normalizeStoryboardSynthesisText
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadAloud
@@ -790,7 +792,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
 
     private fun previewStoryboardSegment(segment: StoryboardSegment) {
         stopStoryboardPreview()
-        val text = segment.text.trim()
+        val text = normalizeStoryboardSynthesisText(segment.text, segment.type)
         if (text.isBlank()) {
             toastOnUi("片段内容为空")
             return
@@ -832,6 +834,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 storyboardPreviewPlayer?.release()
                 storyboardPreviewPlayer = ExoPlayer.Builder(this@ReadAloudPlayerActivity).build().apply {
                     setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+                    setPlaybackSpeed(TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay))
                     prepare()
                     play()
                 }
@@ -1011,7 +1014,11 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     }
 
     private fun speedLabel(): String {
-        return "${(AppConfig.ttsSpeechRate + 5) / 10f}x"
+        return TtsSpeedPolicy.playbackLabel(AppConfig.speechRatePlay)
+    }
+
+    fun refreshPlaybackSpeedLabel() {
+        binding.actionSpeed.tvLabel.text = speedLabel()
     }
 
     private data class ParagraphSummary(

@@ -7,6 +7,7 @@ import com.google.gson.annotations.SerializedName
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookCharacter
+import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.character.ChapterStoryboard
 import io.legado.app.ui.book.character.StoryboardScene
@@ -25,10 +26,16 @@ import kotlin.coroutines.cancellation.CancellationException
 
 object AiTtsStoryboardHelper {
 
-    private const val SKILL_ASSET = "skills/tts_storyboard.md"
+    private const val BASIC_SKILL_ASSET = "skills/tts_storyboard/modes/basic.md"
+    private const val PERFORMANCE_SKILL_ASSET = "skills/tts_storyboard/modes/performance.md"
+    private const val PERFORMANCE_SCENES_SKILL_ASSET = "skills/tts_storyboard/modes/performance-scenes.md"
     private const val CACHE_DIR = "ai_tts_storyboard"
-    private const val CACHE_VERSION = 5
+    private const val CACHE_VERSION = 7
     private const val MEMORY_CACHE_TTL = 5 * 60 * 1000L
+    private object StoryboardMode {
+        const val BASIC = "basic"
+        const val PERFORMANCE = "performance"
+    }
     private val quotePairs = mapOf(
         '“' to '”',
         '‘' to '’',
@@ -54,8 +61,9 @@ object AiTtsStoryboardHelper {
     )
     private val unitKeys = setOf(
         "unitId", "roleType", "characterName", "characterId", "speakerGender",
-        "status", "confidence", "evidence"
+        "status", "confidence", "evidence", "performanceContext"
     )
+    private val sceneKeys = setOf("sceneId", "startParagraphIndex", "endParagraphIndex")
     private val rootKeys = setOf("units", "newCharacters")
     private val roleTypes = setOf("narrator", "character", "thought", "other")
     private val statuses = setOf("assigned", "unknown")
@@ -203,6 +211,7 @@ object AiTtsStoryboardHelper {
             ),
             "request" to mapOf(
                 "cache_key" to request.cacheKey,
+                "mode" to request.mode,
                 "content_hash" to request.contentHash,
                 "content_chars" to content.length,
                 "paragraph_count" to request.paragraphs.size,
@@ -214,7 +223,9 @@ object AiTtsStoryboardHelper {
                 "exists" to (cache != null),
                 "path" to file.absolutePath,
                 "version" to cache?.cacheVersion,
+                "mode" to cache?.mode,
                 "generated_at" to cache?.generatedAt,
+                "scene_count" to cache?.scenes?.size,
                 "assignment_count" to cache?.assignments?.size
             ),
             "characters" to request.characters.map {
@@ -261,7 +272,10 @@ object AiTtsStoryboardHelper {
                     "speaker_gender" to it.speakerGender,
                     "status" to it.status,
                     "confidence" to it.confidence,
-                    "evidence" to it.evidence.limitDebugText(textCharLimit)
+                    "evidence" to it.evidence.limitDebugText(textCharLimit),
+                    "performance_context" to it.performanceContext.map { context ->
+                        context.limitDebugText(textCharLimit)
+                    }
                 )
             }.orEmpty()
         )
@@ -290,7 +304,10 @@ object AiTtsStoryboardHelper {
                             "start" to segment.start,
                             "end" to segment.end,
                             "text" to segment.text.limitDebugText(textCharLimit),
-                            "evidence" to segment.evidence.limitDebugText(textCharLimit)
+                            "evidence" to segment.evidence.limitDebugText(textCharLimit),
+                            "performance_context" to segment.performanceContext.map { context ->
+                                context.limitDebugText(textCharLimit)
+                            }
                         )
                     }
                     ?.toList()
@@ -334,14 +351,19 @@ object AiTtsStoryboardHelper {
     private suspend fun generate(request: StoryboardRequest): GenerateResult {
         val selection = AiConfig.requireReadAloudStoryboardModel()
         val supportsReasoning = selection.supportsReasoning()
-        val systemPrompt = readSkillPrompt()
+        val preparedRequest = if (request.mode == StoryboardMode.PERFORMANCE) {
+            request.withPerformanceScenes(selection, supportsReasoning)
+        } else {
+            request
+        }
+        val systemPrompt = readSkillPrompt(preparedRequest.mode)
         val result = runCatching {
             requestModelUnits(
-                request = request,
+                request = preparedRequest,
                 selection = selection,
                 systemPrompt = systemPrompt,
                 supportsReasoning = supportsReasoning,
-                targetUnits = request.units
+                targetUnits = preparedRequest.units
             )
         }
         val assignments = result.getOrElse { error ->
@@ -352,23 +374,83 @@ object AiTtsStoryboardHelper {
                 "AI听书分镜整章请求失败，已临时回退旁白\n${error.localizedMessage}",
                 error
             )
-            request.units.map { it.fallbackAssignment(error, "整章请求") }
+            preparedRequest.units.map { it.fallbackAssignment(error, "整章请求") }
         }
         return GenerateResult(
             cache = StoryboardCache(
                 cacheVersion = CACHE_VERSION,
-                key = request.cacheKey,
+                key = preparedRequest.cacheKey,
                 providerId = selection.providerId,
                 modelId = selection.modelId,
-                contentHash = request.contentHash,
+                contentHash = preparedRequest.contentHash,
                 generatedAt = System.currentTimeMillis(),
-                chapterTitle = request.chapterTitle,
-                paragraphs = request.paragraphs,
-                units = request.units,
+                chapterTitle = preparedRequest.chapterTitle,
+                mode = preparedRequest.mode,
+                paragraphs = preparedRequest.paragraphs,
+                scenes = preparedRequest.scenes,
+                units = preparedRequest.units,
                 assignments = assignments
             ),
             cacheable = result.isSuccess
         )
+    }
+
+    private suspend fun StoryboardRequest.withPerformanceScenes(
+        selection: AiModelSelection,
+        supportsReasoning: Boolean
+    ): StoryboardRequest {
+        if (paragraphs.isEmpty()) return this
+        val generated = runCatching {
+            requestSceneRanges(selection, supportsReasoning)
+        }.getOrElse { error ->
+            if (error is CancellationException) {
+                throw error
+            }
+            io.legado.app.constant.AppLog.put(
+                "场景演绎划分失败，已使用连续段落边界\n${error.localizedMessage}",
+                error
+            )
+            fallbackSceneRanges(paragraphs)
+        }
+        return copy(
+            scenes = generated,
+            units = units.map { unit ->
+                val paragraphIndex = unit.ranges.firstOrNull()?.paragraphIndex
+                val sceneId = generated.firstOrNull { scene ->
+                    paragraphIndex != null && paragraphIndex in scene.startParagraphIndex..scene.endParagraphIndex
+                }?.sceneId
+                check(sceneId != null) { "候选片段未命中自然场景：${unit.unitId}" }
+                unit.copy(sceneId = sceneId)
+            }
+        )
+    }
+
+    private suspend fun StoryboardRequest.requestSceneRanges(
+        selection: AiModelSelection,
+        supportsReasoning: Boolean
+    ): List<SceneRange> {
+        val payload = ScenePayload(
+            chapter = PayloadChapter(chapterIndex, chapterTitle),
+            paragraphCount = paragraphs.size,
+            firstParagraphIndex = paragraphs.first().paragraphIndex,
+            lastParagraphIndex = paragraphs.last().paragraphIndex,
+            contextParagraphs = paragraphs
+        )
+        val result = AiManager.generateText(
+            providerId = selection.providerId,
+            modelId = selection.modelId,
+            messages = listOf(
+                AiMessage(AiMessage.Role.SYSTEM, readAssetPrompt(PERFORMANCE_SCENES_SKILL_ASSET)),
+                AiMessage(AiMessage.Role.USER, GSON.toJson(payload))
+            ),
+            params = AiConfig.readAloudStoryboardParams(
+                targetUnitCount = paragraphs.size,
+                supportsReasoning = supportsReasoning
+            )
+        )
+        check(result.content.isNotBlank()) { result.emptyContentMessage() }
+        check(result.finishReason != "length") { "AI 场景边界输出被截断" }
+        return parseAndValidateScenes(result.content, paragraphs)
     }
 
     private suspend fun requestModelUnits(
@@ -401,6 +483,7 @@ object AiTtsStoryboardHelper {
         return parseAndValidate(
             raw = result.content,
             targetUnits = targetUnits,
+            mode = request.mode,
             allowNewCharacters = false,
             knownCharacters = request.characters.map { it.toKnownCharacter() }
         )
@@ -434,6 +517,11 @@ object AiTtsStoryboardHelper {
             ContextParagraph(index, text)
         }
         val contentHash = MD5Utils.md5Encode(content)
+        val mode = if (AppConfig.readAloudStoryboardMode == 1) {
+            StoryboardMode.PERFORMANCE
+        } else {
+            StoryboardMode.BASIC
+        }
         val enabledCharacters = characters.filter { it.enabled && it.name.isNotBlank() }
         val charactersHash = MD5Utils.md5Encode(
             enabledCharacters
@@ -459,6 +547,7 @@ object AiTtsStoryboardHelper {
                 chapterTitle,
                 contentHash,
                 charactersHash,
+                mode,
                 selection?.providerId.orEmpty(),
                 selection?.modelId.orEmpty()
             ).joinToString("\u0000")
@@ -469,6 +558,7 @@ object AiTtsStoryboardHelper {
             chapterTitle = chapterTitle,
             contentHash = contentHash,
             cacheKey = cacheKey,
+            mode = mode,
             paragraphs = paragraphs,
             characters = enabledCharacters,
             units = buildCandidateUnits(paragraphs)
@@ -680,9 +770,11 @@ object AiTtsStoryboardHelper {
         return StoryboardPayload(
             book = PayloadBook(book.name, book.author),
             chapter = PayloadChapter(chapterIndex, chapterTitle),
+            mode = mode,
             allowNewCharacters = false,
             knownCharacters = characters.map { it.toKnownCharacter() },
             contextParagraphs = paragraphs,
+            scenes = scenes,
             units = targetUnits,
             targetUnitIds = targetUnits.map { it.unitId }
         )
@@ -705,6 +797,7 @@ object AiTtsStoryboardHelper {
     private fun parseAndValidate(
         raw: String,
         targetUnits: List<CandidateUnit>,
+        mode: String,
         allowNewCharacters: Boolean,
         knownCharacters: List<KnownCharacter> = emptyList()
     ): List<ModelUnitResult> {
@@ -742,8 +835,104 @@ object AiTtsStoryboardHelper {
             check(unit.status in statuses) { "AI 返回非法 status：${unit.status}" }
             check(unit.speakerGender in speakerGenders) { "AI 返回非法 speakerGender：${unit.speakerGender}" }
             check(unit.confidence in 0f..1f) { "AI 返回非法 confidence：${unit.confidence}" }
-            normalizeModelUnit(unit, knownIndex)
+            val source = targetUnits.first { it.unitId == unit.unitId }
+            val normalizedUnit = unit.copy(
+                performanceContext = sanitizePerformanceContext(
+                    context = unit.performanceContext,
+                    targetText = source.textPreview,
+                    enabled = mode == StoryboardMode.PERFORMANCE &&
+                        (unit.roleType == "character" || unit.roleType == "thought")
+                )
+            )
+            normalizeModelUnit(normalizedUnit, knownIndex)
         }
+    }
+
+    private fun parseAndValidateScenes(
+        raw: String,
+        paragraphs: List<ContextParagraph>
+    ): List<SceneRange> {
+        val json = normalizeModelOutput(raw).extractJsonObjectCandidate()
+        check(json.isNotBlank()) { "AI 未返回场景 JSON" }
+        val element = JsonParser.parseString(json)
+        check(element is JsonObject && element.keySet() == setOf("scenes")) {
+            "AI 场景返回包含非法字段"
+        }
+        val scenesElement = element.get("scenes")
+        check(scenesElement?.isJsonArray == true) { "AI 场景返回不是数组" }
+        scenesElement.asJsonArray.forEach { item ->
+            check(item.isJsonObject && item.asJsonObject.keySet() == sceneKeys) {
+                "AI 场景项包含非法字段"
+            }
+        }
+        val output = GSON.fromJson(json, SceneOutput::class.java)
+        val scenes = output.scenes.sortedBy { it.startParagraphIndex }
+        check(scenes.isNotEmpty()) { "AI 未返回自然场景" }
+        check(scenes.map { it.sceneId }.all { it.isNotBlank() }) { "AI 返回空 sceneId" }
+        check(scenes.map { it.sceneId }.distinct().size == scenes.size) { "AI 返回重复 sceneId" }
+        scenes.forEach { scene ->
+            check(scene.startParagraphIndex <= scene.endParagraphIndex) { "AI 返回非法场景范围" }
+        }
+        val indexes = paragraphs.map { it.paragraphIndex }
+        indexes.forEach { paragraphIndex ->
+            check(scenes.count { paragraphIndex in it.startParagraphIndex..it.endParagraphIndex } == 1) {
+                "自然段 $paragraphIndex 未被场景唯一覆盖"
+            }
+        }
+        check(scenes.first().startParagraphIndex == indexes.first()) { "场景未从首段开始" }
+        check(scenes.last().endParagraphIndex == indexes.last()) { "场景未覆盖末段" }
+        return scenes
+    }
+
+    private fun fallbackSceneRanges(paragraphs: List<ContextParagraph>): List<SceneRange> {
+        if (paragraphs.isEmpty()) return emptyList()
+        val scenes = arrayListOf<SceneRange>()
+        var start = paragraphs.first().paragraphIndex
+        var end = start
+        var count = 0
+        var length = 0
+        paragraphs.forEach { paragraph ->
+            if (count > 0 && (count >= 8 || length + paragraph.text.length > 900)) {
+                scenes += SceneRange("scene_${scenes.size + 1}", start, end)
+                start = paragraph.paragraphIndex
+                count = 0
+                length = 0
+            }
+            end = paragraph.paragraphIndex
+            count++
+            length += paragraph.text.length
+        }
+        scenes += SceneRange("scene_${scenes.size + 1}", start, end)
+        return scenes
+    }
+
+    internal fun sanitizePerformanceContext(
+        context: List<String>,
+        targetText: String,
+        enabled: Boolean
+    ): List<String> {
+        if (!enabled) return emptyList()
+        val target = targetText.normalizeComparisonText()
+        var remainingChars = 220
+        return context.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filterNot {
+                target.length >= 12 && target in it.normalizeComparisonText()
+            }
+            .distinct()
+            .take(3)
+            .mapNotNull { item ->
+                if (remainingChars <= 0) return@mapNotNull null
+                val sanitized = item.take(minOf(80, remainingChars)).trim()
+                remainingChars -= sanitized.length
+                sanitized.takeIf { it.isNotBlank() }
+            }
+            .toList()
+    }
+
+    private fun String.normalizeComparisonText(): String {
+        return replace(Regex("[\\s“”‘’\\\"'，。！？!?；;：:、…—-]+"), "")
     }
 
     private fun knownCharacterIndex(knownCharacters: List<KnownCharacter>): KnownCharacterIndex {
@@ -776,7 +965,8 @@ object AiTtsStoryboardHelper {
                 characterName = "",
                 characterId = 0L,
                 speakerGender = StoryboardSegment.SpeakerGender.UNKNOWN,
-                status = "unknown"
+                status = "unknown",
+                performanceContext = emptyList()
             )
         }
         val modelDisplayName = unit.characterName.trim()
@@ -805,7 +995,8 @@ object AiTtsStoryboardHelper {
             characterName = "",
             characterId = 0L,
             speakerGender = StoryboardSegment.SpeakerGender.UNKNOWN,
-            status = "unknown"
+            status = "unknown",
+            performanceContext = emptyList()
         )
     }
 
@@ -815,8 +1006,8 @@ object AiTtsStoryboardHelper {
         val paragraphSegments = paragraphs.associate { paragraph ->
             paragraph.paragraphIndex to buildSegmentsForParagraph(paragraph, unitMap, assignmentMap)
         }
-        val scenes = buildScenes(paragraphs, paragraphSegments)
-        return ChapterStoryboard(chapterTitle = chapterTitle, scenes = scenes)
+        val storyboardScenes = buildScenes(paragraphs, paragraphSegments, scenes)
+        return ChapterStoryboard(chapterTitle = chapterTitle, scenes = storyboardScenes)
     }
 
     private fun buildSegmentsForParagraph(
@@ -866,7 +1057,12 @@ object AiTtsStoryboardHelper {
                     assignment?.speakerGender ?: StoryboardSegment.SpeakerGender.UNKNOWN
                 },
                 start = range.start,
-                end = range.end
+                end = range.end,
+                performanceContext = if (type == StoryboardSegmentType.NARRATION) {
+                    emptyList()
+                } else {
+                    assignment?.performanceContext.orEmpty()
+                }
             )
             cursor = range.end
         }
@@ -913,6 +1109,7 @@ object AiTtsStoryboardHelper {
                 last.speakerId == segment.speakerId &&
                 last.speakerName == segment.speakerName &&
                 last.speakerGender == segment.speakerGender &&
+                last.performanceContext == segment.performanceContext &&
                 last.end == segment.start
             ) {
                 result[result.lastIndex] = last.copy(
@@ -937,21 +1134,31 @@ object AiTtsStoryboardHelper {
 
     private fun buildScenes(
         paragraphs: List<ContextParagraph>,
-        paragraphSegments: Map<Int, List<StoryboardSegment>>
+        paragraphSegments: Map<Int, List<StoryboardSegment>>,
+        sceneRanges: List<SceneRange>
     ): List<StoryboardScene> {
-        val groups = arrayListOf<MutableList<ContextParagraph>>()
-        var current = arrayListOf<ContextParagraph>()
-        var currentLength = 0
-        paragraphs.forEach { paragraph ->
-            if (current.isNotEmpty() && (current.size >= 8 || currentLength + paragraph.text.length > 900)) {
-                groups += current
-                current = arrayListOf()
-                currentLength = 0
+        val groups = if (sceneRanges.isNotEmpty()) {
+            sceneRanges.map { scene ->
+                paragraphs.filter { it.paragraphIndex in scene.startParagraphIndex..scene.endParagraphIndex }
+            }.filter { it.isNotEmpty() }
+        } else {
+            val fallbackGroups = arrayListOf<MutableList<ContextParagraph>>()
+            var current = arrayListOf<ContextParagraph>()
+            var currentLength = 0
+            paragraphs.forEach { paragraph ->
+                if (current.isNotEmpty() &&
+                    (current.size >= 8 || currentLength + paragraph.text.length > 900)
+                ) {
+                    fallbackGroups += current
+                    current = arrayListOf()
+                    currentLength = 0
+                }
+                current += paragraph
+                currentLength += paragraph.text.length
             }
-            current += paragraph
-            currentLength += paragraph.text.length
+            if (current.isNotEmpty()) fallbackGroups += current
+            fallbackGroups
         }
-        if (current.isNotEmpty()) groups += current
         return groups.mapIndexed { index, group ->
             val segments = group.flatMap { paragraphSegments[it.paragraphIndex].orEmpty() }
             val names = segments
@@ -968,7 +1175,8 @@ object AiTtsStoryboardHelper {
                 },
                 summary = summary.replace(Regex("\\s+"), " ").trim().take(64),
                 characters = names,
-                segments = segments
+                segments = segments,
+                contextText = group.joinToString("\n") { it.text }
             )
         }
     }
@@ -991,7 +1199,8 @@ object AiTtsStoryboardHelper {
             cache.takeIf {
                 it.cacheVersion == CACHE_VERSION &&
                     it.key == request.cacheKey &&
-                    it.contentHash == request.contentHash
+                    it.contentHash == request.contentHash &&
+                    it.mode == request.mode
             }
         }.getOrNull()
     }
@@ -1004,7 +1213,8 @@ object AiTtsStoryboardHelper {
             ?.takeIf {
                 it.cacheVersion == CACHE_VERSION &&
                     it.key == request.cacheKey &&
-                    it.contentHash == request.contentHash
+                    it.contentHash == request.contentHash &&
+                    it.mode == request.mode
             }
     }
 
@@ -1023,8 +1233,16 @@ object AiTtsStoryboardHelper {
         return File(File(appCtx.cacheDir, CACHE_DIR), "${request.cacheKey}.json")
     }
 
-    private fun readSkillPrompt(): String {
-        val raw = appCtx.assets.open(SKILL_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() }
+    private fun readSkillPrompt(mode: String): String {
+        val asset = when (mode) {
+            StoryboardMode.PERFORMANCE -> PERFORMANCE_SKILL_ASSET
+            else -> BASIC_SKILL_ASSET
+        }
+        return readAssetPrompt(asset)
+    }
+
+    private fun readAssetPrompt(asset: String): String {
+        val raw = appCtx.assets.open(asset).bufferedReader(Charsets.UTF_8).use { it.readText() }
         if (!raw.startsWith("---")) return raw.trim()
         val end = Regex("\\r?\\n---(?:\\r?\\n|$)").find(raw, startIndex = 3) ?: return raw.trim()
         return raw.substring(end.range.last + 1).trim()
@@ -1117,9 +1335,11 @@ object AiTtsStoryboardHelper {
         val chapterTitle: String,
         val contentHash: String,
         val cacheKey: String,
+        val mode: String,
         val paragraphs: List<ContextParagraph>,
         val characters: List<BookCharacter>,
-        val units: List<CandidateUnit>
+        val units: List<CandidateUnit>,
+        val scenes: List<SceneRange> = emptyList()
     )
 
     private data class GenerateResult(
@@ -1147,8 +1367,12 @@ object AiTtsStoryboardHelper {
         val generatedAt: Long = 0L,
         @SerializedName("chapterTitle")
         val chapterTitle: String = "",
+        @SerializedName("mode")
+        val mode: String = StoryboardMode.BASIC,
         @SerializedName("paragraphs")
         val paragraphs: List<ContextParagraph> = emptyList(),
+        @SerializedName("scenes")
+        val scenes: List<SceneRange> = emptyList(),
         @SerializedName("units")
         val units: List<CandidateUnit> = emptyList(),
         @SerializedName("assignments")
@@ -1165,6 +1389,8 @@ object AiTtsStoryboardHelper {
     data class CandidateUnit(
         @SerializedName("unitId")
         val unitId: String = "",
+        @SerializedName("sceneId")
+        val sceneId: String = "",
         @SerializedName("kind")
         val kind: String = "",
         @SerializedName("roleHint")
@@ -1193,12 +1419,16 @@ object AiTtsStoryboardHelper {
         val book: PayloadBook,
         @SerializedName("chapter")
         val chapter: PayloadChapter,
+        @SerializedName("mode")
+        val mode: String,
         @SerializedName("allowNewCharacters")
         val allowNewCharacters: Boolean,
         @SerializedName("knownCharacters")
         val knownCharacters: List<KnownCharacter>,
         @SerializedName("contextParagraphs")
         val contextParagraphs: List<ContextParagraph>,
+        @SerializedName("scenes")
+        val scenes: List<SceneRange>,
         @SerializedName("units")
         val units: List<CandidateUnit>,
         @SerializedName("targetUnitIds")
@@ -1217,6 +1447,33 @@ object AiTtsStoryboardHelper {
         val index: Int,
         @SerializedName("title")
         val title: String
+    )
+
+    private data class ScenePayload(
+        @SerializedName("chapter")
+        val chapter: PayloadChapter,
+        @SerializedName("paragraphCount")
+        val paragraphCount: Int,
+        @SerializedName("firstParagraphIndex")
+        val firstParagraphIndex: Int,
+        @SerializedName("lastParagraphIndex")
+        val lastParagraphIndex: Int,
+        @SerializedName("contextParagraphs")
+        val contextParagraphs: List<ContextParagraph>
+    )
+
+    private data class SceneOutput(
+        @SerializedName("scenes")
+        val scenes: List<SceneRange> = emptyList()
+    )
+
+    data class SceneRange(
+        @SerializedName("sceneId")
+        val sceneId: String = "",
+        @SerializedName("startParagraphIndex")
+        val startParagraphIndex: Int = 0,
+        @SerializedName("endParagraphIndex")
+        val endParagraphIndex: Int = 0
     )
 
     private data class KnownCharacter(
@@ -1260,6 +1517,8 @@ object AiTtsStoryboardHelper {
         @SerializedName("confidence")
         val confidence: Float = 0f,
         @SerializedName("evidence")
-        val evidence: String = ""
+        val evidence: String = "",
+        @SerializedName("performanceContext")
+        val performanceContext: List<String> = emptyList()
     )
 }

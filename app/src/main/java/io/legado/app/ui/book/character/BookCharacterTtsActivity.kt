@@ -61,6 +61,11 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
         observeData()
     }
 
+    override fun onResume() {
+        super.onResume()
+        adapter.notifyDataSetChanged()
+    }
+
     private fun observeData() {
         lifecycleScope.launch {
             combine(
@@ -120,7 +125,7 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
             title = row.title(),
             searchHint = getString(R.string.default_tts_voice_search),
             emptyText = getString(R.string.character_tts_no_voice_options),
-            engines = { TtsEngineStore.engines().filter { it.enabled } },
+            engines = { selectableEngines(row) },
             isSelected = { option -> isSelected(selectedBinding, option) },
             onSelect = { option -> saveBinding(row, option) },
             beforePreview = {
@@ -132,6 +137,14 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
                 }
             }
         ).show()
+    }
+
+    private fun selectableEngines(row: Row) = when (row) {
+        is Row.Narrator -> TtsEngineStore.engines().filter { it.enabled }
+        else -> listOfNotNull(
+            TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
+                ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
+        )
     }
 
     private fun saveBinding(row: Row, option: TtsVoiceOption) {
@@ -257,10 +270,13 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
     }
 
     private fun Row.binding(): BookCharacterTtsBinding? {
-        return when (this) {
+        val stored = when (this) {
             is Row.Narrator -> binding
             is Row.DialogueFallback -> binding
             is Row.Character -> binding
+        }
+        return stored?.takeIf { binding ->
+            this is Row.Narrator || binding.engineId == AppConfig.multiRoleTtsEngineId
         }
     }
 
@@ -306,7 +322,7 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
                     tvAvatar.text = getString(R.string.character_tts_narrator_avatar)
                     tvAvatar.setBackgroundResource(R.drawable.bg_character_avatar_unknown)
                     tvName.text = item.title()
-                    tvVoice.text = bindingVoiceLabel(item.binding)
+                    tvVoice.text = bindingVoiceLabel(item.binding())
                         ?: getString(
                             R.string.character_tts_follow_global,
                             defaultNarratorVoiceLabel() ?: globalVoiceLabel()
@@ -329,7 +345,7 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
                         }
                     )
                     tvName.text = item.title()
-                    tvVoice.text = bindingVoiceLabel(item.binding)
+                    tvVoice.text = bindingVoiceLabel(item.binding())
                         ?: defaultDialogueVoiceLabel(item.gender)?.let { voiceLabel ->
                             getString(R.string.character_tts_follow_global, voiceLabel)
                         }
@@ -340,7 +356,7 @@ class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBinding>()
                     tvAvatar.text = character.name.firstOrNull()?.toString().orEmpty()
                     tvAvatar.setBackgroundResource(character.avatarBackground())
                     tvName.text = item.title()
-                    tvVoice.text = bindingVoiceLabel(item.binding)
+                    tvVoice.text = bindingVoiceLabel(item.binding())
                         ?: getString(R.string.character_tts_unbound)
                 }
             }

@@ -1,7 +1,11 @@
 package io.legado.app.ui.book.character
 
+import com.google.gson.annotations.SerializedName
+
 data class ChapterStoryboard(
+    @SerializedName("chapterTitle")
     val chapterTitle: String,
+    @SerializedName("scenes")
     val scenes: List<StoryboardScene>
 ) {
     val segmentCount: Int get() = scenes.sumOf { it.segments.size }
@@ -14,11 +18,18 @@ data class ChapterStoryboard(
 }
 
 data class StoryboardScene(
+    @SerializedName("index")
     val index: Int,
+    @SerializedName("title")
     val title: String,
+    @SerializedName("summary")
     val summary: String,
+    @SerializedName("characters")
     val characters: List<String>,
-    val segments: List<StoryboardSegment>
+    @SerializedName("segments")
+    val segments: List<StoryboardSegment>,
+    @SerializedName("context_text")
+    val contextText: String = ""
 ) {
     val narrationCount: Int get() = segments.count { it.type == StoryboardSegmentType.NARRATION }
     val dialogueCount: Int get() = segments.count { it.type == StoryboardSegmentType.DIALOGUE }
@@ -26,15 +37,26 @@ data class StoryboardScene(
 }
 
 data class StoryboardSegment(
+    @SerializedName("type")
     val type: StoryboardSegmentType,
+    @SerializedName("paragraphIndex")
     val paragraphIndex: Int,
+    @SerializedName("text")
     val text: String,
+    @SerializedName("speakerName")
     val speakerName: String?,
+    @SerializedName("evidence")
     val evidence: String,
+    @SerializedName("speakerId")
     val speakerId: Long? = null,
+    @SerializedName("speakerGender")
     val speakerGender: String = SpeakerGender.UNKNOWN,
+    @SerializedName("start")
     val start: Int = 0,
-    val end: Int = start + text.length
+    @SerializedName("end")
+    val end: Int = start + text.length,
+    @SerializedName("performance_context")
+    val performanceContext: List<String> = emptyList()
 ) {
     object SpeakerGender {
         const val MALE = "male"
@@ -44,7 +66,10 @@ data class StoryboardSegment(
 }
 
 enum class StoryboardSegmentType {
+    @SerializedName("NARRATION")
     NARRATION,
+    @SerializedName("DIALOGUE")
     DIALOGUE,
+    @SerializedName("THOUGHT")
     THOUGHT
 }

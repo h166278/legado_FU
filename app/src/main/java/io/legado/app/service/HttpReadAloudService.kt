@@ -28,14 +28,20 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.ReadAloudAudioTask
 import io.legado.app.help.tts.TtsEngineSetting
+import io.legado.app.help.tts.TtsEngineCapability
+import io.legado.app.help.tts.TtsSynthesisContext
+import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.help.tts.TtsScriptEngineClient
 import io.legado.app.help.tts.prepareReadAloudAudioTasks
+import io.legado.app.help.tts.normalizeStoryboardSynthesisText
+import io.legado.app.help.tts.toTtsSynthesisContext
 import io.legado.app.help.tts.writeReadAloudAudioAtomically
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.CacheBook
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.book.character.ChapterStoryboard
+import io.legado.app.ui.book.character.StoryboardScene
 import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
@@ -65,7 +71,6 @@ import java.io.InputStream
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.roundToInt
 
 /**
  * 在线朗读
@@ -79,7 +84,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator
     }
-    private var speechRate: Int = AppConfig.speechRatePlay + 5
+    private var legacySpeechRate: Int = AppConfig.speechRatePlay + 5
     private var downloadTask: Coroutine<*>? = null
     private var playIndexJob: Job? = null
     private val downloadErrorNo = AtomicInteger()
@@ -92,6 +97,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun onCreate() {
         super.onCreate()
         exoPlayer.addListener(this)
+        applyPlaybackRate()
     }
 
     override fun onDestroy() {
@@ -243,19 +249,31 @@ class HttpReadAloudService : BaseReadAloudService(),
         val globalConcurrency = AppConfig.readAloudWorkerCount
         val tasks = items.map { item ->
             val route = routeFor(engineV2, item.segment)
-            val fileName = if (cacheChapter == null) {
-                md5SpeakFileName(item.text, route)
-            } else {
-                md5SpeakFileName(item.text, route, cacheChapter)
-            }
             val routedEngine = route?.engine ?: engineV2
+            val synthesisText = item.synthesisText()
+            val synthesisContext = item.synthesisContext?.takeIf {
+                routedEngine?.supportsCapability(TtsEngineCapability.SCENE_CONTEXT) == true
+            }
+            val fileName = if (cacheChapter == null) {
+                md5SpeakFileName(synthesisText, route, synthesisContext = synthesisContext)
+            } else {
+                md5SpeakFileName(synthesisText, route, cacheChapter, synthesisContext)
+            }
             ReadAloudAudioTask(
                 cacheKey = fileName,
                 engineKey = routedEngine?.id ?: "legacy:${httpTts?.getKey().orEmpty()}",
                 maxConcurrency = routedEngine?.effectiveMaxConcurrency(globalConcurrency)
                     ?: globalConcurrency,
                 prepare = {
-                    prepareSpeakFile(httpTts, engineV2, item, route, fileName)
+                    prepareSpeakFile(
+                        httpTts,
+                        engineV2,
+                        item,
+                        route,
+                        fileName,
+                        synthesisContext,
+                        synthesisText
+                    )
                 }
             )
         }
@@ -267,15 +285,23 @@ class HttpReadAloudService : BaseReadAloudService(),
         engineV2: TtsEngineSetting?,
         item: SpeakItem,
         route: ReadAloudTtsRouter.Route?,
-        fileName: String
+        fileName: String,
+        synthesisContext: TtsSynthesisContext?,
+        synthesisText: String
     ): File {
         currentCoroutineContext().ensureActive()
-        val speakText = item.text.replace(AppPattern.notReadAloudRegex, "")
+        val speakText = synthesisText.replace(AppPattern.notReadAloudRegex, "")
         if (speakText.isEmpty()) {
             AppLog.put("阅读片段内容为空，使用无声音频代替。\n朗读文本：${item.sourceText}")
             createSilentSound(fileName)
         } else if (!hasSpeakFile(fileName)) {
-            val inputStream = getSpeakStream(httpTts, engineV2, speakText, route)
+            val inputStream = getSpeakStream(
+                httpTts,
+                engineV2,
+                speakText,
+                route,
+                synthesisContext
+            )
             if (inputStream != null) {
                 createSpeakFile(fileName, inputStream)
             } else {
@@ -285,11 +311,16 @@ class HttpReadAloudService : BaseReadAloudService(),
         return getSpeakFileAsMd5(fileName)
     }
 
+    private fun SpeakItem.synthesisText(): String {
+        return normalizeStoryboardSynthesisText(text, segment?.type)
+    }
+
     private suspend fun getSpeakStream(
         httpTts: HttpTTS?,
         engineV2: TtsEngineSetting?,
         speakText: String,
-        route: ReadAloudTtsRouter.Route?
+        route: ReadAloudTtsRouter.Route?,
+        synthesisContext: TtsSynthesisContext?
     ): InputStream? {
         while (true) {
             try {
@@ -300,7 +331,8 @@ class HttpReadAloudService : BaseReadAloudService(),
                         text = speakText,
                         voiceId = route?.voiceId ?: routedEngine.activeVoiceId,
                         styleId = route?.styleId,
-                        speed = effectiveEngineSpeed(routedEngine),
+                        speed = TtsSpeedPolicy.synthesisSpeed(routedEngine),
+                        synthesisContext = synthesisContext,
                         coroutineContext = currentCoroutineContext()
                     )
                     currentCoroutineContext().ensureActive()
@@ -311,7 +343,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                 val analyzeUrl = AnalyzeUrl(
                     legacyHttpTts.url,
                     speakText = speakText,
-                    speakSpeed = speechRate,
+                    speakSpeed = legacySpeechRate,
                     source = legacyHttpTts,
                     readTimeout = 300 * 1000L,
                     coroutineContext = currentCoroutineContext()
@@ -416,9 +448,13 @@ class HttpReadAloudService : BaseReadAloudService(),
                 content = content,
                 characters = characters
             )
-        }.onFailure {
-            AppLog.put("AI听书分镜生成失败，已回退旁白朗读\n${it.localizedMessage}", it)
-        }.getOrNull()
+        }.getOrElse { error ->
+            if (error is CancellationException) {
+                throw error
+            }
+            AppLog.put("AI听书分镜生成失败，已回退旁白朗读\n${error.localizedMessage}", error)
+            null
+        }
     }
 
     private suspend fun preGenerateAiStoryboards(): ChapterStoryboard? {
@@ -513,6 +549,12 @@ class HttpReadAloudService : BaseReadAloudService(),
         maxItems: Int
     ): List<SpeakItem> {
         val items = arrayListOf<SpeakItem>()
+        val sceneByParagraph = storyboard?.scenes
+            .orEmpty()
+            .flatMap { scene ->
+                scene.segments.map { segment -> segment.paragraphIndex to scene }
+            }
+            .toMap()
         paragraphs.forEachIndexed { index, originalText ->
             if (index < startParagraphIndex || items.size >= maxItems) return@forEachIndexed
             val readableStart = if (paragraphs === contentList) {
@@ -527,7 +569,12 @@ class HttpReadAloudService : BaseReadAloudService(),
                 fallbackText = originalText
             )
             val paragraphItems = paragraphSegments.mapNotNull { segment ->
-                segment.toSpeakItem(index, originalText, readableStart)
+                segment.toSpeakItem(
+                    index,
+                    originalText,
+                    readableStart,
+                    sceneByParagraph[index]
+                )
             }
             if (paragraphItems.isNotEmpty()) {
                 items += paragraphItems.take(maxItems - items.size)
@@ -544,6 +591,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                         start = readableStart,
                         end = originalText.length,
                         sourceText = originalText,
+                        synthesisContext = null,
                         segment = StoryboardSegment(
                             type = StoryboardSegmentType.NARRATION,
                             paragraphIndex = index,
@@ -563,7 +611,8 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun StoryboardSegment.toSpeakItem(
         paragraphIndex: Int,
         originalText: String,
-        readableStart: Int
+        readableStart: Int,
+        scene: StoryboardScene?
     ): SpeakItem? {
         val safeStart = maxOf(start, readableStart).coerceIn(0, originalText.length)
         val safeEnd = end.coerceIn(0, originalText.length)
@@ -576,6 +625,7 @@ class HttpReadAloudService : BaseReadAloudService(),
             start = safeStart,
             end = safeEnd,
             sourceText = originalText,
+            synthesisContext = toTtsSynthesisContext(scene, AppConfig.readAloudStoryboardMode),
             segment = copy(
                 paragraphIndex = paragraphIndex,
                 text = speakText,
@@ -610,11 +660,12 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun md5SpeakFileName(
         content: String,
         route: ReadAloudTtsRouter.Route?,
-        textChapter: TextChapter? = this.textChapter
+        textChapter: TextChapter? = this.textChapter,
+        synthesisContext: TtsSynthesisContext? = null
     ): String {
         val scenarioMode = if (AppConfig.readAloudMultiRole) "multi" else "single"
         (route?.engine ?: ReadAloud.httpTtsEngineV2)?.let { engine ->
-            val effectiveSpeed = effectiveEngineSpeed(engine)
+            val effectiveSpeed = TtsSpeedPolicy.synthesisSpeed(engine)
             return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
                     MD5Utils.md5Encode16(
                         listOf(
@@ -624,23 +675,23 @@ class HttpReadAloudService : BaseReadAloudService(),
                                 text = content,
                                 voiceId = route?.voiceId ?: engine.activeVoiceId,
                                 styleId = route?.styleId,
-                                speed = effectiveSpeed
+                                speed = effectiveSpeed,
+                                synthesisContext = synthesisContext
                             )
                         ).joinToString("-|-")
                     )
         }
         return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
-                MD5Utils.md5Encode16("$scenarioMode-|-${ReadAloud.httpTTS?.url}-|-$speechRate-|-$content")
+                MD5Utils.md5Encode16("$scenarioMode-|-${ReadAloud.httpTTS?.url}-|-$legacySpeechRate-|-$content")
     }
 
-    private fun effectiveEngineSpeed(engine: TtsEngineSetting): Int {
-        return (engine.effectiveSpeed() * speechRateMultiplier())
-            .roundToInt()
-            .coerceIn(0, 100)
-    }
-
-    private fun speechRateMultiplier(): Float {
-        return speechRate / 10f
+    private fun applyPlaybackRate() {
+        val rate = if (ReadAloud.httpTtsEngineV2 != null) {
+            TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
+        } else {
+            1f
+        }
+        exoPlayer.setPlaybackSpeed(rate)
     }
 
     private suspend fun createSilentSound(fileName: String) {
@@ -719,7 +770,8 @@ class HttpReadAloudService : BaseReadAloudService(),
             if (speakTextLength <= 0) {
                 return@launch
             }
-            val sleep = maxOf(1L, exoPlayer.duration / speakTextLength)
+            val playbackRate = exoPlayer.playbackParameters.speed.coerceAtLeast(0.1f)
+            val sleep = maxOf(1L, (exoPlayer.duration / speakTextLength / playbackRate).toLong())
             val start = speakTextLength * exoPlayer.currentPosition / exoPlayer.duration
             for (i in start..speakTextLength.toLong()) {
                 if (pageIndex + 1 < textChapter.pageSize
@@ -738,8 +790,15 @@ class HttpReadAloudService : BaseReadAloudService(),
      * 更新朗读速度
      */
     override fun upSpeechRate(reset: Boolean) {
-        speechRate = AppConfig.speechRatePlay + 5
-        refreshTtsRoute()
+        legacySpeechRate = AppConfig.speechRatePlay + 5
+        if (ReadAloud.httpTtsEngineV2 != null) {
+            applyPlaybackRate()
+            if (!pause) {
+                upPlayPos()
+            }
+        } else {
+            refreshTtsRoute()
+        }
     }
 
     override fun refreshTtsRoute() {
@@ -840,6 +899,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         val start: Int,
         val end: Int,
         val sourceText: String,
+        val synthesisContext: TtsSynthesisContext?,
         val segment: StoryboardSegment?
     )
 

@@ -24,10 +24,15 @@ import io.legado.app.databinding.ActivityBookStoryboardBinding
 import io.legado.app.databinding.ItemBookStoryboardSceneBinding
 import io.legado.app.databinding.ItemBookStoryboardSegmentBinding
 import io.legado.app.help.ai.AiTtsStoryboardHelper
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.ReadAloudTtsRouter
+import io.legado.app.help.tts.TtsEngineCapability
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsScriptEngineClient
+import io.legado.app.help.tts.TtsSpeedPolicy
+import io.legado.app.help.tts.normalizeStoryboardSynthesisText
+import io.legado.app.help.tts.toTtsSynthesisContext
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.ReadAloud
@@ -114,7 +119,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
         }
         val rows = storyboard.scenes.flatMap { scene ->
             val segments = scene.segments.filterNot { it.isChapterTitleSegment(storyboard.chapterTitle) }
-            listOf(StoryboardRow.Scene(scene)) + segments.map { StoryboardRow.Segment(it) }
+            listOf(StoryboardRow.Scene(scene)) + segments.map { StoryboardRow.Segment(scene, it) }
         }
         val visibleSegments = rows.count { it is StoryboardRow.Segment }
         val visibleDialogueCount = rows.count {
@@ -194,7 +199,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             when (val row = rows[position]) {
                 is StoryboardRow.Scene -> (holder as SceneHolder).bind(row.scene)
-                is StoryboardRow.Segment -> (holder as SegmentHolder).bind(row.segment)
+                is StoryboardRow.Segment -> (holder as SegmentHolder).bind(row.scene, row.segment)
             }
         }
 
@@ -227,7 +232,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
     private inner class SegmentHolder(
         private val binding: ItemBookStoryboardSegmentBinding
     ) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(segment: StoryboardSegment) = binding.run {
+        fun bind(scene: StoryboardScene, segment: StoryboardSegment) = binding.run {
             val identity = when (segment.type) {
                 StoryboardSegmentType.NARRATION -> "旁白"
                 StoryboardSegmentType.DIALOGUE -> segment.speakerName ?: segment.virtualSpeakerName()
@@ -242,7 +247,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
             tvEvidence.isVisible = evidence.isNotBlank() && evidence != identity
             btnPreview.background = accentCircleBackground()
             btnPreview.imageTintList = ColorStateList.valueOf(accentColor)
-            btnPreview.setOnClickListener { previewStoryboardSegment(segment) }
+            btnPreview.setOnClickListener { previewStoryboardSegment(scene, segment) }
         }
     }
 
@@ -268,7 +273,10 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
 
     private sealed interface StoryboardRow {
         data class Scene(val scene: StoryboardScene) : StoryboardRow
-        data class Segment(val segment: StoryboardSegment) : StoryboardRow
+        data class Segment(
+            val scene: StoryboardScene,
+            val segment: StoryboardSegment
+        ) : StoryboardRow
     }
 
     private fun accentCircleBackground(): GradientDrawable {
@@ -278,9 +286,9 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
         }
     }
 
-    private fun previewStoryboardSegment(segment: StoryboardSegment) {
+    private fun previewStoryboardSegment(scene: StoryboardScene, segment: StoryboardSegment) {
         stopPreview()
-        val text = segment.text.trim()
+        val text = normalizeStoryboardSynthesisText(segment.text, segment.type)
         if (text.isBlank()) {
             toastOnUi("片段内容为空")
             return
@@ -300,11 +308,15 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
                     val engine = (route?.engine ?: baseEngine)
                         .takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
                         ?: error("角色绑定的朗读引擎不可用")
+                    val synthesisContext = segment
+                        .toTtsSynthesisContext(scene, AppConfig.readAloudStoryboardMode)
+                        ?.takeIf { engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT) }
                     val response = TtsScriptEngineClient.getSynthesisResponse(
                         engine = engine,
                         text = text,
                         voiceId = route?.voiceId ?: engine.activeVoiceId,
-                        styleId = route?.styleId
+                        styleId = route?.styleId,
+                        synthesisContext = synthesisContext
                     )
                     File(cacheDir, "storyboard_preview_${System.currentTimeMillis()}.audio").apply {
                         response.use {
@@ -319,6 +331,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
                 previewPlayer?.release()
                 previewPlayer = ExoPlayer.Builder(this@BookStoryboardActivity).build().apply {
                     setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+                    setPlaybackSpeed(TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay))
                     prepare()
                     play()
                 }
