@@ -51,8 +51,11 @@ object TtsEngineStore {
         "script_options_example.js",
         "static_voices_example.js"
     )
+    private val defaultScriptEngineSnapshots by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        loadDefaultScriptEngines()
+    }
     private val defaultScriptIdSet by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        defaultScriptEngines().mapTo(hashSetOf()) { it.id }
+        defaultScriptEngineSnapshots.mapTo(hashSetOf()) { it.id }
     }
 
     fun engines(): List<TtsEngineSetting> {
@@ -918,7 +921,9 @@ object TtsEngineStore {
             ?: error("缺少默认 TTS 脚本: static_voices_example.js")
     }
 
-    private fun defaultScriptEngines(): List<TtsEngineSetting> {
+    private fun defaultScriptEngines(): List<TtsEngineSetting> = defaultScriptEngineSnapshots
+
+    private fun loadDefaultScriptEngines(): List<TtsEngineSetting> {
         return appCtx.assets.list(DEFAULT_TTS_ASSET_DIR)
             .orEmpty()
             .filter { it.endsWith(".js", ignoreCase = true) }

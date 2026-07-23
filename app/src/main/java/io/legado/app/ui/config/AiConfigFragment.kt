@@ -105,7 +105,22 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     companion object {
         const val EXTRA_INITIAL_PAGE = "initialPage"
+        const val PAGE_PROVIDERS = "providers"
+        const val PAGE_PROMPTS = "prompts"
+        const val PAGE_PURIFY = "purify"
+        const val PAGE_READ_ALOUD = "readAloud"
         const val PAGE_ASSISTANT = "assistant"
+        private const val ARG_INITIAL_PAGE = "initialPage"
+        private const val ARG_RETURN_TO_MENU = "returnToMenu"
+
+        fun newMenuPageInstance(initialPage: String): AiConfigFragment {
+            return AiConfigFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_INITIAL_PAGE, initialPage)
+                    putBoolean(ARG_RETURN_TO_MENU, true)
+                }
+            }
+        }
     }
 
     private enum class Page {
@@ -169,6 +184,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private var providerDetailTab = ProviderDetailTab.CONFIG
     private val autoFetchedModelProviderIds = hashSetOf<String>()
     private var requestJob: Job? = null
+    private var skillSummaryJob: Job? = null
+    private var skipNextResumeRefresh = false
+    private var entryPage = Page.MAIN
+    private var returnToMenuOnEntryBack = false
     private var ignoreMainFormChanges = false
     private var ignoreProviderFormChanges = false
     private var ignorePurifyFormChanges = false
@@ -190,22 +209,46 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         initPromptDetail()
         initModelSettings()
         initPurifySettings()
-        val initialPage = activity?.intent?.getStringExtra(EXTRA_INITIAL_PAGE)
-        showMain()
-        if (initialPage == PAGE_ASSISTANT) {
-            activity?.intent?.removeExtra(EXTRA_INITIAL_PAGE)
-            showAssistantModelSettings()
+        val initialPage = arguments?.getString(ARG_INITIAL_PAGE)
+            ?: activity?.intent?.getStringExtra(EXTRA_INITIAL_PAGE)
+        returnToMenuOnEntryBack = arguments?.getBoolean(ARG_RETURN_TO_MENU) == true
+        entryPage = when (initialPage) {
+            PAGE_PROVIDERS -> Page.PROVIDERS
+            PAGE_PROMPTS -> Page.PROMPTS
+            PAGE_PURIFY -> Page.PURIFY_MODEL_SETTINGS
+            PAGE_READ_ALOUD -> Page.READ_ALOUD_MODEL_SETTINGS
+            PAGE_ASSISTANT -> Page.ASSISTANT_MODEL_SETTINGS
+            else -> Page.MAIN
         }
+        when (entryPage) {
+            Page.PROVIDERS -> showProviderList()
+            Page.PROMPTS -> showPromptList()
+            Page.PURIFY_MODEL_SETTINGS -> showPurifyModelSettings()
+            Page.READ_ALOUD_MODEL_SETTINGS -> showReadAloudModelSettings()
+            Page.ASSISTANT_MODEL_SETTINGS -> showAssistantModelSettings()
+            else -> showMain()
+        }
+        if (arguments?.containsKey(ARG_INITIAL_PAGE) != true && initialPage != null) {
+            activity?.intent?.removeExtra(EXTRA_INITIAL_PAGE)
+        }
+        skipNextResumeRefresh = true
     }
 
     override fun onResume() {
         super.onResume()
-        refreshCurrentPage()
+        if (skipNextResumeRefresh) {
+            skipNextResumeRefresh = false
+        } else {
+            refreshCurrentPage()
+        }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         requestJob?.cancel()
+        skillSummaryJob?.cancel()
+        skillSummaryJob = null
+        skipNextResumeRefresh = false
         waitDialog.dismiss()
     }
 
@@ -633,6 +676,9 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     override fun onConfigBackPressed(): Boolean {
         val page = visiblePage()
         if (page == Page.MAIN) {
+            return false
+        }
+        if (returnToMenuOnEntryBack && page == entryPage) {
             return false
         }
         currentPage = page
@@ -1083,13 +1129,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         )
         binding.textModelEntrySummary.text = getString(
             R.string.ai_model_function_summary,
-            assistantModelSummaryText(),
-            assistantReasoningSummaryText()
+            assistantModelSummaryText(providers),
+            assistantReasoningSummaryText(providers)
         )
-        binding.textPromptEntrySummary.text = getString(
-            R.string.ai_prompt_menu_summary,
-            visibleAiSkills().size.toString()
-        )
+        refreshSkillSummary()
         binding.textChatFabSummary.text = getString(
             if (AiConfig.chatFabEnabled) {
                 R.string.ai_chat_fab_summary_on
@@ -1116,14 +1159,28 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         refreshAiMemorySummary()
         binding.textPurifyEntrySummary.text = getString(
             R.string.ai_model_function_summary,
-            purifyModelSummaryText(),
-            purifyReasoningSummaryText()
+            purifyModelSummaryText(providers),
+            purifyReasoningSummaryText(providers)
         )
         binding.textReadAloudEntrySummary.text = getString(
             R.string.ai_model_function_summary,
-            readAloudStoryboardModelSummaryText(),
-            readAloudStoryboardReasoningSummaryText()
+            readAloudStoryboardModelSummaryText(providers),
+            readAloudStoryboardReasoningSummaryText(providers)
         )
+    }
+
+    private fun refreshSkillSummary() {
+        skillSummaryJob?.cancel()
+        skillSummaryJob = viewLifecycleOwner.lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                visibleAiSkills().size
+            }
+            if (view == null) return@launch
+            binding.textPromptEntrySummary.text = getString(
+                R.string.ai_prompt_menu_summary,
+                count.toString()
+            )
+        }
     }
 
     private fun refreshAiMemorySummary() {
@@ -2246,8 +2303,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         binding.layoutAssistantReasoningEntry.alpha = if (assistantReasoningEnabled) 1f else 0.55f
     }
 
-    private fun purifyModelSummaryText(): String {
-        val selected = selectedPurifyModel()
+    private fun purifyModelSummaryText(
+        providers: List<AiProviderSetting>? = null
+    ): String {
+        val selected = selectedPurifyModel(providers)
         return when {
             selected == null && AiConfig.purifyModelId.isBlank() ->
                 getString(R.string.ai_purify_model_not_selected)
@@ -2262,8 +2321,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun purifyReasoningSummaryText(): String {
-        val selected = selectedPurifyModel()
+    private fun purifyReasoningSummaryText(
+        providers: List<AiProviderSetting>? = null
+    ): String {
+        val selected = selectedPurifyModel(providers)
         return when {
             selected == null -> getString(R.string.ai_purify_reasoning_select_model_first)
             !selected.model.supportsReasoning() -> getString(R.string.ai_purify_reasoning_unsupported)
@@ -2274,8 +2335,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun assistantModelSummaryText(): String {
-        val selected = selectedAssistantModel()
+    private fun assistantModelSummaryText(
+        providers: List<AiProviderSetting>? = null
+    ): String {
+        val selected = selectedAssistantModel(providers)
         return when {
             selected == null && AiConfig.assistantModelId.isBlank() ->
                 getString(R.string.ai_assistant_model_not_selected)
@@ -2290,8 +2353,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun assistantReasoningSummaryText(): String {
-        val selected = selectedAssistantModel()
+    private fun assistantReasoningSummaryText(
+        providers: List<AiProviderSetting>? = null
+    ): String {
+        val selected = selectedAssistantModel(providers)
         return when {
             selected == null -> getString(R.string.ai_assistant_reasoning_select_model_first)
             !selected.model.supportsReasoning() -> getString(R.string.ai_assistant_reasoning_unsupported)
@@ -2321,8 +2386,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun readAloudStoryboardModelSummaryText(): String {
-        val selected = selectedReadAloudStoryboardModel()
+    private fun readAloudStoryboardModelSummaryText(
+        providers: List<AiProviderSetting>? = null
+    ): String {
+        val selected = selectedReadAloudStoryboardModel(providers)
         return when {
             selected == null && AiConfig.readAloudStoryboardModelId.isBlank() ->
                 getString(R.string.ai_read_aloud_storyboard_model_not_selected)
@@ -2337,8 +2404,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun readAloudStoryboardReasoningSummaryText(): String {
-        val selected = selectedReadAloudStoryboardModel()
+    private fun readAloudStoryboardReasoningSummaryText(
+        providers: List<AiProviderSetting>? = null
+    ): String {
+        val selected = selectedReadAloudStoryboardModel(providers)
         return when {
             selected == null -> getString(R.string.ai_read_aloud_reasoning_select_model_first)
             !selected.model.supportsReasoning() ->
@@ -2350,31 +2419,55 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun selectedPurifyModel(): PurifyModelOption? {
+    private fun selectedPurifyModel(
+        providers: List<AiProviderSetting>? = null
+    ): PurifyModelOption? {
         val providerId = AiConfig.purifyProviderId
         val modelId = AiConfig.purifyModelId
         if (providerId.isBlank() || modelId.isBlank()) {
             return null
         }
-        val provider = AiProviderStore.provider(providerId)?.takeIf { it.enabled } ?: return null
+        val provider = if (providers == null) {
+            AiProviderStore.provider(providerId)
+        } else {
+            providers.firstOrNull { it.id == providerId }
+        }?.takeIf { it.enabled } ?: return null
         val model = provider.purifyEligibleModels().firstOrNull { it.safeId() == modelId } ?: return null
         return PurifyModelOption(provider, model)
     }
 
-    private fun selectedReadAloudStoryboardModel(): PurifyModelOption? {
+    private fun selectedReadAloudStoryboardModel(
+        providers: List<AiProviderSetting>? = null
+    ): PurifyModelOption? {
         val providerId = AiConfig.readAloudStoryboardProviderId
         val modelId = AiConfig.readAloudStoryboardModelId
         if (providerId.isBlank() || modelId.isBlank()) {
             return null
         }
-        val provider = AiProviderStore.provider(providerId)?.takeIf { it.enabled } ?: return null
+        val provider = if (providers == null) {
+            AiProviderStore.provider(providerId)
+        } else {
+            providers.firstOrNull { it.id == providerId }
+        }?.takeIf { it.enabled } ?: return null
         val model = provider.purifyEligibleModels().firstOrNull { it.safeId() == modelId }
             ?: return null
         return PurifyModelOption(provider, model)
     }
 
-    private fun selectedAssistantModel(): AiAssistantConfigUi.AssistantModelOption? {
-        return AiAssistantConfigUi.selectedModel()
+    private fun selectedAssistantModel(
+        providers: List<AiProviderSetting>? = null
+    ): AiAssistantConfigUi.AssistantModelOption? {
+        if (providers == null) return AiAssistantConfigUi.selectedModel()
+        val providerId = AiConfig.assistantProviderId
+        val modelId = AiConfig.assistantModelId
+        if (providerId.isBlank() || modelId.isBlank()) return null
+        val provider = providers.firstOrNull { it.id == providerId }
+            ?.takeIf { it.enabled }
+            ?: return null
+        val model = provider.assistantEligibleModels()
+            .firstOrNull { it.safeId() == modelId }
+            ?: return null
+        return AiAssistantConfigUi.AssistantModelOption(provider, model)
     }
 
     private fun showPurifyModelSelectDialog() {

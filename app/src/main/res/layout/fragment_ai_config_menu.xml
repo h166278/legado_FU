@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/ng_page_padding"
+        android:paddingTop="@dimen/ng_space_l"
+        android:paddingEnd="@dimen/ng_page_padding">
+
+        <TextView
+            android:id="@+id/text_main_section_label"
+            style="@style/Ng.SettingsSectionLabel"
+            android:text="@string/ai_settings_section_features" />
+
+        <io.legado.app.ui.widget.NgGlassLayout style="@style/Ng.SettingsGroup">
+
+            <View style="@style/Ng.SettingsGroupEdgeSpace" />
+
+            <LinearLayout
+                android:id="@+id/layout_provider_entry"
+                style="@style/Ng.SettingsItem">
+
+                <ImageView
+                    android:id="@+id/image_provider_entry_icon"
+                    style="@style/Ng.SettingsIconImage"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/ai_provider_menu"
+                    android:src="@drawable/ic_cfg_web" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Ng.SettingsTitle"
+                        android:text="@string/ai_provider_menu" />
+
+                    <TextView
+                        android:id="@+id/text_provider_entry_summary"
+                        style="@style/Ng.SettingsSummary"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="›"
+                    android:textColor="@color/ng_settings_arrow"
+                    android:textSize="30sp" />
+
+            </LinearLayout>
+
+            <View style="@style/Ng.SettingsItemGap" />
+
+            <LinearLayout
+                android:id="@+id/layout_prompt_entry"
+                style="@style/Ng.SettingsItem">
+
+                <ImageView
+                    android:id="@+id/image_prompt_entry_icon"
+                    style="@style/Ng.SettingsIconImage"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/ai_prompt_menu"
+                    android:src="@drawable/ic_ai_skill_puzzle" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Ng.SettingsTitle"
+                        android:text="@string/ai_prompt_menu" />
+
+                    <TextView
+                        android:id="@+id/text_prompt_entry_summary"
+                        style="@style/Ng.SettingsSummary"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="›"
+                    android:textColor="@color/ng_settings_arrow"
+                    android:textSize="30sp" />
+
+            </LinearLayout>
+
+            <View style="@style/Ng.SettingsItemGap" />
+
+            <LinearLayout
+                android:id="@+id/layout_chat_fab"
+                style="@style/Ng.SettingsItem"
+                android:clickable="false"
+                android:focusable="false"
+                android:foreground="@null">
+
+                <ImageView
+                    android:id="@+id/image_chat_fab_icon"
+                    style="@style/Ng.SettingsIconImage"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/ai_chat_fab"
+                    android:src="@drawable/ic_ai" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Ng.SettingsTitle"
+                        android:text="@string/ai_chat_fab" />
+
+                    <TextView
+                        android:id="@+id/text_chat_fab_summary"
+                        style="@style/Ng.SettingsSummary"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+
+                <io.legado.app.lib.theme.view.ThemeSwitch
+                    android:id="@+id/switch_chat_fab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <View style="@style/Ng.SettingsItemGap" />
+
+            <LinearLayout
+                android:id="@+id/layout_purify_entry"
+                style="@style/Ng.SettingsItem">
+
+                <ImageView
+                    android:id="@+id/image_purify_entry_icon"
+                    style="@style/Ng.SettingsIconImage"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/ai_purify"
+                    android:src="@drawable/ic_ai_purify" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Ng.SettingsTitle"
+                        android:text="@string/ai_purify" />
+
+                    <TextView
+                        android:id="@+id/text_purify_entry_summary"
+                        style="@style/Ng.SettingsSummary"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="›"
+                    android:textColor="@color/ng_settings_arrow"
+                    android:textSize="30sp" />
+
+            </LinearLayout>
+
+            <View style="@style/Ng.SettingsItemGap" />
+
+            <LinearLayout
+                android:id="@+id/layout_model_entry"
+                style="@style/Ng.SettingsItem">
+
+                <ImageView
+                    android:id="@+id/image_model_entry_icon"
+                    style="@style/Ng.SettingsIconImage"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/ai_assistant"
+                    android:src="@drawable/ic_ai" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Ng.SettingsTitle"
+                        android:text="@string/ai_assistant" />
+
+                    <TextView
+                        android:id="@+id/text_model_entry_summary"
+                        style="@style/Ng.SettingsSummary"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="›"
+                    android:textColor="@color/ng_settings_arrow"
+                    android:textSize="30sp" />
+
+            </LinearLayout>
+
+            <View style="@style/Ng.SettingsItemGap" />
+
+            <LinearLayout
+                android:id="@+id/layout_read_aloud_entry"
+                style="@style/Ng.SettingsItem">
+
+                <ImageView
+                    android:id="@+id/image_read_aloud_entry_icon"
+                    style="@style/Ng.SettingsIconImage"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/ai_read_aloud"
+                    android:src="@drawable/ic_ai" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Ng.SettingsTitle"
+                        android:text="@string/ai_read_aloud" />
+
+                    <TextView
+                        android:id="@+id/text_read_aloud_entry_summary"
+                        style="@style/Ng.SettingsSummary"
+                        android:layout_marginTop="4dp"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="›"
+                    android:textColor="@color/ng_settings_arrow"
+                    android:textSize="30sp" />
+
+            </LinearLayout>
+
+            <View style="@style/Ng.SettingsGroupEdgeSpace" />
+
+        </io.legado.app.ui.widget.NgGlassLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

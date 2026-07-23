@@ -24,11 +24,17 @@ import io.legado.app.service.BaseReadAloudService
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config) {
 
     private val binding by viewBinding(FragmentReadAloudConfigBinding::bind)
     private val cardClickDebouncer = TtsSheetLaunchDebouncer()
+    private var summaryJob: Job? = null
+    private var skipNextResumeRefresh = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.read_aloud_settings)
@@ -50,11 +56,23 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
             }
         }
         refreshContent()
+        skipNextResumeRefresh = true
     }
 
     override fun onResume() {
         super.onResume()
-        if (view != null) refreshContent()
+        if (skipNextResumeRefresh) {
+            skipNextResumeRefresh = false
+        } else if (view != null) {
+            refreshContent()
+        }
+    }
+
+    override fun onDestroyView() {
+        summaryJob?.cancel()
+        summaryJob = null
+        skipNextResumeRefresh = false
+        super.onDestroyView()
     }
 
     private fun refreshContent() {
@@ -63,9 +81,26 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
         binding.imageTtsEngineIcon.imageTintList = tint
         binding.imageMultiRoleEngineIcon.imageTintList = tint
         binding.imageDefaultVoiceIcon.imageTintList = tint
-        binding.textMultiRoleEngineSummary.text =
-            selectedMultiRoleEngine()?.name
+        refreshMultiRoleEngineSummary()
+    }
+
+    private fun refreshMultiRoleEngineSummary() {
+        summaryJob?.cancel()
+        val selectedId = AppConfig.multiRoleTtsEngineId
+        if (selectedId.isNullOrBlank()) {
+            binding.textMultiRoleEngineSummary.setText(R.string.multi_role_tts_engine_unset)
+            return
+        }
+        summaryJob = viewLifecycleOwner.lifecycleScope.launch {
+            val selectedName = withContext(Dispatchers.IO) {
+                TtsEngineStore.engine(selectedId)
+                    ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
+                    ?.name
+            }
+            if (view == null) return@launch
+            binding.textMultiRoleEngineSummary.text = selectedName
                 ?: getString(R.string.multi_role_tts_engine_unset)
+        }
     }
 
     private fun runCardAction(action: () -> Unit) {
@@ -104,11 +139,6 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
         }
         refreshRunningMultiRoleReadAloud(requireContext())
         refreshContent()
-    }
-
-    private fun selectedMultiRoleEngine(): TtsEngineSetting? {
-        return TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
-            ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
     }
 
 }

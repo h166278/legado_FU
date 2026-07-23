@@ -71,6 +71,9 @@ object AiSkillRegistry {
         SKILL_BOOK_SCAN_REPORT
     )
     private val MANAGEMENT_SYSTEM_WORKFLOW_IDS = listOf(SKILL_BOOK_SCAN)
+    private val builtInSkillDefaults by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        loadBuiltInSkills()
+    }
 
     fun all(): List<AiSkillDefinition> {
         ensureBuiltInSkills()
@@ -292,7 +295,9 @@ object AiSkillRegistry {
         return false
     }
 
-    private fun builtInSkills(): List<AiSkill> {
+    private fun builtInSkills(): List<AiSkill> = builtInSkillDefaults
+
+    private fun loadBuiltInSkills(): List<AiSkill> {
         val names = appCtx.assets.list(BUILT_IN_SKILL_ASSET_DIR).orEmpty()
         return names
             .filter { it.endsWith(".md", ignoreCase = true) }

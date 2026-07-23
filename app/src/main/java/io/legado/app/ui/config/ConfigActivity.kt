@@ -27,10 +27,22 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
         onBackPressedDispatcher.addCallback(this) {
             handleConfigBackPressed()
         }
+        if (
+            savedInstanceState != null &&
+            supportFragmentManager.findFragmentById(R.id.configFrameLayout) != null
+        ) {
+            return
+        }
         when (val configTag = intent.getStringExtra("configTag")) {
             ConfigTag.OTHER_CONFIG -> replaceFragment<OtherConfigFragment>(configTag)
             ConfigTag.SERVICE_CONFIG -> replaceFragment<ServiceConfigFragment>(configTag)
-            ConfigTag.AI_CONFIG -> replaceFragment<AiConfigFragment>(configTag)
+            ConfigTag.AI_CONFIG -> {
+                if (intent.hasExtra(AiConfigFragment.EXTRA_INITIAL_PAGE)) {
+                    replaceFragment<AiConfigFragment>(configTag)
+                } else {
+                    replaceFragment<AiConfigMenuFragment>(configTag)
+                }
+            }
             ConfigTag.READ_ALOUD_CONFIG -> replaceFragment<ReadAloudConfigFragment>(configTag)
             ConfigTag.TTS_ENGINE_CONFIG -> replaceFragment<TtsEngineConfigFragment>(configTag)
             ConfigTag.DEFAULT_TTS_VOICE_CONFIG -> replaceFragment<DefaultTtsVoiceConfigFragment>(configTag)
@@ -49,7 +61,22 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
         if ((fragment as? ConfigBackHandler)?.onConfigBackPressed() == true) {
             return
         }
+        if (supportFragmentManager.backStackEntryCount > 0) {
+            supportFragmentManager.popBackStack()
+            return
+        }
         finish()
+    }
+
+    fun openAiConfigPage(page: String) {
+        supportFragmentManager.beginTransaction()
+            .replace(
+                R.id.configFrameLayout,
+                AiConfigFragment.newMenuPageInstance(page),
+                "${ConfigTag.AI_CONFIG}:$page"
+            )
+            .addToBackStack(page)
+            .commit()
     }
 
     override fun onHomeNavigationSelected() {
