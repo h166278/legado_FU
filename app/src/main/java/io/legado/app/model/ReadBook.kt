@@ -519,7 +519,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 if (scrollPageAnim && pageChanged) {
                     ReadAloud.pause(appCtx)
                 } else {
-                    readAloud(!BaseReadAloudService.pause)
+                    readAloud(BaseReadAloudService.isPlay())
                 }
             }
         }

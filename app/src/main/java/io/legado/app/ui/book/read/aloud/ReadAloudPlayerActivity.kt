@@ -42,9 +42,13 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsEngineStore
+import io.legado.app.help.tts.TtsPlayerFactory
 import io.legado.app.help.tts.TtsScriptEngineClient
 import io.legado.app.help.tts.TtsSpeedPolicy
+import io.legado.app.help.tts.forEngineCapabilities
 import io.legado.app.help.tts.normalizeStoryboardSynthesisText
+import io.legado.app.help.tts.toTtsSynthesisContext
+import io.legado.app.help.tts.writeReadAloudAudioWithWavRetry
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadAloud
@@ -129,7 +133,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         if (intent.getBooleanExtra(ReadAloudLauncher.EXTRA_AUTO_START, false)) {
             intent.removeExtra(ReadAloudLauncher.EXTRA_AUTO_START)
             if (isCurrentBookAlreadyReading(intent)) {
-                if (BaseReadAloudService.pause) {
+                if (!BaseReadAloudService.isPlay()) {
                     ReadAloud.resume(this)
                 }
                 setPlayButtonLoading(false)
@@ -192,10 +196,10 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         cardCover.setOnClickListener { openBookInfo() }
         actionMore.root.setOnClickListener { showMoreSheet() }
         actionTimer.root.setOnClickListener {
-            ReadAloudTimerSheet().show(supportFragmentManager, "readAloudTimer")
+            ReadAloudTimerDialog().show(supportFragmentManager, "readAloudTimer")
         }
         actionSpeed.root.setOnClickListener {
-            ReadAloudSpeedSheet().show(supportFragmentManager, "readAloudSpeed")
+            ReadAloudSpeedDialog().show(supportFragmentManager, "readAloudSpeed")
         }
         actionRefresh.root.setOnClickListener { refreshCurrentChapter() }
         actionOriginal.root.setOnClickListener { openOriginal() }
@@ -400,7 +404,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         val pageStart = chapter.getReadLength(targetPage)
         val pageStartPos = (targetPos - pageStart).coerceAtLeast(0)
         val wasRun = BaseReadAloudService.isRun
-        val wasPlaying = BaseReadAloudService.isRun && !BaseReadAloudService.pause
+        val wasPlaying = BaseReadAloudService.isPlay()
 
         ReadBook.durChapterPos = targetPos
         lastProgress = -1
@@ -432,7 +436,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 }
                 startReadAloudAfterContentReady()
             }
-            BaseReadAloudService.pause -> {
+            !BaseReadAloudService.isPlay() -> {
                 setPlayButtonLoading(true)
                 ReadAloud.resume(this)
             }
@@ -452,7 +456,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         val chapterIndex = ReadBook.durChapterIndex
         val chapterPos = ReadBook.durChapterPos
         val wasRun = BaseReadAloudService.isRun
-        val wasPlaying = BaseReadAloudService.isRun && !BaseReadAloudService.pause
+        val wasPlaying = BaseReadAloudService.isPlay()
         switchingChapter = true
         stopStoryboardPreview()
         if (wasRun) {
@@ -565,7 +569,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         if (AppConfig.readAloudMultiRole == enabled) return
         val targetMode = if (enabled) 1 else 0
         val wasRun = BaseReadAloudService.isRun
-        val wasPlaying = BaseReadAloudService.isRun && !BaseReadAloudService.pause
+        val wasPlaying = BaseReadAloudService.isPlay()
         val startPos = currentPageStartPos()
         stopStoryboardPreview()
         storyboardLoadJob?.cancel()
@@ -733,7 +737,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         setStoryboardLoading(false)
         val rows = storyboard.scenes.flatMap { scene ->
             val segments = scene.segments.filterNot { it.isChapterTitleSegment(storyboard.chapterTitle) }
-            listOf(StoryboardRow.Scene(scene)) + segments.map { StoryboardRow.Segment(it) }
+            listOf(StoryboardRow.Scene(scene)) + segments.map { StoryboardRow.Segment(it, scene) }
         }
         val visibleSegments = rows.count { it is StoryboardRow.Segment }
         val visibleDialogueCount = rows.count {
@@ -790,7 +794,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         return filterNot { it.isWhitespace() || it == '\u3000' }
     }
 
-    private fun previewStoryboardSegment(segment: StoryboardSegment) {
+    private fun previewStoryboardSegment(segment: StoryboardSegment, scene: StoryboardScene) {
         stopStoryboardPreview()
         val text = normalizeStoryboardSynthesisText(segment.text, segment.type)
         if (text.isBlank()) {
@@ -813,26 +817,24 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                     val engine = (route?.engine ?: baseEngine)
                         .takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
                         ?: error("角色绑定的朗读引擎不可用")
-                    val response = TtsScriptEngineClient.getSynthesisResponse(
-                        engine = engine,
-                        text = text,
-                        voiceId = route?.voiceId ?: engine.activeVoiceId,
-                        styleId = route?.styleId
-                    )
-                    File(cacheDir, "storyboard_preview_${System.currentTimeMillis()}.audio").apply {
-                        response.use {
-                            outputStream().use { out ->
-                                it.body.byteStream().use { input ->
-                                    input.copyTo(out)
-                                }
-                            }
-                        }
+                    val synthesisContext = segment
+                        .toTtsSynthesisContext(scene)
+                        ?.forEngineCapabilities(engine)
+                    val file = File(cacheDir, "storyboard_preview_${System.currentTimeMillis()}.audio")
+                    writeReadAloudAudioWithWavRetry(file, text) {
+                        TtsScriptEngineClient.getSynthesisStream(
+                            engine = engine,
+                            text = text,
+                            voiceId = route?.voiceId ?: engine.activeVoiceId,
+                            styleId = route?.styleId,
+                            synthesisContext = synthesisContext
+                        )
                     }
                 }
             }
             result.onSuccess { file ->
                 storyboardPreviewPlayer?.release()
-                storyboardPreviewPlayer = ExoPlayer.Builder(this@ReadAloudPlayerActivity).build().apply {
+                storyboardPreviewPlayer = TtsPlayerFactory.create(this@ReadAloudPlayerActivity).apply {
                     setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
                     setPlaybackSpeed(TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay))
                     prepare()
@@ -855,7 +857,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
 
     fun openChapterFromCatalog(chapterIndex: Int) {
         if (chapterIndex == ReadBook.durChapterIndex) return
-        val wasPlaying = BaseReadAloudService.isRun && !BaseReadAloudService.pause
+        val wasPlaying = BaseReadAloudService.isPlay()
         switchingChapter = true
         if (BaseReadAloudService.isRun) {
             ReadAloud.stop(this)
@@ -1033,7 +1035,10 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
 
     private sealed interface StoryboardRow {
         data class Scene(val scene: StoryboardScene) : StoryboardRow
-        data class Segment(val segment: StoryboardSegment) : StoryboardRow
+        data class Segment(
+            val segment: StoryboardSegment,
+            val scene: StoryboardScene
+        ) : StoryboardRow
     }
 
     private inner class LyricsAdapter : RecyclerView.Adapter<LyricsAdapter.LyricHolder>() {
@@ -1133,7 +1138,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             when (val row = rows[position]) {
                 is StoryboardRow.Scene -> (holder as SceneHolder).bind(row.scene)
-                is StoryboardRow.Segment -> (holder as SegmentHolder).bind(row.segment)
+                is StoryboardRow.Segment -> (holder as SegmentHolder).bind(row.segment, row.scene)
             }
         }
 
@@ -1166,7 +1171,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     private inner class SegmentHolder(
         private val binding: ItemBookStoryboardSegmentBinding
     ) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(segment: StoryboardSegment) = binding.run {
+        fun bind(segment: StoryboardSegment, scene: StoryboardScene) = binding.run {
             val identity = when (segment.type) {
                 StoryboardSegmentType.NARRATION -> "旁白"
                 StoryboardSegmentType.DIALOGUE -> segment.speakerName ?: segment.virtualSpeakerName()
@@ -1181,7 +1186,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
             tvEvidence.isVisible = evidence.isNotBlank() && evidence != identity
             btnPreview.background = accentCircleBackground()
             btnPreview.imageTintList = ColorStateList.valueOf(accentColor)
-            btnPreview.setOnClickListener { previewStoryboardSegment(segment) }
+            btnPreview.setOnClickListener { previewStoryboardSegment(segment, scene) }
         }
     }
 

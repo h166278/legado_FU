@@ -2,6 +2,8 @@ package io.legado.app.help.tts
 
 import io.legado.app.ui.book.character.StoryboardSegmentType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TtsSynthesisTextTest {
@@ -28,5 +30,14 @@ class TtsSynthesisTextTest {
             "“是我，陈升。",
             normalizeStoryboardSynthesisText("“是我，陈升。", StoryboardSegmentType.DIALOGUE)
         )
+    }
+
+    @Test
+    fun `punctuation only storyboard text is silent`() {
+        assertTrue(isReadAloudSynthesisTextSilent("　　…………………………"))
+        assertTrue(isReadAloudSynthesisTextSilent("“……”"))
+        assertTrue(isReadAloudSynthesisTextSilent("？！——"))
+        assertFalse(isReadAloudSynthesisTextSilent("被举报了，提交了复审。"))
+        assertFalse(isReadAloudSynthesisTextSilent("3000"))
     }
 }

@@ -117,7 +117,7 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
 
     private fun upTtsSpeechRate() {
         ReadAloud.upTtsSpeechRate(requireContext())
-        if (!BaseReadAloudService.pause) {
+        if (BaseReadAloudService.isPlay()) {
             ReadAloud.pause(requireContext())
             ReadAloud.resume(requireContext())
         }

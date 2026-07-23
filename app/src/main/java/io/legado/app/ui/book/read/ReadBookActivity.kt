@@ -3184,7 +3184,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 }
             }
 
-            BaseReadAloudService.pause -> {
+            !BaseReadAloudService.isPlay() -> {
                 val scrollPageAnim = ReadBook.pageAnim() == 3
                 if (scrollPageAnim && pageChanged) {
                     pageChanged = false
@@ -3488,7 +3488,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (it) {
                 toggleReadAloud()
             } else {
-                ReadBook.readAloud(!BaseReadAloudService.pause)
+                ReadBook.readAloud(BaseReadAloudService.isPlay())
             }
         }
         observeEvent<ArrayList<Int>>(EventBus.UP_CONFIG) {

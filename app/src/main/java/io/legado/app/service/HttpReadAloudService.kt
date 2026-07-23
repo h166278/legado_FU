@@ -3,6 +3,8 @@ package io.legado.app.service
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -28,14 +30,17 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.ReadAloudAudioTask
 import io.legado.app.help.tts.TtsEngineSetting
-import io.legado.app.help.tts.TtsEngineCapability
+import io.legado.app.help.tts.TtsPlayerFactory
 import io.legado.app.help.tts.TtsSynthesisContext
 import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.help.tts.TtsScriptEngineClient
+import io.legado.app.help.tts.isReadAloudSynthesisTextSilent
 import io.legado.app.help.tts.prepareReadAloudAudioTasks
 import io.legado.app.help.tts.normalizeStoryboardSynthesisText
 import io.legado.app.help.tts.toTtsSynthesisContext
+import io.legado.app.help.tts.forEngineCapabilities
 import io.legado.app.help.tts.writeReadAloudAudioAtomically
+import io.legado.app.help.tts.writeReadAloudAudioWithWavRetry
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.CacheBook
@@ -72,6 +77,8 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
+private const val SILENT_SOUND_FILE_SIZE = 2160L
+
 /**
  * 在线朗读
  */
@@ -79,7 +86,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class HttpReadAloudService : BaseReadAloudService(),
     Player.Listener {
     private val exoPlayer: ExoPlayer by lazy {
-        ExoPlayer.Builder(this).build()
+        TtsPlayerFactory.create(this)
     }
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator
@@ -207,6 +214,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                     }
                 } catch (e: Throwable) {
                     if (e !is CancellationException) {
+                        AppLog.put("朗读音频合成失败\n${e.localizedMessage}", e, true)
                         pauseReadAloud()
                     }
                     return@execute
@@ -251,9 +259,7 @@ class HttpReadAloudService : BaseReadAloudService(),
             val route = routeFor(engineV2, item.segment)
             val routedEngine = route?.engine ?: engineV2
             val synthesisText = item.synthesisText()
-            val synthesisContext = item.synthesisContext?.takeIf {
-                routedEngine?.supportsCapability(TtsEngineCapability.SCENE_CONTEXT) == true
-            }
+            val synthesisContext = item.synthesisContext?.forEngineCapabilities(routedEngine)
             val fileName = if (cacheChapter == null) {
                 md5SpeakFileName(synthesisText, route, synthesisContext = synthesisContext)
             } else {
@@ -293,19 +299,37 @@ class HttpReadAloudService : BaseReadAloudService(),
         val speakText = synthesisText.replace(AppPattern.notReadAloudRegex, "")
         if (speakText.isEmpty()) {
             AppLog.put("阅读片段内容为空，使用无声音频代替。\n朗读文本：${item.sourceText}")
-            createSilentSound(fileName)
-        } else if (!hasSpeakFile(fileName)) {
-            val inputStream = getSpeakStream(
-                httpTts,
-                engineV2,
-                speakText,
-                route,
-                synthesisContext
-            )
-            if (inputStream != null) {
-                createSpeakFile(fileName, inputStream)
-            } else {
+            if (!hasSpeakFile(fileName)) {
                 createSilentSound(fileName)
+            }
+        } else {
+            removeSilentSpeakFile(fileName)
+            val target = getSpeakFileAsMd5(fileName)
+            val routedEngine = route?.engine ?: engineV2
+            if (routedEngine != null) {
+                writeReadAloudAudioWithWavRetry(
+                    target = target,
+                    text = speakText,
+                    onRejected = { issue, nextAttempt ->
+                        AppLog.put(
+                            "TTS音频疑似在句中截断，正在第${nextAttempt}次合成" +
+                                    "\n实际时长：${issue.durationMillis}ms，文本长度：${issue.speechUnits}"
+                        )
+                    }
+                ) {
+                    getSpeakStream(
+                        httpTts,
+                        engineV2,
+                        speakText,
+                        route,
+                        synthesisContext
+                    )
+                }
+            } else if (!hasSpeakFile(fileName)) {
+                createSpeakFile(
+                    fileName,
+                    getSpeakStream(httpTts, engineV2, speakText, route, synthesisContext)
+                )
             }
         }
         return getSpeakFileAsMd5(fileName)
@@ -321,7 +345,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         speakText: String,
         route: ReadAloudTtsRouter.Route?,
         synthesisContext: TtsSynthesisContext?
-    ): InputStream? {
+    ): InputStream {
         while (true) {
             try {
                 val routedEngine = route?.engine ?: engineV2
@@ -418,16 +442,12 @@ class HttpReadAloudService : BaseReadAloudService(),
                         if (errorCount > 5) {
                             val msg1 = "TTS服务器连续5次错误，已暂停阅读。"
                             AppLog.put(msg1, e, true)
-                            throw e
-                        } else {
-                            AppLog.put("TTS下载音频出错，使用无声音频代替。\n朗读文本：$speakText")
-                            break
                         }
+                        throw e
                     }
                 }
             }
         }
-        return null
     }
 
     private suspend fun loadCurrentAiStoryboard(): ChapterStoryboard? {
@@ -584,7 +604,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                 } else {
                     originalText
                 }
-                if (readable.isNotBlank()) {
+                if (!isReadAloudSynthesisTextSilent(readable)) {
                     items += SpeakItem(
                         paragraphIndex = index,
                         text = readable,
@@ -618,14 +638,15 @@ class HttpReadAloudService : BaseReadAloudService(),
         val safeEnd = end.coerceIn(0, originalText.length)
         if (safeEnd <= safeStart) return null
         val speakText = originalText.substring(safeStart, safeEnd)
-        if (speakText.isBlank()) return null
+        // 只过滤音频项，正文段落与 paragraphIndex 保持不变，由播放推进逻辑跨过该段。
+        if (isReadAloudSynthesisTextSilent(speakText)) return null
         return SpeakItem(
             paragraphIndex = paragraphIndex,
             text = speakText,
             start = safeStart,
             end = safeEnd,
             sourceText = originalText,
-            synthesisContext = toTtsSynthesisContext(scene, AppConfig.readAloudStoryboardMode),
+            synthesisContext = toTtsSynthesisContext(scene),
             segment = copy(
                 paragraphIndex = paragraphIndex,
                 text = speakText,
@@ -705,6 +726,12 @@ class HttpReadAloudService : BaseReadAloudService(),
         return FileUtils.exist("${ttsFolderPath}$name.mp3")
     }
 
+    private fun removeSilentSpeakFile(name: String) {
+        getSpeakFileAsMd5(name)
+            .takeIf { it.isFile && it.length() == SILENT_SOUND_FILE_SIZE }
+            ?.delete()
+    }
+
     private fun getSpeakFileAsMd5(name: String): File {
         return File("${ttsFolderPath}$name.mp3")
     }
@@ -719,7 +746,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun removeCacheFile() {
         val titleMd5 = MD5Utils.md5Encode16(textChapter?.title ?: "")
         FileUtils.listDirsAndFiles(ttsFolderPath)?.forEach {
-            val isSilentSound = it.length() == 2160L
+            val isSilentSound = it.length() == SILENT_SOUND_FILE_SIZE
             if ((!it.name.startsWith(titleMd5)
                         && System.currentTimeMillis() - it.lastModified() > 600000)
                 || isSilentSound
@@ -731,14 +758,19 @@ class HttpReadAloudService : BaseReadAloudService(),
 
 
     override fun pauseReadAloud(abandonFocus: Boolean) {
-        super.pauseReadAloud(abandonFocus)
-        kotlin.runCatching {
+        runOnPlayerThread {
             playIndexJob?.cancel()
-            exoPlayer.pause()
+            kotlin.runCatching { exoPlayer.pause() }
+                .onSuccess { super.pauseReadAloud(abandonFocus) }
+                .onFailure { AppLog.put("暂停在线朗读失败", it) }
         }
     }
 
     override fun resumeReadAloud() {
+        runOnPlayerThread(::resumeReadAloudOnPlayerThread)
+    }
+
+    private fun resumeReadAloudOnPlayerThread() {
         if (pageChanged || exoPlayer.mediaItemCount == 0 ||
             exoPlayer.playbackState == Player.STATE_IDLE ||
             exoPlayer.playbackState == Player.STATE_ENDED
@@ -746,10 +778,19 @@ class HttpReadAloudService : BaseReadAloudService(),
             play()
             return
         }
-        super.resumeReadAloud()
-        kotlin.runCatching {
-            exoPlayer.play()
-            upPlayPos()
+        kotlin.runCatching { exoPlayer.play() }
+            .onSuccess {
+                super.resumeReadAloud()
+                upPlayPos()
+            }
+            .onFailure { AppLog.put("继续在线朗读失败", it) }
+    }
+
+    private fun runOnPlayerThread(action: () -> Unit) {
+        if (Looper.myLooper() == exoPlayer.applicationLooper) {
+            action()
+        } else {
+            Handler(exoPlayer.applicationLooper).post(action)
         }
     }
 
@@ -813,6 +854,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         super.onPlaybackStateChanged(playbackState)
+        if (!ownsPlaybackState()) return
         when (playbackState) {
             Player.STATE_IDLE -> {
                 // 空闲
@@ -842,7 +884,13 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        super.onIsPlayingChanged(isPlaying)
+        syncActualPlaybackState(isPlaying)
+    }
+
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+        if (!ownsPlaybackState()) return
         when (reason) {
             Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED -> {
                 if (!timeline.isEmpty && exoPlayer.playbackState == Player.STATE_IDLE) {
@@ -855,6 +903,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        if (!ownsPlaybackState()) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
             playErrorNo = 0
@@ -865,6 +914,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
+        if (!ownsPlaybackState()) return
         AppLog.put("朗读错误\n${contentList[nowSpeak]}", error)
         deleteCurrentSpeakFile()
         playErrorNo++

@@ -656,7 +656,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        if (BaseReadAloudService.isRun && BaseReadAloudService.pause) {
+        if (BaseReadAloudService.isRun && !BaseReadAloudService.isPlay()) {
             ReadAloud.stop(context)
         }
     }

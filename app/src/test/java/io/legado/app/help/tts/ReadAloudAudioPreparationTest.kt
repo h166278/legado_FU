@@ -10,6 +10,8 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,6 +19,8 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -178,6 +182,70 @@ class ReadAloudAudioPreparationTest {
         }
     }
 
+    @Test
+    fun wavValidation_detectsShortAudioThatEndsMidSpeech() {
+        val folder = createTempDirectory("read-aloud-wav-").toFile()
+        try {
+            val target = File(folder, "truncated.wav").apply {
+                writeBytes(pcmWav(durationMillis = 1_500, quietTailMillis = 0))
+            }
+
+            val issue = detectAbruptWavTruncation(
+                target,
+                "小欣，我不是故意瞒着你，我性格就是这样的，这次来也是真的和你吃个饭。"
+            )
+
+            assertNotNull(issue)
+            assertTrue(requireNotNull(issue).tailRms > 300)
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun wavValidation_keepsShortAudioWithAQuietSentenceTail() {
+        val folder = createTempDirectory("read-aloud-wav-").toFile()
+        try {
+            val target = File(folder, "complete.wav").apply {
+                writeBytes(pcmWav(durationMillis = 1_500, quietTailMillis = 150))
+            }
+
+            assertNull(
+                detectAbruptWavTruncation(
+                    target,
+                    "小欣，我不是故意瞒着你，我性格就是这样的，这次来也是真的和你吃个饭。"
+                )
+            )
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun wavRetry_replacesAbruptResponseWithCompleteResponse() = runBlocking {
+        val folder = createTempDirectory("read-aloud-wav-").toFile()
+        try {
+            val target = File(folder, "audio.wav")
+            val attempts = AtomicInteger()
+            val shortWav = pcmWav(durationMillis = 1_500, quietTailMillis = 0)
+            val completeWav = pcmWav(durationMillis = 4_000, quietTailMillis = 150)
+
+            writeReadAloudAudioWithWavRetry(
+                target,
+                "小欣，我不是故意瞒着你，我性格就是这样的，这次来也是真的和你吃个饭。"
+            ) {
+                ByteArrayInputStream(
+                    if (attempts.incrementAndGet() == 1) shortWav else completeWav
+                )
+            }
+
+            assertEquals(2, attempts.get())
+            assertArrayEquals(completeWav, target.readBytes())
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
     private fun <T> task(
         cacheKey: String,
         engineKey: String,
@@ -190,5 +258,37 @@ class ReadAloudAudioPreparationTest {
             val current = peak.get()
             if (value <= current || peak.compareAndSet(current, value)) return
         }
+    }
+
+    private fun pcmWav(
+        durationMillis: Int,
+        quietTailMillis: Int,
+        sampleRate: Int = 48_000,
+        amplitude: Short = 4_000
+    ): ByteArray {
+        val sampleCount = sampleRate * durationMillis / 1_000
+        val quietSamples = sampleRate * quietTailMillis / 1_000
+        val dataSize = sampleCount * 2
+        return ByteBuffer.allocate(44 + dataSize)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply {
+                put("RIFF".toByteArray())
+                putInt(36 + dataSize)
+                put("WAVE".toByteArray())
+                put("fmt ".toByteArray())
+                putInt(16)
+                putShort(1.toShort())
+                putShort(1.toShort())
+                putInt(sampleRate)
+                putInt(sampleRate * 2)
+                putShort(2.toShort())
+                putShort(16.toShort())
+                put("data".toByteArray())
+                putInt(dataSize)
+                repeat(sampleCount) { index ->
+                    putShort(if (index >= sampleCount - quietSamples) 0.toShort() else amplitude)
+                }
+            }
+            .array()
     }
 }

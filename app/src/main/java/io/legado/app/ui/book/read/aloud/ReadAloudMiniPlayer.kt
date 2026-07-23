@@ -127,10 +127,10 @@ object ReadAloudMiniPlayer {
             setPadding(11.dpToPx(), 11.dpToPx(), 11.dpToPx(), 11.dpToPx())
         }
         installDragTouch(activity, capsule, play) {
-            if (BaseReadAloudService.pause) {
-                ReadAloud.resume(activity)
-            } else {
+            if (BaseReadAloudService.isPlay()) {
                 ReadAloud.pause(activity)
+            } else {
+                ReadAloud.resume(activity)
             }
         }
         capsule.addView(

@@ -109,10 +109,10 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             dismissAllowingStateLoss()
         }
         ivPlayPause.setOnClickListener {
-            if (BaseReadAloudService.pause) {
-                ReadAloud.resume(requireContext())
-            } else {
+            if (BaseReadAloudService.isPlay()) {
                 ReadAloud.pause(requireContext())
+            } else {
+                ReadAloud.resume(requireContext())
             }
         }
         ivPlayPrev.setOnClickListener { ReadAloud.prevParagraph(requireContext()) }
@@ -181,7 +181,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
     }
 
     private fun upPlayState() {
-        if (!BaseReadAloudService.pause) {
+        if (BaseReadAloudService.isPlay()) {
             binding.ivPlayPause.setImageResource(R.drawable.ic_pause_24dp)
             binding.ivPlayPause.contentDescription = getString(R.string.pause)
         } else {
@@ -219,7 +219,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
 
     private fun upTtsSpeechRate() {
         ReadAloud.upTtsSpeechRate(requireContext())
-        if (!BaseReadAloudService.pause) {
+        if (BaseReadAloudService.isPlay()) {
             ReadAloud.pause(requireContext())
             ReadAloud.resume(requireContext())
         }

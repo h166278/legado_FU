@@ -160,6 +160,7 @@ cn.hutool.core.util.**{*;}
 #-dontwarn tv.danmaku.ijk.**
 #-keep class androidx.media3.** {*;}
 #-keep interface androidx.media3.**
+-keep class com.tianscar.soundtouch.** { *; }
 #-keep class com.shuyu.alipay.** {*;}
 #-keep interface com.shuyu.alipay.**
 -keep public class * extends android.view.View{

@@ -89,8 +89,14 @@ abstract class BaseReadAloudService : BaseService(),
         var activeBookUrl: String? = null
             private set
 
+        @Volatile
+        private var playbackStateOwner: BaseReadAloudService? = null
+
+        @Volatile
+        private var actualPlaybackConfirmed = false
+
         fun isPlay(): Boolean {
-            return isRun && !pause
+            return isRun && (actualPlaybackConfirmed || !pause)
         }
 
         private const val TAG = "BaseReadAloudService"
@@ -149,6 +155,8 @@ abstract class BaseReadAloudService : BaseService(),
     @SuppressLint("WakelockTimeout")
     override fun onCreate() {
         super.onCreate()
+        playbackStateOwner = this
+        actualPlaybackConfirmed = false
         isRun = true
         pause = false
         observeLiveBus()
@@ -192,23 +200,30 @@ abstract class BaseReadAloudService : BaseService(),
 
     override fun onDestroy() {
         super.onDestroy()
+        val ownsPlaybackState = playbackStateOwner === this
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
         }
-        isRun = false
-        pause = true
-        activeBookUrl = null
-        abandonFocus()
         unregisterReceiver(broadcastReceiver)
-        postEvent(EventBus.ALOUD_STATE, Status.STOP)
-        notificationManager.cancel(NotificationId.ReadAloudService)
-        upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
+        if (ownsPlaybackState) {
+            isRun = false
+            pause = true
+            actualPlaybackConfirmed = false
+            playbackStateOwner = null
+            activeBookUrl = null
+            abandonFocus()
+            postEvent(EventBus.ALOUD_STATE, Status.STOP)
+            notificationManager.cancel(NotificationId.ReadAloudService)
+            upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
+        }
         mediaSessionCompat.release()
         ReadBook.uploadProgress()
         unregisterPhoneStateListener(phoneStateListener)
         upNotificationJob?.invokeOnCompletion {
-            notificationManager.cancel(NotificationId.ReadAloudService)
+            if (playbackStateOwner == null || playbackStateOwner === this) {
+                notificationManager.cancel(NotificationId.ReadAloudService)
+            }
         }
     }
 
@@ -385,10 +400,12 @@ abstract class BaseReadAloudService : BaseService(),
 
     @SuppressLint("WakelockTimeout")
     open fun play() {
+        if (playbackStateOwner !== this) return
         if (useWakeLock) {
             wakeLock.acquire()
             wifiLock?.acquire()
         }
+        actualPlaybackConfirmed = false
         isRun = true
         pause = false
         needResumeOnAudioFocusGain = false
@@ -406,6 +423,8 @@ abstract class BaseReadAloudService : BaseService(),
             wakeLock.release()
             wifiLock?.release()
         }
+        if (playbackStateOwner !== this) return
+        actualPlaybackConfirmed = false
         pause = true
         if (abandonFocus) {
             abandonFocus()
@@ -424,6 +443,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun resumeReadAloudInternal() {
+        if (playbackStateOwner !== this) return
         pause = false
         needResumeOnAudioFocusGain = false
         needResumeOnCallStateIdle = false
@@ -431,6 +451,24 @@ abstract class BaseReadAloudService : BaseService(),
         upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
         postEvent(EventBus.ALOUD_STATE, Status.PLAY)
     }
+
+    /**
+     * 以播放器真实状态校正服务事件。服务重建时，旧实例的迟到回调不会覆盖新实例。
+     */
+    protected fun syncActualPlaybackState(isPlaying: Boolean) {
+        if (playbackStateOwner !== this) return
+        actualPlaybackConfirmed = isPlaying
+        if (isPlaying && pause) {
+            pause = false
+            needResumeOnAudioFocusGain = false
+            needResumeOnCallStateIdle = false
+            upReadAloudNotification()
+            upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
+            postEvent(EventBus.ALOUD_STATE, Status.PLAY)
+        }
+    }
+
+    protected fun ownsPlaybackState(): Boolean = playbackStateOwner === this
 
     abstract fun upSpeechRate(reset: Boolean = false)
 

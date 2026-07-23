@@ -123,7 +123,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 toastOnUi(R.string.double_click_exit)
                 exitTime = System.currentTimeMillis()
             } else {
-                if (BaseReadAloudService.pause) {
+                if (!BaseReadAloudService.isPlay()) {
                     finish()
                 } else {
                     moveTaskToBack(true)
