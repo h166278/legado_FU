@@ -3,6 +3,7 @@ package io.legado.app.ui.book.source.manage
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -22,6 +23,8 @@ import io.legado.app.model.Debug
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
+import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
+import io.legado.app.ui.widget.recycler.DragSelectTouchHelper.AdvanceCallback.Mode
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.buildMainHandler
@@ -182,6 +185,7 @@ class BookSourceAdapter(
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemBookSourceBinding) {
         binding.apply {
+            var canStartDragSelection = false
             sectionContainer.setOnClickListener {
                 (currentItem(holder) as? BookSourceListItem.Section)?.let {
                     callBack.toggleSection(it.key)
@@ -201,6 +205,35 @@ class BookSourceAdapter(
                 (currentItem(holder) as? BookSourceListItem.Section)?.let {
                     callBack.toggleSection(it.key)
                 }
+            }
+            cbBookSource.setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        canStartDragSelection = if (view.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+                            event.x >= view.width - dp(48)
+                        } else {
+                            event.x <= dp(48)
+                        }
+                        if (canStartDragSelection) {
+                            callBack.onSourceCheckboxPressChanged(true)
+                        }
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (canStartDragSelection) {
+                            callBack.onSourceCheckboxPressChanged(false)
+                        }
+                        canStartDragSelection = false
+                    }
+                }
+                false
+            }
+            cbBookSource.setOnLongClickListener {
+                if (!canStartDragSelection) return@setOnLongClickListener false
+                val position = currentPosition(holder)
+                if (position == RecyclerView.NO_POSITION) return@setOnLongClickListener false
+                callBack.startDragSelection(position)
+                true
             }
             cbBookSource.setOnUserCheckedChangeListener { checked ->
                 (currentItem(holder) as? BookSourceListItem.Source)?.source?.let {
@@ -468,6 +501,45 @@ class BookSourceAdapter(
         }
     }
 
+    val dragSelectCallback: DragSelectTouchHelper.Callback =
+        object : DragSelectTouchHelper.AdvanceCallback<String>(Mode.ToggleAndReverse) {
+
+            override fun currentSelectedId(): Set<String> {
+                return selected.mapTo(mutableSetOf()) { it.bookSourceUrl }
+            }
+
+            override fun getItemId(position: Int): String {
+                return when (val item = getItems().getOrNull(position)) {
+                    is BookSourceListItem.Source -> item.source.bookSourceUrl
+                    is BookSourceListItem.Section -> item.sameItemKey
+                    null -> "missing:$position"
+                }
+            }
+
+            override fun updateSelectState(position: Int, isSelected: Boolean): Boolean {
+                val source = (getItems().getOrNull(position) as? BookSourceListItem.Source)?.source
+                    ?: return false
+                val changed = if (isSelected) {
+                    selected.add(source)
+                } else {
+                    selected.remove(source)
+                }
+                if (changed) {
+                    notifyItemChanged(position, bundleOf(Pair("selected", null)))
+                }
+                return true
+            }
+
+            override fun onSelectEnd(end: Int) {
+                super.onSelectEnd(end)
+                recyclerView.post {
+                    notifyItemRangeChanged(0, itemCount, bundleOf(Pair("selected", null)))
+                    callBack.upCountView()
+                    callBack.onDragSelectionFinished()
+                }
+            }
+        }
+
     private fun sectionSelectionSame(
         oldItem: BookSourceListItem,
         newItem: BookSourceListItem
@@ -548,6 +620,9 @@ class BookSourceAdapter(
         fun enable(enable: Boolean, bookSource: BookSourcePart)
         fun enableExplore(enable: Boolean, bookSource: BookSourcePart)
         fun upCountView()
+        fun onDragSelectionFinished()
+        fun onSourceCheckboxPressChanged(pressed: Boolean)
+        fun startDragSelection(position: Int)
         fun getSourceHost(origin: String): String
         fun toggleSection(key: String)
         fun updateSectionEnabled(title: String, sources: List<BookSourcePart>, isEnabled: Boolean)

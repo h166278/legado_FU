@@ -47,6 +47,7 @@ import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.SelectActionBar
+import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
@@ -92,7 +93,11 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     override val viewModel by viewModels<BookSourceViewModel>()
     private val importRecordKey = "bookSourceRecordKey"
     private val adapter by lazy { BookSourceAdapter(this, this, binding.recyclerView) }
+    private val dragSelectTouchHelper by lazy {
+        DragSelectTouchHelper(adapter.dragSelectCallback)
+    }
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
+    private var sourceCheckboxPressed = false
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
@@ -283,6 +288,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         binding.recyclerView.addItemDecoration(VerticalDivider(this))
         binding.recyclerView.adapter = adapter
         binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
+        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
+        // Long-press selection needs to claim the checkbox area before item reordering.
         ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
     }
 
@@ -297,7 +304,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             view.setOnClickListener {
                 viewMode = mode
                 adapter.showSourceHost = groupSourcesByDomain && viewMode == BookSourceViewMode.LIST
-                itemTouchCallback.isCanDrag = canDragSources()
+                updateItemDragState()
                 upViewModeViews()
                 submitBookSources()
             }
@@ -403,7 +410,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             }.flowOn(IO).conflate().collect { data ->
                 allSources = data
                 submitBookSources()
-                itemTouchCallback.isCanDrag = canDragSources()
+                updateItemDragState()
                 delay(500)
             }
         }
@@ -417,6 +424,10 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         return viewMode == BookSourceViewMode.LIST
                 && sort == BookSourceSort.Default
                 && !groupSourcesByDomain
+    }
+
+    private fun updateItemDragState() {
+        itemTouchCallback.isCanDrag = canDragSources() && !sourceCheckboxPressed
     }
 
     override fun onResume() {
@@ -736,6 +747,20 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             .upCountView(adapter.selection.size, adapter.sourceCount)
     }
 
+    override fun onDragSelectionFinished() {
+        sourceCheckboxPressed = false
+        updateItemDragState()
+    }
+
+    override fun onSourceCheckboxPressChanged(pressed: Boolean) {
+        sourceCheckboxPressed = pressed
+        updateItemDragState()
+    }
+
+    override fun startDragSelection(position: Int) {
+        dragSelectTouchHelper.activeDragSelect(position)
+    }
+
     override fun getSourceHost(origin: String): String {
         return hostMap.getOrPut(origin) {
             NetworkUtils.getSubDomainOrNull(origin) ?: "#"
@@ -932,6 +957,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     override fun onDestroy() {
+        dragSelectTouchHelper.attachToRecyclerView(null)
         super.onDestroy()
         if (!Debug.isChecking) {
             Debug.debugMessageMap.clear()
