@@ -5,15 +5,15 @@ import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
 
 fun StoryboardSegment.toTtsSynthesisContext(
-    scene: StoryboardScene?,
-    storyboardMode: Int
+    scene: StoryboardScene?
 ): TtsSynthesisContext? {
-    if (storyboardMode != 1 || type == StoryboardSegmentType.NARRATION) return null
+    if (type == StoryboardSegmentType.NARRATION) return null
     val contextTexts = performanceContext
         .map { it.trim() }
         .filter { it.isNotEmpty() }
         .take(3)
-    if (contextTexts.isEmpty()) return null
+    val instruction = performanceInstruction.trim()
+    if (contextTexts.isEmpty() && instruction.isEmpty()) return null
     return TtsSynthesisContext(
         mode = TtsSynthesisContext.Mode.PERFORMANCE,
         role = TtsRoleContext(
@@ -25,10 +25,29 @@ fun StoryboardSegment.toTtsSynthesisContext(
             },
             gender = speakerGender
         ),
-        scene = TtsSceneContext(
-            title = scene?.title,
-            text = contextTexts.joinToString("\n"),
-            contextTexts = contextTexts
-        )
+        scene = contextTexts.takeIf { it.isNotEmpty() }?.let {
+            TtsSceneContext(
+                title = scene?.title,
+                text = it.joinToString("\n"),
+                contextTexts = it
+            )
+        },
+        performanceInstruction = instruction
+    )
+}
+
+fun TtsSynthesisContext.forEngineCapabilities(engine: TtsEngineSetting?): TtsSynthesisContext? {
+    val supportsInstruction = engine?.supportsCapability(
+        TtsEngineCapability.PERFORMANCE_INSTRUCTION
+    ) == true
+    val supportsScene = supportsInstruction || engine?.supportsCapability(
+        TtsEngineCapability.SCENE_CONTEXT
+    ) == true
+    val filteredScene = scene.takeIf { supportsScene }
+    val filteredInstruction = performanceInstruction.takeIf { supportsInstruction }.orEmpty()
+    if (filteredScene == null && filteredInstruction.isEmpty()) return null
+    return copy(
+        scene = filteredScene,
+        performanceInstruction = filteredInstruction
     )
 }

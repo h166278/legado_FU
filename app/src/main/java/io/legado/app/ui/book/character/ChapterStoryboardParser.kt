@@ -56,7 +56,9 @@ data class StoryboardSegment(
     @SerializedName("end")
     val end: Int = start + text.length,
     @SerializedName("performance_context")
-    val performanceContext: List<String> = emptyList()
+    val performanceContext: List<String> = emptyList(),
+    @SerializedName("performance_instruction")
+    val performanceInstruction: String = ""
 ) {
     object SpeakerGender {
         const val MALE = "male"

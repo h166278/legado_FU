@@ -49,6 +49,7 @@ import io.legado.app.databinding.ItemTtsVoiceBinding
 import io.legado.app.databinding.LayoutTtsVoiceParamsPopupBinding
 import io.legado.app.constant.AppConst
 import io.legado.app.help.http.decompressed
+import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
@@ -84,6 +85,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 
 class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config),
     ConfigBackHandler {
@@ -159,7 +161,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         binding.buttonTabConfig.setOnClickListener { showDetailTab(DetailTab.CONFIG) }
         binding.buttonTabVoices.setOnClickListener { showDetailTab(DetailTab.VOICES) }
         binding.buttonConfigSource.setOnClickListener { showConfigSourceMode(!sourceMode) }
-        binding.buttonTestConfig.setOnClickListener { testCurrentEngineConnection() }
+        binding.buttonTestConfig.setOnClickListener { measureCurrentEngineLatency() }
         binding.buttonSaveConfig.setOnClickListener { saveCurrentEngine() }
         binding.buttonVoiceParams.setOnClickListener { toggleVoiceParamPanel() }
         binding.buttonToggleAllVoices.setOnClickListener { toggleAllVoicesEnabled() }
@@ -1163,50 +1165,39 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         )
     }
 
-    private fun testCurrentEngineConnection() {
+    private fun measureCurrentEngineLatency() {
         val engine = saveCurrentEngine(
             showToast = false,
             restartReadAloud = false
         )?.takeIf { it.isScriptEngine } ?: return
-        val voice = engine.effectiveVoices().firstOrNull { it.id == engine.activeVoiceId }
-            ?: engine.effectiveVoices().firstOrNull()
-        val styleId = voice?.let { savedPreviewStyleId(engine, it, it.styleOptions()) }
         val context = context ?: return
-        context.toastOnUi("正在测试接口...")
+        val targetUrl = engine.baseUrl.trim().takeIf { it.isAbsUrl() }
+        if (targetUrl == null) {
+            context.toastOnUi("脚本未声明测速地址")
+            return
+        }
+        context.toastOnUi("正在测速...")
         lifecycleScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
                     val started = SystemClock.elapsedRealtime()
-                    val response = TtsScriptEngineClient.getSynthesisResponse(
-                        engine = engine,
-                        text = TtsScriptEngineClient.sampleText(engine, voice),
-                        voiceId = voice?.id,
-                        styleId = styleId
-                    )
-                    response.use {
-                        val contentType = it.header("Content-Type").orEmpty()
-                        val normalizedContentType = contentType.substringBefore(";")
-                        if (normalizedContentType == "application/json" ||
-                            normalizedContentType.startsWith("text/")
-                        ) {
-                            error(it.body.string().take(200))
+                    okHttpClient.newBuilder()
+                        .callTimeout(15, TimeUnit.SECONDS)
+                        .build()
+                        .newCallResponse {
+                            url(targetUrl)
+                            head()
+                        }.use {
+                            SystemClock.elapsedRealtime() - started
+                        }.let { elapsed ->
+                            "网络延迟：${elapsed}ms"
                         }
-                        val firstBytes = ByteArray(512)
-                        val readBytes = it.body.byteStream().use { input ->
-                            input.read(firstBytes)
-                        }
-                        if (readBytes <= 0) {
-                            error("接口未返回音频内容")
-                        }
-                        val elapsed = SystemClock.elapsedRealtime() - started
-                        "接口可用：${elapsed}ms，$normalizedContentType"
-                    }
                 }
             }
             result.onSuccess {
                 context.toastOnUi(it)
             }.onFailure {
-                context.toastOnUi("接口测试失败：${it.localizedMessage ?: it.javaClass.simpleName}")
+                context.toastOnUi("测速失败：${it.localizedMessage ?: it.javaClass.simpleName}")
             }
         }
     }

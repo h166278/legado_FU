@@ -19,20 +19,25 @@ class StoryboardTtsContextTest {
     )
 
     @Test
-    fun basicModeDoesNotExposeSceneContext() {
-        assertNull(dialogue().toTtsSynthesisContext(scene, storyboardMode = 0))
+    fun segmentWithoutEnhancementDoesNotExposeSynthesisContext() {
+        assertNull(
+            dialogue().copy(
+                performanceContext = emptyList(),
+                performanceInstruction = ""
+            ).toTtsSynthesisContext(scene)
+        )
     }
 
     @Test
     fun narrationDoesNotExposeSceneContext() {
         val narration = dialogue().copy(type = StoryboardSegmentType.NARRATION)
 
-        assertNull(narration.toTtsSynthesisContext(scene, storyboardMode = 1))
+        assertNull(narration.toTtsSynthesisContext(scene))
     }
 
     @Test
     fun performanceModeExposesStableRoleAndApprovedContextItems() {
-        val context = dialogue().toTtsSynthesisContext(scene, storyboardMode = 1)!!
+        val context = dialogue().toTtsSynthesisContext(scene)!!
 
         assertEquals(TtsSynthesisContext.Mode.PERFORMANCE, context.mode)
         assertEquals(7L, context.role?.id)
@@ -44,6 +49,24 @@ class StoryboardTtsContextTest {
             listOf("安秋月独自在陌生城市丢失生活费。", "陈升追问后，她忍不住哭起来。"),
             context.scene?.contextTexts
         )
+        assertEquals("刚哭过，开口迟疑，后半句逐渐变轻", context.performanceInstruction)
+    }
+
+    @Test
+    fun engineCapabilitiesFilterSceneAndActorLayers() {
+        val context = dialogue().toTtsSynthesisContext(scene)!!
+        val sceneOnly = engine(setOf(TtsEngineCapability.SCENE_CONTEXT))
+        val actor = engine(setOf(TtsEngineCapability.PERFORMANCE_INSTRUCTION))
+        val unsupported = engine(emptySet())
+
+        assertEquals(context.scene, context.forEngineCapabilities(sceneOnly)?.scene)
+        assertEquals("", context.forEngineCapabilities(sceneOnly)?.performanceInstruction)
+        assertEquals(context.scene, context.forEngineCapabilities(actor)?.scene)
+        assertEquals(
+            "刚哭过，开口迟疑，后半句逐渐变轻",
+            context.forEngineCapabilities(actor)?.performanceInstruction
+        )
+        assertNull(context.forEngineCapabilities(unsupported))
     }
 
     private fun dialogue() = StoryboardSegment(
@@ -57,6 +80,14 @@ class StoryboardTtsContextTest {
         performanceContext = listOf(
             "安秋月独自在陌生城市丢失生活费。",
             "陈升追问后，她忍不住哭起来。"
-        )
+        ),
+        performanceInstruction = "刚哭过，开口迟疑，后半句逐渐变轻"
+    )
+
+    private fun engine(capabilities: Set<String>) = TtsEngineSetting(
+        id = "test",
+        name = "测试",
+        type = TtsEngineType.SCRIPT,
+        capabilities = capabilities
     )
 }

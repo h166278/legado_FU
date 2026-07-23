@@ -16,6 +16,7 @@ import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineType
+import io.legado.app.help.tts.TtsPlayerFactory
 import io.legado.app.help.tts.TtsScriptEngineClient
 import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.help.tts.TtsVoice
@@ -158,7 +159,7 @@ class TtsVoicePreviewController(
 
     private fun startPlayer(file: File, key: String, token: Int) {
         previewPlayer?.release()
-        previewPlayer = ExoPlayer.Builder(context).build().apply {
+        previewPlayer = TtsPlayerFactory.create(context).apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     if (isPlaying && token == requestToken && activeKey == key) {

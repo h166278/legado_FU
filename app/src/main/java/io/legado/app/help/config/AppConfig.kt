@@ -379,12 +379,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val readAloudMultiRole: Boolean
         get() = readAloudScenarioMode == 1
 
-    var readAloudStoryboardMode: Int
-        get() = appCtx.getPrefInt(PreferKey.readAloudStoryboardMode, 0)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.readAloudStoryboardMode, value.coerceIn(0, 1))
-        }
-
     var chineseConverterType: Int
         get() = appCtx.getPrefInt(PreferKey.chineseConverterType)
         set(value) {

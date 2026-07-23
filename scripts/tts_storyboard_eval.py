@@ -28,11 +28,17 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = ROOT / "app/src/main/assets/skills/tts_storyboard"
-MODE_SKILL_FILES = {
-    "basic": SKILL_ROOT / "modes/basic.md",
-    "performance": SKILL_ROOT / "modes/performance.md",
-}
+PROTOCOL_SKILL_FILE = SKILL_ROOT / "modules/protocol.md"
+BASE_ROUTING_SKILL_FILE = SKILL_ROOT / "modules/base-routing.md"
+SCENE_CONTEXT_SKILL_FILE = SKILL_ROOT / "modules/scene-context.md"
+PERFORMANCE_INSTRUCTION_SKILL_FILE = SKILL_ROOT / "modules/performance-instruction.md"
 SCENE_SKILL_FILE = SKILL_ROOT / "modes/performance-scenes.md"
+CAP_SCENE_CONTEXT = "scene_context"
+CAP_PERFORMANCE_INSTRUCTION = "performance_instruction"
+STORYBOARD_CAPABILITIES = {
+    CAP_SCENE_CONTEXT,
+    CAP_PERFORMANCE_INSTRUCTION,
+}
 API_URL = "https://api.siliconflow.cn/v1/chat/completions"
 DEFAULT_MODEL = "Qwen/Qwen3-8B"
 DEFAULT_OUT_DIR = Path("build/tts_storyboard_eval")
@@ -76,6 +82,7 @@ UNIT_KEYS = {
     "evidence",
     "performanceContext",
 }
+OPTIONAL_UNIT_KEYS = {"performanceInstruction"}
 ROOT_KEYS = {"units", "newCharacters"}
 ROLE_TYPES = {"narrator", "character", "thought", "other"}
 STATUSES = {"assigned", "unknown"}
@@ -196,6 +203,16 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Run a first model pass that supplies explicit full-scene boundaries to performance mode.",
     )
+    parser.add_argument(
+        "--engine-capability",
+        action="append",
+        choices=tuple(sorted(STORYBOARD_CAPABILITIES)),
+        default=[],
+        help=(
+            "Capability declared by the target TTS engine. Repeat for multiple values. "
+            "performance_instruction automatically includes scene_context."
+        ),
+    )
     parser.add_argument("--max-tokens", type=int)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float)
@@ -235,11 +252,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_system_prompt(mode: str) -> str:
-    skill_file = MODE_SKILL_FILES.get(mode)
-    if skill_file is None:
+def resolve_storyboard_capabilities(
+    mode: str,
+    capabilities: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> list[str]:
+    if mode not in ("basic", "performance"):
         raise ValueError(f"unsupported storyboard mode: {mode}")
-    return extract_skill_body(skill_file.read_text(encoding="utf-8"))
+    if mode == "basic":
+        return []
+    requested = set(capabilities or (CAP_SCENE_CONTEXT,))
+    unknown = requested - STORYBOARD_CAPABILITIES
+    if unknown:
+        raise ValueError(f"unsupported storyboard capabilities: {','.join(sorted(unknown))}")
+    if CAP_PERFORMANCE_INSTRUCTION in requested:
+        requested.add(CAP_SCENE_CONTEXT)
+    return [
+        capability
+        for capability in (CAP_SCENE_CONTEXT, CAP_PERFORMANCE_INSTRUCTION)
+        if capability in requested
+    ]
+
+
+def build_system_prompt(
+    mode: str,
+    capabilities: list[str] | tuple[str, ...] | set[str] | None = None,
+) -> str:
+    resolved = resolve_storyboard_capabilities(mode, capabilities)
+    module_files = [PROTOCOL_SKILL_FILE, BASE_ROUTING_SKILL_FILE]
+    if CAP_SCENE_CONTEXT in resolved:
+        module_files.append(SCENE_CONTEXT_SKILL_FILE)
+    if CAP_PERFORMANCE_INSTRUCTION in resolved:
+        module_files.append(PERFORMANCE_INSTRUCTION_SKILL_FILE)
+    return "\n\n---\n\n".join(
+        extract_skill_body(path.read_text(encoding="utf-8")) for path in module_files
+    )
 
 
 def extract_skill_body(content: str) -> str:
@@ -471,13 +517,16 @@ def build_storyboard_payload(
     max_chars: int,
     known_characters: list[dict[str, Any]] | None = None,
     mode: str = "basic",
+    capabilities: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> dict[str, Any]:
     paragraphs = build_context_paragraphs(chapter, max_chars)
     units = build_candidate_units(paragraphs)
+    resolved_capabilities = resolve_storyboard_capabilities(mode, capabilities)
     return {
         "book": {"name": "", "author": ""},
         "chapter": {"index": chapter.index, "title": chapter.title},
         "mode": mode,
+        "storyboardCapabilities": resolved_capabilities,
         "allowNewCharacters": False,
         "knownCharacters": known_characters or [],
         "contextParagraphs": [
@@ -589,10 +638,10 @@ def build_candidate_units(paragraphs: list[dict[str, Any]]) -> list[CandidateUni
         for span_start, span_end, kind in quote_spans:
             range_item = TextRange(paragraph_index, span_start, span_end)
             preview = text[span_start:span_end]
-            role_hint = "thought" if looks_like_thought(text, span_start, span_end) else "character"
+            role_hint = quote_role_hint(text, span_start, span_end)
             units.append(
                 make_unit(
-                    kind=kind,
+                    kind="quote_reference" if role_hint == "narrator" else kind,
                     role_hint=role_hint,
                     ranges=[range_item],
                     text_preview=preview,
@@ -728,6 +777,38 @@ def looks_like_thought(text: str, start: int, end: int) -> bool:
     return any(cue in before or cue in after for cue in THOUGHT_CUES)
 
 
+NARRATED_QUOTE_STRONG_CUES = (
+    "那句", "这句", "那句话", "这句话", "原话", "所谓", "口头禅",
+    "字眼", "词语", "称呼", "标题", "名字", "写着", "显示",
+)
+NARRATED_QUOTE_SHORT_CUES = (
+    "一句", "一声", "一串", "几个字", "两个字", "三个字", "四个字", "五个字",
+)
+
+
+def quote_role_hint(text: str, start: int, end: int) -> str:
+    if looks_like_thought(text, start, end):
+        return "thought"
+    if looks_like_narrated_quote(text, start, end):
+        return "narrator"
+    return "character"
+
+
+def looks_like_narrated_quote(text: str, start: int, end: int) -> bool:
+    if start < 0 or end < start or end > len(text):
+        return False
+    prefix = text[previous_boundary(text, start) : start].strip().rstrip("，,、")
+    if not prefix or prefix.endswith(("：", ":")):
+        return False
+    nearby_prefix = prefix[-28:]
+    if any(cue in nearby_prefix for cue in NARRATED_QUOTE_STRONG_CUES):
+        return True
+    quoted_length = max(0, end - start - 2)
+    return quoted_length <= 16 and any(
+        cue in nearby_prefix for cue in NARRATED_QUOTE_SHORT_CUES
+    )
+
+
 def context_before(
     paragraphs: dict[int, str],
     paragraph_index: int,
@@ -780,7 +861,7 @@ def validate_storyboard_result(
     target_ids = list(payload.get("targetUnitIds") or [])
     target_set = set(target_ids)
     known_ids = {unit["unitId"]: unit for unit in payload.get("units") or []}
-    mode = str(payload.get("mode") or "basic")
+    capabilities = payload_storyboard_capabilities(payload)
     invalid_schema: list[str] = []
     text_leaks: list[str] = []
     root_extra_keys = set(result) - ROOT_KEYS
@@ -805,7 +886,7 @@ def validate_storyboard_result(
             continue
         leak_paths = find_text_leaks(item, f"units[{index}]")
         text_leaks.extend(leak_paths)
-        extra_keys = set(item) - UNIT_KEYS
+        extra_keys = set(item) - UNIT_KEYS - OPTIONAL_UNIT_KEYS
         if extra_keys:
             invalid_schema.append(f"units[{index}]:extra_keys={','.join(sorted(extra_keys))}")
         missing_keys = UNIT_KEYS - set(item)
@@ -839,8 +920,15 @@ def validate_storyboard_result(
             payload=payload,
             unit=item,
             unit_index=index,
-            mode=mode,
+            capabilities=capabilities,
             context=performance_context,
+            invalid_schema=invalid_schema,
+        )
+        validate_performance_instruction(
+            unit=item,
+            unit_index=index,
+            capabilities=capabilities,
+            instruction=item.get("performanceInstruction"),
             invalid_schema=invalid_schema,
         )
         if role_type in ("narrator", "other"):
@@ -862,10 +950,20 @@ def validate_storyboard_result(
     missing_ids = [unit_id for unit_id in target_ids if unit_id not in seen]
     unknown_ids = [unit_id for unit_id in seen if unit_id and unit_id not in target_set]
     cacheable = not invalid_schema and not text_leaks and not missing_ids and not duplicate_ids and not unknown_ids
+    performance_units = [
+        item
+        for item in model_units
+        if isinstance(item, dict) and item.get("roleType") in ("character", "thought")
+    ]
     performance_context_count = sum(
         1
-        for item in model_units
-        if isinstance(item, dict) and bool(item.get("performanceContext"))
+        for item in performance_units
+        if bool(item.get("performanceContext"))
+    )
+    performance_instruction_count = sum(
+        1
+        for item in performance_units
+        if bool(str(item.get("performanceInstruction") or "").strip())
     )
     return {
         "counts": counts,
@@ -881,9 +979,18 @@ def validate_storyboard_result(
         "text_leak_samples": text_leaks[:10],
         "invalid_schema_count": len(invalid_schema),
         "invalid_schema_samples": invalid_schema[:20],
+        "performance_target_count": len(performance_units),
         "performance_context_count": performance_context_count,
         "performance_context_coverage": (
-            round(performance_context_count / len(model_units), 4) if model_units else 0.0
+            round(performance_context_count / len(performance_units), 4)
+            if performance_units
+            else 0.0
+        ),
+        "performance_instruction_count": performance_instruction_count,
+        "performance_instruction_coverage": (
+            round(performance_instruction_count / len(performance_units), 4)
+            if performance_units
+            else 0.0
         ),
         "cacheable": cacheable,
         "accepted_units": valid_units if cacheable else [],
@@ -894,7 +1001,7 @@ def validate_performance_context(
     payload: dict[str, Any],
     unit: dict[str, Any],
     unit_index: int,
-    mode: str,
+    capabilities: list[str],
     context: Any,
     invalid_schema: list[str],
 ) -> None:
@@ -906,12 +1013,17 @@ def validate_performance_context(
         invalid_schema.append(f"{prefix}_has_blank_or_non_string")
         return
     role_type = unit.get("roleType")
-    requires_context = mode == "performance" and role_type in ("character", "thought")
+    requires_context = (
+        CAP_SCENE_CONTEXT in capabilities and role_type in ("character", "thought")
+    )
     if not requires_context:
         if context:
             invalid_schema.append(f"{prefix}_must_be_empty")
         return
-    if context and not 1 <= len(context) <= 3:
+    if not context:
+        invalid_schema.append(f"{prefix}_required")
+        return
+    if not 1 <= len(context) <= 3:
         invalid_schema.append(f"{prefix}_count={len(context)}")
     if any(len(value.strip()) > 80 for value in context):
         invalid_schema.append(f"{prefix}_item_too_long")
@@ -927,6 +1039,50 @@ def validate_performance_context(
     target_text = normalize_comparison_text(str((source_unit or {}).get("textPreview") or ""))
     if len(target_text) >= 12 and any(target_text in normalize_comparison_text(value) for value in context):
         invalid_schema.append(f"{prefix}_repeats_target")
+
+
+def payload_storyboard_capabilities(payload: dict[str, Any]) -> list[str]:
+    raw = payload.get("storyboardCapabilities")
+    if raw is None:
+        return resolve_storyboard_capabilities(str(payload.get("mode") or "basic"))
+    if not isinstance(raw, list):
+        return []
+    return resolve_storyboard_capabilities(
+        str(payload.get("mode") or "basic"),
+        [str(value) for value in raw],
+    )
+
+
+def validate_performance_instruction(
+    unit: dict[str, Any],
+    unit_index: int,
+    capabilities: list[str],
+    instruction: Any,
+    invalid_schema: list[str],
+) -> None:
+    prefix = f"units[{unit_index}]:performanceInstruction"
+    actor_enabled = CAP_PERFORMANCE_INSTRUCTION in capabilities
+    if actor_enabled:
+        if not isinstance(instruction, str):
+            invalid_schema.append(f"{prefix}_not_string")
+            return
+    elif instruction is None:
+        return
+    elif not isinstance(instruction, str):
+        invalid_schema.append(f"{prefix}_not_string")
+        return
+
+    value = str(instruction or "").strip()
+    role_type = unit.get("roleType")
+    if not actor_enabled or role_type in ("narrator", "other"):
+        if value:
+            invalid_schema.append(f"{prefix}_must_be_empty")
+        return
+    if not value:
+        invalid_schema.append(f"{prefix}_required")
+        return
+    if not 4 <= len(value) <= 40:
+        invalid_schema.append(f"{prefix}_length={len(value)}")
 
 
 def normalize_comparison_text(value: str) -> str:
@@ -1026,8 +1182,11 @@ def write_report(
         f"duplicate_unit_count: {validation['duplicate_unit_count']}",
         f"text_leak_count: {validation['text_leak_count']}",
         f"invalid_schema_count: {validation['invalid_schema_count']}",
+        f"performance_target_count: {validation['performance_target_count']}",
         f"performance_context_count: {validation['performance_context_count']}",
         f"performance_context_coverage: {validation['performance_context_coverage']}",
+        f"performance_instruction_count: {validation['performance_instruction_count']}",
+        f"performance_instruction_coverage: {validation['performance_instruction_coverage']}",
         "",
         "## Counts",
         "",
@@ -1065,6 +1224,10 @@ def write_report(
                 "   performance: "
                 + (" | ".join(str(value) for value in resolution.get("performanceContext") or []) or "-")
             )
+            lines.append(
+                "   instruction: "
+                + (str(resolution.get("performanceInstruction") or "-").strip() or "-")
+            )
         else:
             lines.append("   result: MISSING")
         lines.append("")
@@ -1076,6 +1239,7 @@ def write_report(
 
 def main() -> int:
     args = parse_args()
+    capabilities = resolve_storyboard_capabilities(args.mode, args.engine_capability or None)
     load_repo_env()
     api_key = os.getenv(args.api_key_env)
     if not api_key:
@@ -1096,11 +1260,21 @@ def main() -> int:
         known_characters = parse_known_characters(args.character)
         for index in indexes:
             chapter = chapters[index - 1]
-            payload = build_storyboard_payload(chapter, args.max_chars, known_characters, args.mode)
+            payload = build_storyboard_payload(
+                chapter,
+                args.max_chars,
+                known_characters,
+                args.mode,
+                capabilities,
+            )
             cases.append((chapter, payload))
     summary: list[dict[str, Any]] = []
     for chapter, payload in cases:
-        if args.scene_pass and args.mode == "performance" and payload.get("contextParagraphs"):
+        if (
+            args.scene_pass
+            and CAP_SCENE_CONTEXT in payload_storyboard_capabilities(payload)
+            and payload.get("contextParagraphs")
+        ):
             print(f"request scene boundaries chapter {chapter.index}: {chapter.title}", flush=True)
             scene_payload = build_scene_payload(payload)
             try:
@@ -1175,7 +1349,10 @@ def main() -> int:
                 thinking_state=args.thinking_state,
                 retries=args.retries,
                 retry_sleep=args.retry_sleep,
-                system_prompt=build_system_prompt(args.mode),
+                system_prompt=build_system_prompt(
+                    str(payload.get("mode") or args.mode),
+                    payload_storyboard_capabilities(payload),
+                ),
             )
         except Exception as error:
             error_payload = {

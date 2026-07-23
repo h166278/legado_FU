@@ -26,13 +26,15 @@ import io.legado.app.databinding.ItemBookStoryboardSegmentBinding
 import io.legado.app.help.ai.AiTtsStoryboardHelper
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.ReadAloudTtsRouter
-import io.legado.app.help.tts.TtsEngineCapability
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
+import io.legado.app.help.tts.TtsPlayerFactory
 import io.legado.app.help.tts.TtsScriptEngineClient
 import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.help.tts.normalizeStoryboardSynthesisText
 import io.legado.app.help.tts.toTtsSynthesisContext
+import io.legado.app.help.tts.forEngineCapabilities
+import io.legado.app.help.tts.writeReadAloudAudioWithWavRetry
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.ReadAloud
@@ -309,27 +311,21 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>() {
                         .takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
                         ?: error("角色绑定的朗读引擎不可用")
                     val synthesisContext = segment
-                        .toTtsSynthesisContext(scene, AppConfig.readAloudStoryboardMode)
-                        ?.takeIf { engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT) }
-                    val response = TtsScriptEngineClient.getSynthesisResponse(
-                        engine = engine,
-                        text = text,
-                        voiceId = route?.voiceId ?: engine.activeVoiceId,
-                        styleId = route?.styleId,
-                        synthesisContext = synthesisContext
-                    )
-                    File(cacheDir, "storyboard_preview_${System.currentTimeMillis()}.audio").apply {
-                        response.use {
-                            outputStream().use { out ->
-                                it.body.byteStream().use { input ->
-                                    input.copyTo(out)
-                                }
-                            }
-                        }
+                        .toTtsSynthesisContext(scene)
+                        ?.forEngineCapabilities(engine)
+                    val file = File(cacheDir, "storyboard_preview_${System.currentTimeMillis()}.audio")
+                    writeReadAloudAudioWithWavRetry(file, text) {
+                        TtsScriptEngineClient.getSynthesisStream(
+                            engine = engine,
+                            text = text,
+                            voiceId = route?.voiceId ?: engine.activeVoiceId,
+                            styleId = route?.styleId,
+                            synthesisContext = synthesisContext
+                        )
                     }
                 }
                 previewPlayer?.release()
-                previewPlayer = ExoPlayer.Builder(this@BookStoryboardActivity).build().apply {
+                previewPlayer = TtsPlayerFactory.create(this@BookStoryboardActivity).apply {
                     setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
                     setPlaybackSpeed(TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay))
                     prepare()

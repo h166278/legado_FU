@@ -22,17 +22,39 @@ def unit_text(payload: dict, unit_id: str) -> str:
 
 class TtsStoryboardEvalTest(unittest.TestCase):
 
-    def test_each_mode_loads_its_own_prompt_resource(self) -> None:
+    def test_prompt_modules_follow_engine_capabilities(self) -> None:
         basic = storyboard.build_system_prompt("basic")
-        performance = storyboard.build_system_prompt("performance")
+        scene = storyboard.build_system_prompt(
+            "performance",
+            [storyboard.CAP_SCENE_CONTEXT],
+        )
+        actor = storyboard.build_system_prompt(
+            "performance",
+            [storyboard.CAP_PERFORMANCE_INSTRUCTION],
+        )
 
-        self.assertNotEqual(basic, performance)
-        self.assertIn("# 基础分镜", basic)
-        self.assertNotIn("## 演绎上下文", basic)
-        self.assertIn("# 场景演绎分镜", performance)
-        self.assertIn("## 演绎场景", performance)
+        self.assertIn("# 公共协议", basic)
+        self.assertIn("# 基础归因", basic)
+        self.assertNotIn("# 导演层", basic)
+        self.assertNotIn("# 演员层", basic)
+        self.assertIn("# 导演层", scene)
+        self.assertNotIn("# 演员层", scene)
+        self.assertIn("# 导演层", actor)
+        self.assertIn("# 演员层", actor)
         self.assertNotIn("你不是", basic)
-        self.assertNotIn("你不是", performance)
+        self.assertNotIn("你不是", scene)
+        self.assertNotIn("你不是", actor)
+
+    def test_actor_capability_implicitly_loads_scene_context(self) -> None:
+        resolved = storyboard.resolve_storyboard_capabilities(
+            "performance",
+            [storyboard.CAP_PERFORMANCE_INSTRUCTION],
+        )
+
+        self.assertEqual(
+            resolved,
+            [storyboard.CAP_SCENE_CONTEXT, storyboard.CAP_PERFORMANCE_INSTRUCTION],
+        )
 
     def test_performance_scene_pass_loads_shared_skill_resource(self) -> None:
         prompt = storyboard.SCENE_SKILL_FILE.read_text(encoding="utf-8").strip()
@@ -73,6 +95,31 @@ class TtsStoryboardEvalTest(unittest.TestCase):
         self.assertNotIn("在陈升被爆头很多次后，赵文博终于吐槽。", texts)
         self.assertFalse(any("赵文博目瞪口呆" in text for text in texts))
         self.assertFalse(any("绝不可能承认" in text for text in texts))
+
+    def test_narrated_quote_references_are_hinted_as_narrator(self) -> None:
+        chapter = storyboard.Chapter(
+            95,
+            "我拄拐，你拿碗",
+            "\n".join(
+                [
+                    "那句“靠你了”总往她心窝子钻，钻得她暖暖热热。",
+                    "“很想很想很想很想……”",
+                    "电话里，沈言卿娇憨甜脆地说了好长一串“很想”。",
+                    "陈升问：“有多想？”",
+                ]
+            ),
+        )
+
+        payload = storyboard.build_storyboard_payload(chapter, max_chars=2000)
+        hints = {
+            unit_text(payload, unit["unitId"]): (unit["kind"], unit["roleHint"])
+            for unit in payload["units"]
+        }
+
+        self.assertEqual(("quote_reference", "narrator"), hints["“靠你了”"])
+        self.assertEqual(("quote_reference", "narrator"), hints["“很想”"])
+        self.assertEqual(("quote", "character"), hints["“很想很想很想很想……”"])
+        self.assertEqual(("quote", "character"), hints["“有多想？”"])
 
     def test_colon_units_are_conservative(self) -> None:
         chapter = storyboard.Chapter(
@@ -290,7 +337,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
         self.assertTrue(audit["cacheable"])
         self.assertEqual(audit["invalid_schema_count"], 0)
 
-    def test_performance_mode_accepts_empty_context_for_neutral_dialogue(self) -> None:
+    def test_performance_mode_requires_context_for_neutral_dialogue(self) -> None:
         chapter = storyboard.Chapter(1, "金额", "“丢了多少？”陈升问。")
         payload = storyboard.build_storyboard_payload(
             chapter,
@@ -312,7 +359,7 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                     "status": "assigned",
                     "confidence": 0.96,
                     "evidence": "后文: 陈升问",
-                    "performanceContext": [],
+                    "performanceContext": ["对方刚说丢了生活费；陈升想确认金额后决定如何帮助。"],
                 }
             ],
             "newCharacters": [],
@@ -649,6 +696,173 @@ class TtsStoryboardEvalTest(unittest.TestCase):
 
         self.assertTrue(audit["cacheable"])
         self.assertEqual(audit["invalid_schema_count"], 0)
+
+    def test_actor_capability_accepts_short_performance_instruction(self) -> None:
+        chapter = storyboard.Chapter(1, "困境", "安秋月浑身一颤。\n“我……生活费丢了……”")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            known_characters=[
+                {"characterId": 3, "name": "安秋月", "aliases": [], "gender": "female", "role": "女主"}
+            ],
+            mode="performance",
+            capabilities=[storyboard.CAP_PERFORMANCE_INSTRUCTION],
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 3,
+                    "speakerGender": "female",
+                    "status": "assigned",
+                    "confidence": 0.98,
+                    "evidence": "前文动作: 安秋月颤抖",
+                    "performanceContext": ["安秋月丢失生活费后，无助地向陈升说明情况。"],
+                    "performanceInstruction": "开口迟疑，后半句逐渐变轻",
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertTrue(audit["cacheable"])
+        self.assertEqual(audit["performance_target_count"], 1)
+        self.assertEqual(audit["performance_instruction_count"], 1)
+        self.assertEqual(audit["performance_instruction_coverage"], 1.0)
+
+    def test_actor_capability_rejects_blank_performance_instruction(self) -> None:
+        chapter = storyboard.Chapter(1, "问话", "“联系方式呢？”陈升自然地问。")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            mode="performance",
+            capabilities=[storyboard.CAP_PERFORMANCE_INSTRUCTION],
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "陈升",
+                    "characterId": 0,
+                    "speakerGender": "male",
+                    "status": "unknown",
+                    "confidence": 0.98,
+                    "evidence": "后文主语: 陈升",
+                    "performanceContext": ["对方仍有些局促；陈升想确认信息后继续提供帮助。"],
+                    "performanceInstruction": "",
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertFalse(audit["cacheable"])
+        self.assertTrue(
+            any("performanceInstruction_required" in value for value in audit["invalid_schema_samples"])
+        )
+
+    def test_scene_capability_rejects_blank_performance_context(self) -> None:
+        chapter = storyboard.Chapter(1, "问话", "“联系方式呢？”陈升自然地问。")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            max_chars=1000,
+            mode="performance",
+            capabilities=[storyboard.CAP_SCENE_CONTEXT],
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "陈升",
+                    "characterId": 0,
+                    "speakerGender": "male",
+                    "status": "unknown",
+                    "confidence": 0.98,
+                    "evidence": "后文主语: 陈升",
+                    "performanceContext": [],
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertFalse(audit["cacheable"])
+        self.assertTrue(
+            any("performanceContext_required" in value for value in audit["invalid_schema_samples"])
+        )
+
+    def test_scene_only_capability_rejects_actor_instruction(self) -> None:
+        chapter = storyboard.Chapter(1, "困境", "“我……生活费丢了……”安秋月哭着说。")
+        payload = storyboard.build_storyboard_payload(chapter, 1000, mode="performance")
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "character",
+                    "characterName": "安秋月",
+                    "characterId": 0,
+                    "speakerGender": "female",
+                    "status": "unknown",
+                    "confidence": 0.92,
+                    "evidence": "后文主语: 安秋月",
+                    "performanceContext": ["安秋月丢失生活费后正在哭泣。"],
+                    "performanceInstruction": "含着眼泪，声音逐渐变轻",
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertFalse(audit["cacheable"])
+        self.assertTrue(
+            any("performanceInstruction_must_be_empty" in value for value in audit["invalid_schema_samples"])
+        )
+
+    def test_actor_capability_rejects_instruction_on_narration(self) -> None:
+        chapter = storyboard.Chapter(1, "通知", "黑板上写着：“明天放假。”")
+        payload = storyboard.build_storyboard_payload(
+            chapter,
+            1000,
+            mode="performance",
+            capabilities=[storyboard.CAP_PERFORMANCE_INSTRUCTION],
+        )
+        unit_id = payload["targetUnitIds"][0]
+        result = {
+            "units": [
+                {
+                    "unitId": unit_id,
+                    "roleType": "narrator",
+                    "characterName": "",
+                    "characterId": 0,
+                    "speakerGender": "unknown",
+                    "status": "unknown",
+                    "confidence": 0.99,
+                    "evidence": "叙述动作",
+                    "performanceContext": [],
+                    "performanceInstruction": "声音低沉，放慢讲述",
+                }
+            ],
+            "newCharacters": [],
+        }
+
+        audit = storyboard.validate_storyboard_result(payload, result)
+
+        self.assertFalse(audit["cacheable"])
+        self.assertTrue(
+            any("performanceInstruction_must_be_empty" in value for value in audit["invalid_schema_samples"])
+        )
 
 
 if __name__ == "__main__":

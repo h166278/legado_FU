@@ -97,7 +97,7 @@ object TtsScriptEngineClient {
             synthesisContext = synthesisContext,
             coroutineContext = coroutineContext,
             aggregateResponse = true
-        )
+        ).response
     }
 
     private suspend fun executeSynthesis(
@@ -111,7 +111,7 @@ object TtsScriptEngineClient {
         synthesisContext: TtsSynthesisContext?,
         coroutineContext: CoroutineContext,
         aggregateResponse: Boolean
-    ): Response {
+    ): SynthesisExecution {
         val voice = TtsEngineStore.voice(engine.id, voiceId)
             ?: engine.effectiveVoices().firstOrNull { it.id == voiceId }
         val options = engine.effectiveOptionValues(loadOptions(engine))
@@ -132,17 +132,20 @@ object TtsScriptEngineClient {
             )
         ) ?: throw NoStackTraceException("脚本未实现 synthesize(text, voice, params, options, ctx)")
         val request = parseSynthesisRequest(synthesis, engine)
-        return executeWithRetry(
-            request = request,
-            engine = engine,
-            text = text,
-            speed = speed,
-            volume = volume,
-            pitch = pitch,
-            voiceId = voice?.id ?: voiceId,
-            voiceName = voice?.name,
-            coroutineContext = coroutineContext,
-            aggregateResponse = aggregateResponse
+        return SynthesisExecution(
+            response = executeWithRetry(
+                request = request,
+                engine = engine,
+                text = text,
+                speed = speed,
+                volume = volume,
+                pitch = pitch,
+                voiceId = voice?.id ?: voiceId,
+                voiceName = voice?.name,
+                coroutineContext = coroutineContext,
+                aggregateResponse = aggregateResponse
+            ),
+            audioContentType = request.audioContentType ?: engine.contentType
         )
     }
 
@@ -253,7 +256,7 @@ object TtsScriptEngineClient {
         synthesisContext: TtsSynthesisContext? = null,
         coroutineContext: CoroutineContext = EmptyCoroutineContext
     ): InputStream {
-        val response = executeSynthesis(
+        val execution = executeSynthesis(
             engine = engine,
             text = text,
             voiceId = voiceId,
@@ -265,13 +268,13 @@ object TtsScriptEngineClient {
             coroutineContext = coroutineContext,
             aggregateResponse = false
         )
-        return response.requireAudioStream(engine)
+        return execution.response.requireAudioStream(execution.audioContentType)
     }
 
-    private fun Response.requireAudioStream(engine: TtsEngineSetting): InputStream {
+    private fun Response.requireAudioStream(expectedAudioContentType: String?): InputStream {
         headers["Content-Type"]?.let { rawContentType ->
             val contentType = rawContentType.substringBefore(';').trim()
-            val expected = engine.contentType.orEmpty()
+            val expected = expectedAudioContentType.orEmpty()
             if (contentType == "application/json" || contentType.startsWith("text/")) {
                 throw NoStackTraceException(body.string())
             }
@@ -697,4 +700,9 @@ object TtsScriptEngineClient {
             return "$url,${GSON.toJson(option)}"
         }
     }
+
+    private data class SynthesisExecution(
+        val response: Response,
+        val audioContentType: String?
+    )
 }

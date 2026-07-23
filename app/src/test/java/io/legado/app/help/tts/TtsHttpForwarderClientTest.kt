@@ -364,6 +364,54 @@ class TtsHttpForwarderClientTest {
     }
 
     @Test
+    fun stepAudioBuiltInEngine_declaresScenePerformanceCapabilities() {
+        val engine = scriptEngineFromAssetFile("stepaudio_25_tts.js")
+
+        assertEquals(TtsEngineStore.STEPAUDIO_25_TTS_ID, engine.id)
+        assertEquals("阶跃星辰 StepAudio 2.5 TTS", engine.name)
+        assertEquals(TtsEngineType.SCRIPT, engine.type)
+        assertEquals(false, engine.enabled)
+        assertEquals(false, engine.builtIn)
+        assertEquals("audio/wav", engine.contentType)
+        assertEquals(2, engine.maxConcurrency)
+        assertTrue(engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.PERFORMANCE_INSTRUCTION))
+        assertFalse(engine.supportsCapability(TtsEngineCapability.PERSONA))
+        assertTrue(engine.script.contains("// @version 1.0.6"))
+        assertTrue(engine.script.contains("https://api.stepfun.com/step_plan/v1/audio/speech"))
+        assertFalse(engine.script.contains("\"https://api.stepfun.com/v1/audio/speech\""))
+        assertTrue(engine.script.contains("key: \"outputFormat\""))
+        assertTrue(engine.script.contains("defaultValue: \"wav\""))
+        assertTrue(engine.script.contains("key: \"sampleRate\""))
+        assertTrue(engine.script.contains("defaultValue: \"48000\""))
+        assertTrue(engine.script.contains("options.sampleRate || 48000"))
+        assertFalse(engine.script.contains("sample_rate: 24000"))
+        assertTrue(engine.script.contains("response_format: outputFormat(options)"))
+        assertFalse(engine.script.contains("stream_format:"))
+        assertTrue(engine.script.contains("format === \"mp3\" ? \"audio/mpeg\" : \"audio/wav\""))
+        assertTrue(engine.script.contains("Step Plan API Key"))
+        assertTrue(engine.script.contains("zixinnansheng"))
+        assertTrue(engine.script.contains("function collectSceneInstruction(ctx)"))
+        assertTrue(engine.script.contains("payload.instruction = sceneInstruction"))
+        assertTrue(engine.script.contains("（\" + actorInstruction + \"）"))
+
+        val wavKey = TtsScriptEngineClient.audioCacheKey(
+            engine.copy(optionValues = mapOf("outputFormat" to "wav", "sampleRate" to "48000")),
+            "测试"
+        )
+        val mp3Key = TtsScriptEngineClient.audioCacheKey(
+            engine.copy(optionValues = mapOf("outputFormat" to "mp3", "sampleRate" to "48000")),
+            "测试"
+        )
+        val wav24kKey = TtsScriptEngineClient.audioCacheKey(
+            engine.copy(optionValues = mapOf("outputFormat" to "wav", "sampleRate" to "24000")),
+            "测试"
+        )
+        assertNotEquals(wavKey, mp3Key)
+        assertNotEquals(wavKey, wav24kKey)
+    }
+
+    @Test
     fun scriptMetadata_parsesHeaderComments() {
         val metadata = TtsEngineStore.parseScriptMetadata(
             """
@@ -414,13 +462,14 @@ class TtsHttpForwarderClientTest {
             """
             // @name 场景演绎示例
             // @uuid performance_tts
-            // @capabilities persona，scene_context|casting_metadata
+            // @capabilities persona，scene_context|performance_instruction|casting_metadata
             function synthesize(text, voice, params, options, ctx) { return {}; }
             """.trimIndent()
         )!!
 
         assertTrue(engine.supportsCapability(TtsEngineCapability.PERSONA))
         assertTrue(engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.PERFORMANCE_INSTRUCTION))
         assertTrue(engine.supportsCapability(TtsEngineCapability.CASTING_METADATA))
         assertFalse(engine.supportsCapability("emotion"))
     }
@@ -430,7 +479,7 @@ class TtsHttpForwarderClientTest {
         val script = """
             // @name 场景演绎示例
             // @uuid performance_tts_normalized
-            // @capabilities persona,scene_context,casting_metadata
+            // @capabilities persona,scene_context,performance_instruction,casting_metadata
             function synthesize(text, voice, params, options, ctx) { return {}; }
         """.trimIndent()
         val source = TtsEngineStore.scriptEngineFromScript(script)!!
@@ -441,7 +490,33 @@ class TtsHttpForwarderClientTest {
 
         assertTrue(restored.supportsCapability(TtsEngineCapability.PERSONA))
         assertTrue(restored.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertTrue(restored.supportsCapability(TtsEngineCapability.PERFORMANCE_INSTRUCTION))
         assertTrue(restored.supportsCapability(TtsEngineCapability.CASTING_METADATA))
+    }
+
+    @Test
+    fun normalizeEditedEngine_usesCurrentScriptHeaderAsCapabilitySourceOfTruth() {
+        val sourceScript = """
+            // @name 场景演绎示例
+            // @uuid performance_tts_authoritative_header
+            // @capabilities scene_context,performance_instruction
+            function synthesize(text, voice, params, options, ctx) { return {}; }
+        """.trimIndent()
+        val source = TtsEngineStore.scriptEngineFromScript(sourceScript)!!
+        val edited = source.copy(
+            script = sourceScript.replace(
+                "// @capabilities scene_context,performance_instruction\n",
+                ""
+            ),
+            capabilities = source.capabilities
+        )
+
+        val normalized = TtsEngineStore.normalizeEditedEngine(
+            parsed = edited,
+            source = source
+        ).getOrThrow()
+
+        assertEquals(emptySet<String>(), normalized.capabilities)
     }
 
     @Test

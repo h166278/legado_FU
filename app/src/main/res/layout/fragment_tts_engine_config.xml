@@ -152,7 +152,7 @@
                 android:layout_height="38dp"
                 android:layout_marginStart="12dp"
                 android:layout_weight="1"
-                android:text="测试"
+                android:text="测速"
                 app:useSurfaceBackground="true" />
 
             <io.legado.app.ui.widget.text.AccentStrokeTextView

@@ -8,6 +8,8 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.tts.TtsEngineCapability
+import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.character.ChapterStoryboard
 import io.legado.app.ui.book.character.StoryboardScene
@@ -26,11 +28,14 @@ import kotlin.coroutines.cancellation.CancellationException
 
 object AiTtsStoryboardHelper {
 
-    private const val BASIC_SKILL_ASSET = "skills/tts_storyboard/modes/basic.md"
-    private const val PERFORMANCE_SKILL_ASSET = "skills/tts_storyboard/modes/performance.md"
+    private const val PROTOCOL_SKILL_ASSET = "skills/tts_storyboard/modules/protocol.md"
+    private const val BASE_ROUTING_SKILL_ASSET = "skills/tts_storyboard/modules/base-routing.md"
+    private const val SCENE_CONTEXT_SKILL_ASSET = "skills/tts_storyboard/modules/scene-context.md"
+    private const val PERFORMANCE_INSTRUCTION_SKILL_ASSET =
+        "skills/tts_storyboard/modules/performance-instruction.md"
     private const val PERFORMANCE_SCENES_SKILL_ASSET = "skills/tts_storyboard/modes/performance-scenes.md"
     private const val CACHE_DIR = "ai_tts_storyboard"
-    private const val CACHE_VERSION = 7
+    private const val CACHE_VERSION = 10
     private const val MEMORY_CACHE_TTL = 5 * 60 * 1000L
     private object StoryboardMode {
         const val BASIC = "basic"
@@ -56,10 +61,17 @@ object AiTtsStoryboardHelper {
         "说", "说道", "问", "问道", "喊", "喊道", "叫", "叫道", "道", "开口",
         "吐槽", "坦言", "回答", "答道", "回道", "回复", "说了句", "喊上一句", "补了一句"
     )
+    private val narratedQuoteStrongCues = listOf(
+        "那句", "这句", "那句话", "这句话", "原话", "所谓", "口头禅",
+        "字眼", "词语", "称呼", "标题", "名字", "写着", "显示"
+    )
+    private val narratedQuoteShortCues = listOf(
+        "一句", "一声", "一串", "几个字", "两个字", "三个字", "四个字", "五个字"
+    )
     private val textLeakKeys = setOf(
         "text", "input", "content", "sourceText", "source_text", "output", "ranges", "start", "end"
     )
-    private val unitKeys = setOf(
+    private val baseUnitKeys = setOf(
         "unitId", "roleType", "characterName", "characterId", "speakerGender",
         "status", "confidence", "evidence", "performanceContext"
     )
@@ -212,6 +224,8 @@ object AiTtsStoryboardHelper {
             "request" to mapOf(
                 "cache_key" to request.cacheKey,
                 "mode" to request.mode,
+                "multi_role_engine_id" to request.multiRoleEngineId,
+                "storyboard_capabilities" to request.storyboardCapabilities,
                 "content_hash" to request.contentHash,
                 "content_chars" to content.length,
                 "paragraph_count" to request.paragraphs.size,
@@ -275,7 +289,8 @@ object AiTtsStoryboardHelper {
                     "evidence" to it.evidence.limitDebugText(textCharLimit),
                     "performance_context" to it.performanceContext.map { context ->
                         context.limitDebugText(textCharLimit)
-                    }
+                    },
+                    "performance_instruction" to it.performanceInstruction.limitDebugText(textCharLimit)
                 )
             }.orEmpty()
         )
@@ -307,7 +322,9 @@ object AiTtsStoryboardHelper {
                             "evidence" to segment.evidence.limitDebugText(textCharLimit),
                             "performance_context" to segment.performanceContext.map { context ->
                                 context.limitDebugText(textCharLimit)
-                            }
+                            },
+                            "performance_instruction" to
+                                segment.performanceInstruction.limitDebugText(textCharLimit)
                         )
                     }
                     ?.toList()
@@ -351,12 +368,15 @@ object AiTtsStoryboardHelper {
     private suspend fun generate(request: StoryboardRequest): GenerateResult {
         val selection = AiConfig.requireReadAloudStoryboardModel()
         val supportsReasoning = selection.supportsReasoning()
-        val preparedRequest = if (request.mode == StoryboardMode.PERFORMANCE) {
+        val preparedRequest = if (
+            request.mode == StoryboardMode.PERFORMANCE &&
+            TtsEngineCapability.SCENE_CONTEXT in request.storyboardCapabilities
+        ) {
             request.withPerformanceScenes(selection, supportsReasoning)
         } else {
             request
         }
-        val systemPrompt = readSkillPrompt(preparedRequest.mode)
+        val systemPrompt = readSkillPrompt(preparedRequest.storyboardCapabilities)
         val result = runCatching {
             requestModelUnits(
                 request = preparedRequest,
@@ -386,6 +406,8 @@ object AiTtsStoryboardHelper {
                 generatedAt = System.currentTimeMillis(),
                 chapterTitle = preparedRequest.chapterTitle,
                 mode = preparedRequest.mode,
+                multiRoleEngineId = preparedRequest.multiRoleEngineId,
+                storyboardCapabilities = preparedRequest.storyboardCapabilities,
                 paragraphs = preparedRequest.paragraphs,
                 scenes = preparedRequest.scenes,
                 units = preparedRequest.units,
@@ -483,7 +505,7 @@ object AiTtsStoryboardHelper {
         return parseAndValidate(
             raw = result.content,
             targetUnits = targetUnits,
-            mode = request.mode,
+            capabilities = request.storyboardCapabilities,
             allowNewCharacters = false,
             knownCharacters = request.characters.map { it.toKnownCharacter() }
         )
@@ -517,10 +539,16 @@ object AiTtsStoryboardHelper {
             ContextParagraph(index, text)
         }
         val contentHash = MD5Utils.md5Encode(content)
-        val mode = if (AppConfig.readAloudStoryboardMode == 1) {
-            StoryboardMode.PERFORMANCE
-        } else {
+        val multiRoleEngine = TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
+            ?.takeIf { it.enabled && it.isScriptEngine }
+        val multiRoleEngineId = multiRoleEngine?.id.orEmpty()
+        val storyboardCapabilities = resolveStoryboardSkillCapabilities(
+            declaredCapabilities = multiRoleEngine?.capabilities.orEmpty()
+        )
+        val mode = if (storyboardCapabilities.isEmpty()) {
             StoryboardMode.BASIC
+        } else {
+            StoryboardMode.PERFORMANCE
         }
         val enabledCharacters = characters.filter { it.enabled && it.name.isNotBlank() }
         val charactersHash = MD5Utils.md5Encode(
@@ -548,6 +576,8 @@ object AiTtsStoryboardHelper {
                 contentHash,
                 charactersHash,
                 mode,
+                multiRoleEngineId,
+                storyboardCapabilities.joinToString(","),
                 selection?.providerId.orEmpty(),
                 selection?.modelId.orEmpty()
             ).joinToString("\u0000")
@@ -559,6 +589,8 @@ object AiTtsStoryboardHelper {
             contentHash = contentHash,
             cacheKey = cacheKey,
             mode = mode,
+            multiRoleEngineId = multiRoleEngineId,
+            storyboardCapabilities = storyboardCapabilities,
             paragraphs = paragraphs,
             characters = enabledCharacters,
             units = buildCandidateUnits(paragraphs)
@@ -573,9 +605,10 @@ object AiTtsStoryboardHelper {
             val quoteSpans = findQuoteSpans(text)
             quoteSpans.forEach { span ->
                 val preview = text.substring(span.start, span.end)
+                val roleHint = quoteRoleHint(text, span.start, span.end)
                 units += makeUnit(
-                    kind = span.kind,
-                    roleHint = if (looksLikeThought(text, span.start, span.end)) "thought" else "character",
+                    kind = if (roleHint == "narrator") "quote_reference" else span.kind,
+                    roleHint = roleHint,
                     ranges = listOf(TextRange(paragraph.paragraphIndex, span.start, span.end)),
                     textPreview = preview,
                     cueBefore = contextBefore(texts, paragraph.paragraphIndex, span.start),
@@ -722,6 +755,28 @@ object AiTtsStoryboardHelper {
         return thoughtCues.any { before.contains(it) || after.contains(it) }
     }
 
+    internal fun quoteRoleHint(text: String, start: Int, end: Int): String {
+        if (looksLikeThought(text, start, end)) return "thought"
+        if (looksLikeNarratedQuote(text, start, end)) return "narrator"
+        return "character"
+    }
+
+    private fun looksLikeNarratedQuote(text: String, start: Int, end: Int): Boolean {
+        if (start !in 0..text.length || end !in start..text.length) return false
+        val prefix = text.substring(previousBoundary(text, start), start)
+            .trim()
+            .trimEnd('，', ',', '、')
+        if (prefix.isBlank() || prefix.endsWith('：') || prefix.endsWith(':')) return false
+        val nearbyPrefix = prefix.takeLast(28)
+        if (narratedQuoteStrongCues.any(nearbyPrefix::contains)) return true
+        val quotedLength = (end - start - 2).coerceAtLeast(0)
+        return quotedLength <= 16 && narratedQuoteShortCues.any(nearbyPrefix::contains)
+    }
+
+    internal fun routedRoleType(roleHint: String, modelRoleType: String): String {
+        return if (roleHint == "narrator") "narrator" else modelRoleType
+    }
+
     private fun contextBefore(
         paragraphs: Map<Int, String>,
         paragraphIndex: Int,
@@ -771,6 +826,7 @@ object AiTtsStoryboardHelper {
             book = PayloadBook(book.name, book.author),
             chapter = PayloadChapter(chapterIndex, chapterTitle),
             mode = mode,
+            storyboardCapabilities = storyboardCapabilities,
             allowNewCharacters = false,
             knownCharacters = characters.map { it.toKnownCharacter() },
             contextParagraphs = paragraphs,
@@ -797,7 +853,7 @@ object AiTtsStoryboardHelper {
     private fun parseAndValidate(
         raw: String,
         targetUnits: List<CandidateUnit>,
-        mode: String,
+        capabilities: List<String>,
         allowNewCharacters: Boolean,
         knownCharacters: List<KnownCharacter> = emptyList()
     ): List<ModelUnitResult> {
@@ -827,22 +883,44 @@ object AiTtsStoryboardHelper {
         check(duplicated.isEmpty()) { "AI 重复返回 unit：${duplicated.take(3).joinToString()}" }
         check(unknown.isEmpty()) { "AI 返回未知 unit：${unknown.take(3).joinToString()}" }
         val knownIndex = knownCharacterIndex(knownCharacters)
+        val supportsScene = TtsEngineCapability.SCENE_CONTEXT in capabilities
+        val supportsInstruction = TtsEngineCapability.PERFORMANCE_INSTRUCTION in capabilities
+        val allowedUnitKeys = if (supportsInstruction) {
+            baseUnitKeys + "performanceInstruction"
+        } else {
+            baseUnitKeys
+        }
         return output.units.mapIndexed { index, unit ->
             val item = unitsElement.asJsonArray[index].asJsonObject
-            val extraKeys = item.keySet() - unitKeys
+            val extraKeys = item.keySet() - allowedUnitKeys
             check(extraKeys.isEmpty()) { "AI 返回 unit 额外字段：${extraKeys.joinToString()}" }
             check(unit.roleType in roleTypes) { "AI 返回非法 roleType：${unit.roleType}" }
             check(unit.status in statuses) { "AI 返回非法 status：${unit.status}" }
             check(unit.speakerGender in speakerGenders) { "AI 返回非法 speakerGender：${unit.speakerGender}" }
             check(unit.confidence in 0f..1f) { "AI 返回非法 confidence：${unit.confidence}" }
             val source = targetUnits.first { it.unitId == unit.unitId }
+            val roleType = routedRoleType(source.roleHint, unit.roleType)
+            val isSpokenUnit = roleType == "character" || roleType == "thought"
+            val performanceContext = sanitizePerformanceContext(
+                context = unit.performanceContext,
+                targetText = source.textPreview,
+                enabled = supportsScene && isSpokenUnit
+            )
+            val performanceInstruction = sanitizePerformanceInstruction(
+                instruction = unit.performanceInstruction,
+                targetText = source.textPreview,
+                enabled = supportsInstruction && isSpokenUnit
+            )
+            check(!supportsScene || !isSpokenUnit || performanceContext.isNotEmpty()) {
+                "AI 未给对白或心声返回有效场景：${unit.unitId}"
+            }
+            check(!supportsInstruction || !isSpokenUnit || performanceInstruction.isNotEmpty()) {
+                "AI 未给对白或心声返回有效演员指导：${unit.unitId}"
+            }
             val normalizedUnit = unit.copy(
-                performanceContext = sanitizePerformanceContext(
-                    context = unit.performanceContext,
-                    targetText = source.textPreview,
-                    enabled = mode == StoryboardMode.PERFORMANCE &&
-                        (unit.roleType == "character" || unit.roleType == "thought")
-                )
+                roleType = roleType,
+                performanceContext = performanceContext,
+                performanceInstruction = performanceInstruction
             )
             normalizeModelUnit(normalizedUnit, knownIndex)
         }
@@ -931,6 +1009,22 @@ object AiTtsStoryboardHelper {
             .toList()
     }
 
+    internal fun sanitizePerformanceInstruction(
+        instruction: String,
+        targetText: String,
+        enabled: Boolean
+    ): String {
+        if (!enabled) return ""
+        val sanitized = instruction.trim().replace(Regex("\\s+"), " ")
+        if (sanitized.length !in 4..40) return ""
+        val target = targetText.normalizeComparisonText()
+        val normalizedInstruction = sanitized.normalizeComparisonText()
+        if (target.isNotBlank() &&
+            (target == normalizedInstruction || target.length >= 8 && target in normalizedInstruction)
+        ) return ""
+        return sanitized
+    }
+
     private fun String.normalizeComparisonText(): String {
         return replace(Regex("[\\s“”‘’\\\"'，。！？!?；;：:、…—-]+"), "")
     }
@@ -966,7 +1060,8 @@ object AiTtsStoryboardHelper {
                 characterId = 0L,
                 speakerGender = StoryboardSegment.SpeakerGender.UNKNOWN,
                 status = "unknown",
-                performanceContext = emptyList()
+                performanceContext = emptyList(),
+                performanceInstruction = ""
             )
         }
         val modelDisplayName = unit.characterName.trim()
@@ -996,7 +1091,8 @@ object AiTtsStoryboardHelper {
             characterId = 0L,
             speakerGender = StoryboardSegment.SpeakerGender.UNKNOWN,
             status = "unknown",
-            performanceContext = emptyList()
+            performanceContext = emptyList(),
+            performanceInstruction = ""
         )
     }
 
@@ -1062,6 +1158,11 @@ object AiTtsStoryboardHelper {
                     emptyList()
                 } else {
                     assignment?.performanceContext.orEmpty()
+                },
+                performanceInstruction = if (type == StoryboardSegmentType.NARRATION) {
+                    ""
+                } else {
+                    assignment?.performanceInstruction.orEmpty()
                 }
             )
             cursor = range.end
@@ -1110,6 +1211,7 @@ object AiTtsStoryboardHelper {
                 last.speakerName == segment.speakerName &&
                 last.speakerGender == segment.speakerGender &&
                 last.performanceContext == segment.performanceContext &&
+                last.performanceInstruction == segment.performanceInstruction &&
                 last.end == segment.start
             ) {
                 result[result.lastIndex] = last.copy(
@@ -1233,12 +1335,39 @@ object AiTtsStoryboardHelper {
         return File(File(appCtx.cacheDir, CACHE_DIR), "${request.cacheKey}.json")
     }
 
-    private fun readSkillPrompt(mode: String): String {
-        val asset = when (mode) {
-            StoryboardMode.PERFORMANCE -> PERFORMANCE_SKILL_ASSET
-            else -> BASIC_SKILL_ASSET
+    internal fun resolveStoryboardSkillCapabilities(
+        declaredCapabilities: Set<String>
+    ): List<String> {
+        val supportsInstruction = declaredCapabilities.any {
+            it.equals(TtsEngineCapability.PERFORMANCE_INSTRUCTION, ignoreCase = true)
         }
-        return readAssetPrompt(asset)
+        val supportsScene = supportsInstruction || declaredCapabilities.any {
+            it.equals(TtsEngineCapability.SCENE_CONTEXT, ignoreCase = true)
+        }
+        return buildList {
+            if (supportsScene) add(TtsEngineCapability.SCENE_CONTEXT)
+            if (supportsInstruction) add(TtsEngineCapability.PERFORMANCE_INSTRUCTION)
+        }
+    }
+
+    internal fun storyboardSkillAssets(
+        capabilities: List<String>
+    ): List<String> {
+        return buildList {
+            add(PROTOCOL_SKILL_ASSET)
+            add(BASE_ROUTING_SKILL_ASSET)
+            if (TtsEngineCapability.SCENE_CONTEXT in capabilities) {
+                add(SCENE_CONTEXT_SKILL_ASSET)
+            }
+            if (TtsEngineCapability.PERFORMANCE_INSTRUCTION in capabilities) {
+                add(PERFORMANCE_INSTRUCTION_SKILL_ASSET)
+            }
+        }
+    }
+
+    private fun readSkillPrompt(capabilities: List<String>): String {
+        return storyboardSkillAssets(capabilities)
+            .joinToString("\n\n---\n\n") { readAssetPrompt(it) }
     }
 
     private fun readAssetPrompt(asset: String): String {
@@ -1336,6 +1465,8 @@ object AiTtsStoryboardHelper {
         val contentHash: String,
         val cacheKey: String,
         val mode: String,
+        val multiRoleEngineId: String,
+        val storyboardCapabilities: List<String>,
         val paragraphs: List<ContextParagraph>,
         val characters: List<BookCharacter>,
         val units: List<CandidateUnit>,
@@ -1369,6 +1500,10 @@ object AiTtsStoryboardHelper {
         val chapterTitle: String = "",
         @SerializedName("mode")
         val mode: String = StoryboardMode.BASIC,
+        @SerializedName("multiRoleEngineId")
+        val multiRoleEngineId: String = "",
+        @SerializedName("storyboardCapabilities")
+        val storyboardCapabilities: List<String> = emptyList(),
         @SerializedName("paragraphs")
         val paragraphs: List<ContextParagraph> = emptyList(),
         @SerializedName("scenes")
@@ -1421,6 +1556,8 @@ object AiTtsStoryboardHelper {
         val chapter: PayloadChapter,
         @SerializedName("mode")
         val mode: String,
+        @SerializedName("storyboardCapabilities")
+        val storyboardCapabilities: List<String>,
         @SerializedName("allowNewCharacters")
         val allowNewCharacters: Boolean,
         @SerializedName("knownCharacters")
@@ -1519,6 +1656,8 @@ object AiTtsStoryboardHelper {
         @SerializedName("evidence")
         val evidence: String = "",
         @SerializedName("performanceContext")
-        val performanceContext: List<String> = emptyList()
+        val performanceContext: List<String> = emptyList(),
+        @SerializedName("performanceInstruction")
+        val performanceInstruction: String = ""
     )
 }

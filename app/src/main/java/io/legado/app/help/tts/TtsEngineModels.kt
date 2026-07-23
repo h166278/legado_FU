@@ -40,7 +40,9 @@ data class TtsSynthesisContext(
     @SerializedName("role")
     val role: TtsRoleContext? = null,
     @SerializedName("scene")
-    val scene: TtsSceneContext? = null
+    val scene: TtsSceneContext? = null,
+    @SerializedName("performance_instruction")
+    val performanceInstruction: String = ""
 ) {
     object Mode {
         const val BASIC = "basic"
@@ -71,6 +73,7 @@ data class TtsSceneContext(
 object TtsEngineCapability {
     const val PERSONA = "persona"
     const val SCENE_CONTEXT = "scene_context"
+    const val PERFORMANCE_INSTRUCTION = "performance_instruction"
     const val CASTING_METADATA = "casting_metadata"
 }
 
