@@ -11,17 +11,17 @@
 
     <ImageView
         android:id="@+id/iv_icon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         app:tint="@color/ng_on_surface_variant" />
 
     <TextView
         android:id="@+id/tv_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="7dp"
+        android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"
         android:textColor="@color/ng_on_surface_variant"
-        android:textSize="12sp" />
+        android:textSize="11sp" />
 </LinearLayout>

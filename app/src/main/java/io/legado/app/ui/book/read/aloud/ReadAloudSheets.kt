@@ -16,11 +16,13 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.annotation.LayoutRes
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
@@ -33,6 +35,9 @@ import io.legado.app.databinding.DialogReadAloudSpeedSheetBinding
 import io.legado.app.databinding.DialogReadAloudTimerSheetBinding
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ThemeConfig
+import io.legado.app.help.tts.TtsEngineCapability
+import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.lib.theme.accentColor
@@ -40,11 +45,13 @@ import io.legado.app.lib.theme.view.ThemeSwitch
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
+import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.config.TtsVoiceOption
 import io.legado.app.ui.config.TtsVoiceSelectionSheet
 import io.legado.app.ui.widget.dialog.NgLongListBottomSheet
+import io.legado.app.ui.widget.dialog.applyNgDialogWindow
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
@@ -74,8 +81,28 @@ abstract class ReadAloudBottomSheet(layoutId: Int) : BaseDialogFragment(layoutId
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
+
+    protected fun applyThemeSheetBackground() {
+        val background = runCatching {
+            ThemeConfig.getBgImage(requireContext(), resources.displayMetrics)
+        }.getOrNull() ?: return
+        view?.background = ReadDrawerStyle.wrapTopRounded(background)
+    }
 }
-class ReadAloudTimerSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_timer_sheet) {
+
+abstract class ReadAloudSliderDialog(@LayoutRes layoutId: Int) : BaseDialogFragment(layoutId) {
+    override fun onStart() {
+        super.onStart()
+        applyNgDialogWindow(marginDp = 10)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        view.setBackgroundResource(R.drawable.ng_bg_read_aloud_slider_dialog)
+    }
+}
+
+class ReadAloudTimerDialog : ReadAloudSliderDialog(R.layout.dialog_read_aloud_timer_sheet) {
     private val binding by viewBinding(DialogReadAloudTimerSheetBinding::bind)
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
@@ -87,32 +114,31 @@ class ReadAloudTimerSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_time
             AppConfig.ttsTimer
         }.coerceIn(0, seekTimer.max)
         seekTimer.progress = initialMinute
-        upStateText(initialMinute, applied = activeMinute > 0)
+        upTitle(initialMinute)
         seekTimer.setOnSeekBarChangeListener(object : SeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                upStateText(progress, applied = false)
+                upTitle(progress)
             }
 
             override fun onStopTrackingTouch(seekBar: SeekBar) {
-                val safeContext = this@ReadAloudTimerSheet.context ?: return
+                val safeContext = this@ReadAloudTimerDialog.context ?: return
                 val minute = seekBar.progress.coerceIn(0, seekBar.max)
                 AppConfig.ttsTimer = minute
                 ReadAloud.setTimer(safeContext, minute)
-                upStateText(minute, applied = true)
             }
         })
     }
 
-    private fun upStateText(minute: Int, applied: Boolean) {
-        binding.tvTimerState.text = when {
-            minute <= 0 -> "未开启定时"
-            applied -> "当前定时 $minute 分钟"
-            else -> "拖动设置 $minute 分钟"
+    private fun upTitle(minute: Int) {
+        binding.tvTitle.text = if (minute <= 0) {
+            "定时关闭"
+        } else {
+            "定时关闭 ${minute}分钟"
         }
     }
 }
 
-class ReadAloudSpeedSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_speed_sheet) {
+class ReadAloudSpeedDialog : ReadAloudSliderDialog(R.layout.dialog_read_aloud_speed_sheet) {
     private val binding by viewBinding(DialogReadAloudSpeedSheetBinding::bind)
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
@@ -125,7 +151,7 @@ class ReadAloudSpeedSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_spee
             }
 
             override fun onStopTrackingTouch(seekBar: SeekBar) {
-                val safeContext = this@ReadAloudSpeedSheet.context ?: return
+                val safeContext = this@ReadAloudSpeedDialog.context ?: return
                 AppConfig.ttsFlowSys = false
                 AppConfig.ttsSpeechRate = seekBar.progress
                 (activity as? ReadAloudPlayerActivity)?.refreshPlaybackSpeedLabel()
@@ -149,113 +175,159 @@ class ReadAloudModeSheet(
 
     private val binding by viewBinding(DialogReadAloudModeSheetBinding::bind)
 
+    override fun onStart() {
+        super.onStart()
+        applyThemeSheetBackground()
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
         renderState()
-        switchMultiRole.setOnUserCheckedChangeListener { isChecked ->
-            activity.setMultiRoleEnabled(isChecked)
-            renderState()
+        cardSingleRole.setOnClickListener {
+            selectMultiRole(false)
         }
-        itemMultiRole.setOnClickListener {
-            activity.setMultiRoleEnabled(!AppConfig.readAloudMultiRole)
-            renderState()
+        cardMultiRole.setOnClickListener {
+            selectMultiRole(true)
         }
         itemStoryboardResult.setOnClickListener {
             activity.openStoryboardResult()
             dismissAllowingStateLoss()
         }
-        segmentStoryboardModeBasic.setOnClickListener {
-            selectStoryboardMode(StoryboardTtsMode.BASIC)
-        }
-        segmentStoryboardModeScene.setOnClickListener {
-            selectStoryboardMode(StoryboardTtsMode.SCENE)
-        }
     }
 
     private fun renderState() = binding.run {
         val multiRole = AppConfig.readAloudMultiRole
-        switchMultiRole.isChecked = multiRole
-        textMultiRoleSummary.text = if (multiRole) {
-            "已开启，使用角色音色和分镜路由"
-        } else {
-            "关闭时使用单人朗读"
+        cardSingleRole.isSelected = !multiRole
+        cardMultiRole.isSelected = multiRole
+        applyReadAloudModeCardStyles()
+        layoutMultiRoleDetails.isVisible = multiRole
+        if (multiRole) {
+            val engine = TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
+            textMultiRoleEngine.text = engine?.name ?: "未选择多人 TTS 引擎"
+            bindStoryboardCapabilities(engine)
         }
-        val storedMode = StoryboardTtsMode.from(AppConfig.readAloudStoryboardMode)
-        segmentStoryboardModeBasic.isSelected = storedMode == StoryboardTtsMode.BASIC
-        segmentStoryboardModeScene.isSelected = storedMode == StoryboardTtsMode.SCENE
-        applyStoryboardModeSegmentStyles()
-        tvStoryboardModeSummary.text = storedMode.summary
         val storyboardAlpha = if (multiRole) 1f else 0.42f
-        listOf(itemStoryboardResult, layoutStoryboardMode).forEach { row ->
-            row.isEnabled = multiRole
-            row.alpha = storyboardAlpha
-        }
-        segmentStoryboardModeBasic.isEnabled = multiRole
-        segmentStoryboardModeScene.isEnabled = multiRole
+        itemStoryboardResult.isEnabled = multiRole
+        itemStoryboardResult.alpha = storyboardAlpha
     }
 
-    private fun applyStoryboardModeSegmentStyles() = binding.run {
+    private fun applyReadAloudModeCardStyles() = binding.run {
         val safeContext = root.context
         val activeColor = safeContext.accentColor
-        val outlineColor = ContextCompat.getColor(safeContext, R.color.ng_outline_strong)
+        val innerSurfaceColor = ContextCompat.getColor(safeContext, R.color.ng_surface)
         val textColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface)
-        val selectedBackground = androidx.core.graphics.ColorUtils.setAlphaComponent(activeColor, 22)
-        val segments = listOf(segmentStoryboardModeBasic, segmentStoryboardModeScene)
-        groupStoryboardMode.showDividers = LinearLayout.SHOW_DIVIDER_MIDDLE
-        groupStoryboardMode.dividerDrawable = GradientDrawable().apply {
-            setColor(outlineColor)
-            setSize(1.dpToPx(), 1.dpToPx())
+        val inactiveIconColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface_variant)
+        layoutReadAloudMode.setBackgroundResource(R.drawable.ng_bg_settings_item)
+        layoutReadAloudMode.elevation = 0f
+        layoutMultiRoleDetails.background = GradientDrawable().apply {
+            cornerRadius = 14.dpToPx().toFloat()
+            setColor(innerSurfaceColor)
         }
-        groupStoryboardMode.setPadding(1.dpToPx(), 1.dpToPx(), 1.dpToPx(), 1.dpToPx())
-        groupStoryboardMode.background = GradientDrawable().apply {
-            cornerRadius = 22.dpToPx().toFloat()
-            setColor(Color.TRANSPARENT)
-            setStroke(1.dpToPx(), outlineColor)
+        itemStoryboardResult.background = GradientDrawable().apply {
+            cornerRadius = 18.dpToPx().toFloat()
+            setColor(innerSurfaceColor)
         }
-        segments.forEachIndexed { index, segment ->
-            val rawText = segment.text.toString().removePrefix("✓ ").trim()
-            segment.text = if (segment.isSelected) "✓ $rawText" else rawText
-            segment.setTextColor(textColor)
-            segment.typeface = Typeface.defaultFromStyle(Typeface.NORMAL)
-            segment.background = GradientDrawable().apply {
-                setColor(if (segment.isSelected) selectedBackground else Color.TRANSPARENT)
-                cornerRadii = when (index) {
-                    0 -> floatArrayOf(
-                        21.dpToPx().toFloat(), 21.dpToPx().toFloat(),
-                        0f, 0f, 0f, 0f,
-                        21.dpToPx().toFloat(), 21.dpToPx().toFloat()
-                    )
-                    else -> floatArrayOf(
-                        0f, 0f,
-                        21.dpToPx().toFloat(), 21.dpToPx().toFloat(),
-                        21.dpToPx().toFloat(), 21.dpToPx().toFloat(),
-                        0f, 0f
-                    )
+        itemStoryboardResult.elevation = 0f
+        val cards = listOf(
+            Triple(cardSingleRole, iconSingleRole, titleSingleRole),
+            Triple(cardMultiRole, iconMultiRole, titleMultiRole)
+        )
+        cards.forEach { (card, icon, title) ->
+            val selected = card.isSelected
+            card.background = GradientDrawable().apply {
+                cornerRadius = 14.dpToPx().toFloat()
+                setColor(innerSurfaceColor)
+            }
+            icon.imageTintList = ColorStateList.valueOf(if (selected) activeColor else inactiveIconColor)
+            title.setTextColor(if (selected) activeColor else textColor)
+            title.typeface = Typeface.defaultFromStyle(
+                if (selected) Typeface.BOLD else Typeface.NORMAL
+            )
+        }
+    }
+
+    private fun selectMultiRole(enabled: Boolean) {
+        activity.setMultiRoleEnabled(enabled)
+        renderState()
+    }
+
+    private fun bindStoryboardCapabilities(engine: TtsEngineSetting?) = binding.run {
+        layoutMultiRoleCapabilities.removeAllViews()
+        storyboardCapabilityTags(engine).forEach { tag ->
+            layoutMultiRoleCapabilities.addView(
+                TextView(layoutMultiRoleCapabilities.context).apply {
+                    text = tag.text
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    maxLines = 1
+                    setTextColor(ContextCompat.getColor(context, tag.colorRes))
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    setBackgroundResource(tag.backgroundRes)
+                    setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
+                    layoutParams = FlexboxLayout.LayoutParams(
+                        FlexboxLayout.LayoutParams.WRAP_CONTENT,
+                        24.dpToPx()
+                    ).apply {
+                        marginEnd = 6.dpToPx()
+                        bottomMargin = 4.dpToPx()
+                    }
                 }
+            )
+        }
+    }
+
+    private fun storyboardCapabilityTags(engine: TtsEngineSetting?): List<StoryboardCapabilityTag> {
+        val activeEngine = engine
+            ?.takeIf { it.enabled && it.isScriptEngine }
+            ?: return listOf(
+                StoryboardCapabilityTag(
+                    "需先选择引擎",
+                    R.drawable.ng_bg_tag_warning,
+                    R.color.ng_warning
+                )
+            )
+        return buildList {
+            add(
+                StoryboardCapabilityTag(
+                    "角色识别",
+                    R.drawable.ng_bg_tts_voice_tag_blue,
+                    R.color.ng_tts_tag_blue
+                )
+            )
+            add(
+                StoryboardCapabilityTag(
+                    "片段拆分",
+                    R.drawable.ng_bg_tts_voice_tag_purple,
+                    R.color.ng_tts_tag_purple
+                )
+            )
+            if (activeEngine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT) ||
+                activeEngine.supportsCapability(TtsEngineCapability.PERFORMANCE_INSTRUCTION)
+            ) {
+                add(
+                    StoryboardCapabilityTag(
+                        "场景理解",
+                        R.drawable.ng_bg_tts_voice_tag_orange,
+                        R.color.ng_tts_tag_orange
+                    )
+                )
+            }
+            if (activeEngine.supportsCapability(TtsEngineCapability.PERFORMANCE_INSTRUCTION)) {
+                add(
+                    StoryboardCapabilityTag(
+                        "演员指导",
+                        R.drawable.ng_bg_tts_voice_tag_green,
+                        R.color.ng_tts_tag_green
+                    )
+                )
             }
         }
     }
 
-    private fun selectStoryboardMode(mode: StoryboardTtsMode) {
-        if (AppConfig.readAloudStoryboardMode != mode.value) {
-            AppConfig.readAloudStoryboardMode = mode.value
-            ReadAloud.refreshTtsRoute(activity)
-        }
-        renderState()
-    }
-}
-
-private enum class StoryboardTtsMode(
-    val value: Int,
-    val summary: String
-) {
-    BASIC(0, "拆分旁白、对白和说话人"),
-    SCENE(1, "结合人物与场景自然演绎(需TTS引擎支持)");
-
-    companion object {
-        fun from(value: Int): StoryboardTtsMode {
-            return entries.firstOrNull { it.value == value } ?: BASIC
-        }
-    }
+    private data class StoryboardCapabilityTag(
+        val text: String,
+        val backgroundRes: Int,
+        val colorRes: Int
+    )
 }
 
 private fun SeekBar.applyReadAloudSliderStyle() {
@@ -295,11 +367,13 @@ class ReadAloudMoreSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_more_
 
     override fun onStart() {
         super.onStart()
+        applyThemeSheetBackground()
         val height = (resources.displayMetrics.heightPixels * 0.86f).toInt()
         dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, height)
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
+        applyReadAloudMoreCardStyles()
         tvEngineSummary.text = TtsEngineStore.activeEngine().name
         bindSwitch(itemIgnoreAudioFocus, switchIgnoreAudioFocus, PreferKey.ignoreAudioFocus) {
             syncPauseOnCallState()
@@ -347,6 +421,32 @@ class ReadAloudMoreSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_more_
         }
     }
 
+    private fun applyReadAloudMoreCardStyles() = binding.run {
+        val surfaceColor = ContextCompat.getColor(root.context, R.color.ng_surface)
+        listOf(layoutPlaybackSettings, layoutEngineSettings).forEach { group ->
+            group.background = null
+            group.elevation = 0f
+        }
+        listOf(
+            itemIgnoreAudioFocus,
+            itemPauseOnCall,
+            itemWakeLock,
+            itemMediaButtonPerNext,
+            itemReadByPage,
+            itemSkipChapterTitle,
+            itemWorkerCount,
+            itemStop,
+            itemEngine,
+            itemSystemTts
+        ).forEach { item ->
+            item.background = GradientDrawable().apply {
+                cornerRadius = 14.dpToPx().toFloat()
+                setColor(surfaceColor)
+            }
+            item.elevation = 0f
+        }
+    }
+
     private fun bindSwitch(
         row: View,
         switch: ThemeSwitch,
@@ -368,10 +468,9 @@ class ReadAloudMoreSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_more_
     }
 
     private fun syncWorkerCount(count: Int) = binding.run {
-        tvWorkerCountValue.text = count.toString()
-        val activeColor = tvWorkerCountValue.context.accentColor
+        val activeColor = seekWorkerCount.context.accentColor
         val inactiveColor = ContextCompat.getColor(
-            tvWorkerCountValue.context,
+            seekWorkerCount.context,
             R.color.ng_on_surface_variant
         )
         listOf(

@@ -1,101 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root_view"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/ng_bg_read_aloud_sheet"
-    android:orientation="vertical"
-    android:paddingStart="20dp"
-    android:paddingTop="18dp"
-    android:paddingEnd="20dp"
-    android:paddingBottom="28dp">
+    style="@style/Ng.DialogRoot"
+    android:layout_height="252dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:gravity="center_vertical"
-        android:orientation="vertical">
+    <LinearLayout style="@style/Ng.DialogHeader">
 
         <TextView
-            style="@style/Ng.Title"
-            android:text="定时关闭" />
-
-        <TextView
-            android:id="@+id/tv_timer_state"
-            style="@style/Ng.SettingsSummary"
-            android:layout_marginTop="6dp"
-            android:singleLine="true" />
+            android:id="@+id/tv_title"
+            style="@style/Ng.DialogTitle"
+            android:layout_width="match_parent"
+            android:gravity="center"
+            android:text="定时关闭"
+            android:textSize="20sp" />
     </LinearLayout>
 
-    <TextView
-        style="@style/Ng.SettingsSectionLabel"
-        android:layout_marginStart="4dp"
-        android:layout_marginTop="18dp"
-        android:text="按时间" />
-
     <LinearLayout
-        style="@style/Ng.DialogSection"
-        android:orientation="vertical">
+        style="@style/Ng.DialogBody"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipChildren="false"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingTop="0dp">
 
         <io.legado.app.lib.theme.view.ThemeSeekBar
             android:id="@+id/seek_timer"
             android:layout_width="match_parent"
-            android:layout_height="46dp"
+            android:layout_height="42dp"
             android:max="180" />
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="28dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginStart="14dp"
+            android:layout_marginEnd="14dp"
+            android:clipChildren="false">
+
+            <androidx.constraintlayout.widget.Guideline
+                android:id="@+id/guide_timer_60"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                app:layout_constraintGuide_percent="0.333333" />
+
+            <androidx.constraintlayout.widget.Guideline
+                android:id="@+id/guide_timer_120"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                app:layout_constraintGuide_percent="0.666667" />
 
             <TextView
                 style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:text="0" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="关闭"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
                 style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="30" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="60"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="@id/guide_timer_60"
+                app:layout_constraintStart_toStartOf="@id/guide_timer_60"
+                app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
                 style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="60" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="120"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="@id/guide_timer_120"
+                app:layout_constraintStart_toStartOf="@id/guide_timer_120"
+                app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
                 style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="90" />
-
-            <TextView
-                style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="120" />
-
-            <TextView
-                style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="150" />
-
-            <TextView
-                style="@style/Ng.SettingsSummary"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:gravity="end"
-                android:text="180" />
-        </LinearLayout>
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="180分钟"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 </LinearLayout>

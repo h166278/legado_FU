@@ -6,21 +6,22 @@
     android:layout_height="match_parent"
     android:background="@drawable/ng_bg_read_aloud_sheet"
     android:orientation="vertical"
-    android:paddingStart="20dp"
-    android:paddingTop="18dp"
-    android:paddingEnd="20dp"
-    android:paddingBottom="24dp">
+    android:paddingStart="14dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="10dp">
 
     <TextView
         android:id="@+id/tv_title"
         style="@style/Ng.Title"
         android:layout_width="match_parent"
+        android:gravity="center"
         android:text="@string/aloud_config" />
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="10dp"
         android:layout_weight="1"
         android:clipToPadding="false"
         android:fadingEdgeLength="24dp"
@@ -38,7 +39,9 @@
                 android:text="播放设置" />
 
             <LinearLayout
+                android:id="@+id/layout_playback_settings"
                 style="@style/Ng.DialogSection"
+                android:background="@null"
                 android:orientation="vertical"
                 android:padding="0dp">
 
@@ -256,13 +259,6 @@
                             android:layout_width="0dp"
                             android:layout_weight="1"
                             android:text="@string/read_aloud_worker_count" />
-
-                        <TextView
-                            android:id="@+id/tv_worker_count_value"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="@color/ng_primary"
-                            android:textSize="15sp" />
                     </LinearLayout>
 
                     <io.legado.app.lib.theme.view.ThemeSeekBar
@@ -280,46 +276,63 @@
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:orientation="horizontal"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp">
 
                         <TextView
                             android:id="@+id/tv_worker_count_1"
                             style="@style/Ng.SettingsSummary"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
-                            android:gravity="start"
+                            android:layout_width="wrap_content"
+                            android:gravity="center"
                             android:text="1" />
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
 
                         <TextView
                             android:id="@+id/tv_worker_count_2"
                             style="@style/Ng.SettingsSummary"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
+                            android:layout_width="wrap_content"
                             android:gravity="center"
                             android:text="2" />
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
 
                         <TextView
                             android:id="@+id/tv_worker_count_3"
                             style="@style/Ng.SettingsSummary"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
+                            android:layout_width="wrap_content"
                             android:gravity="center"
                             android:text="3" />
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
 
                         <TextView
                             android:id="@+id/tv_worker_count_4"
                             style="@style/Ng.SettingsSummary"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
+                            android:layout_width="wrap_content"
                             android:gravity="center"
                             android:text="4" />
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
 
                         <TextView
                             android:id="@+id/tv_worker_count_5"
                             style="@style/Ng.SettingsSummary"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
-                            android:gravity="end"
+                            android:layout_width="wrap_content"
+                            android:gravity="center"
                             android:text="5" />
                     </LinearLayout>
                 </LinearLayout>
@@ -341,11 +354,13 @@
 
             <TextView
                 style="@style/Ng.SettingsSectionLabel"
-                android:layout_marginTop="18dp"
+                android:layout_marginTop="14dp"
                 android:text="@string/speak_engine" />
 
             <LinearLayout
+                android:id="@+id/layout_engine_settings"
                 style="@style/Ng.DialogSection"
+                android:background="@null"
                 android:orientation="vertical"
                 android:padding="0dp">
 

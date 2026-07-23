@@ -161,10 +161,14 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="76dp"
+            android:layout_height="54dp"
             android:layout_marginTop="4dp"
+            android:background="@drawable/ng_bg_read_aloud_control_bar"
+            android:clipToOutline="true"
             android:gravity="center"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp">
 
             <include
                 android:id="@+id/action_character"
@@ -175,32 +179,34 @@
 
             <ImageButton
                 android:id="@+id/btn_prev"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/ng_bg_read_aloud_action_circle"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/previous_chapter"
-                android:padding="12dp"
+                android:padding="15dp"
                 android:src="@drawable/ic_skip_previous"
                 app:tint="@color/ng_on_surface" />
 
             <ImageButton
                 android:id="@+id/btn_play"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:layout_marginHorizontal="10dp"
-                android:background="@drawable/ng_bg_read_aloud_action_circle"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/audio_play"
-                android:padding="20dp"
+                android:padding="15dp"
                 android:src="@drawable/ic_play_24dp"
                 app:tint="@color/ng_on_surface" />
 
             <ImageButton
                 android:id="@+id/btn_next"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/ng_bg_read_aloud_action_circle"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/next_chapter"
-                android:padding="12dp"
+                android:padding="15dp"
                 android:src="@drawable/ic_skip_next"
                 app:tint="@color/ng_on_surface" />
 
@@ -220,11 +226,13 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/ng_bg_read_aloud_engine_pill"
             android:clickable="true"
+            android:clipToOutline="true"
             android:focusable="true"
             android:foreground="?android:attr/selectableItemBackground"
             android:gravity="center"
             android:minWidth="190dp"
             android:orientation="horizontal"
+            android:outlineProvider="background"
             android:paddingStart="16dp"
             android:paddingEnd="16dp">
 
