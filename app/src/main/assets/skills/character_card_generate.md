@@ -3,7 +3,7 @@ id: character_card_generate
 name: 角色卡生成
 description: 基于指定书籍和章节范围采样阅读原文，生成主要角色的待审核角色卡。
 scope: AGENT
-version: 18
+version: 19
 suggestions: 给当前书生成角色卡|从上次继续扫描角色卡|指定章节范围生成角色卡
 mcp_capabilities: bookshelf.query|bookshelf.read_content|bookshelf.cache_status|bookshelf.manage_characters|ai.memory
 conversation_group: 书籍相关
@@ -126,7 +126,7 @@ AgentMemory 写入是上述业务写禁令的唯一例外，但只能保存本 S
 - `bookshelf_character_upsert`：写入用户确认后的角色卡。
 - `bookshelf_character_set_enabled`：只在用户明确要求启用或禁用已有角色卡时使用。
 - `bookshelf_character_delete`：只在用户明确要求删除已有角色卡时使用。
-- `agent_memory_search/upsert`：读取已确认预览，并在每次实际业务写入后记录对应成功/失败状态。
+- `agent_memory_search/batch_upsert`：读取已确认预览，并在整批业务写入完成后一次性记录各角色的成功/失败状态。
 
 `apply` 阶段也要先说明将应用哪些角色；如果用户的确认消息没有指向上一轮表格，先反问确认，不要猜。
 
@@ -146,14 +146,15 @@ AgentMemory 写入是上述业务写禁令的唯一例外，但只能保存本 S
 
 收到应用确认后，先用 `agent_memory_search(scope_type=book, scope_key=work_key, domain=character_card, memory_type=preview)` 读取最新预览；只有状态为 `ready/revised` 且内容与用户最后确认的可见表格一致时才写入。若预览不存在、已变化或已应用，先向用户说明，不凭聊天残片猜测。
 
-对每个确认角色按顺序执行：
+把最终确认表格中的所有角色整理成独立的 `bookshelf_character_upsert` 调用，并必须在同一次助手工具调用批次中一次性发出。不得等待某一张角色卡的结果后再发下一张；这样 App 可以在执行前合并展示完整影响对象，只进行一次写操作确认。
 
-1. 调用 `bookshelf_character_upsert`。
-2. 根据真实工具结果，把该角色的 `apply_state` 更新为 `applied` 或 `failed`。
-3. 立即用 `agent_memory_upsert` 更新该预览的 `apply_state`，并把角色卡写入结果的 receipt 放入 `source_receipt_ids`；写入失败时只记录失败事实，不伪造成功状态。
-4. 记忆更新成功后才继续下一个角色；最后一个角色完成后把预览状态更新为 `confirmed`。
+收到整批业务结果后：
 
-业务写入成功但 AgentMemory 更新失败时，明确说明“角色卡已实际写入，但应用状态尚未同步”，停止后续角色；下次先用 `bookshelf_character_list/get` 与预览记忆对账，禁止盲目重复 upsert。App 不会在工具调用后替本 Skill 补写应用状态。
+1. 根据每个角色的真实工具结果，把对应 `apply_state` 分别更新为 `applied` 或 `failed`；写入失败时只记录失败事实，不伪造成功状态。
+2. 使用一次 `agent_memory_batch_upsert` 更新唯一 preview，并为每个角色写入一条 `apply_result`；把整批成功或失败结果的全部 receipt 统一放入 batch 顶层 `source_receipt_ids`，不要放进单个 item，同时把 preview 状态更新为 `confirmed`。
+3. 所有实际结果均已提交到 AgentMemory 后，再向用户汇总成功和失败项；不得对失败项盲目重试。
+
+整批业务写入完成但 AgentMemory 批量更新失败时，明确说明“角色卡已实际写入，但应用状态尚未同步”，并列出已实际写入和失败的角色；下次先用 `bookshelf_character_list/get` 与预览记忆对账，禁止盲目重复 upsert。App 不会在工具调用后替本 Skill 补写应用状态。
 
 ## 入口和书籍确认
 
@@ -437,7 +438,7 @@ AgentMemory 写入是上述业务写禁令的唯一例外，但只能保存本 S
 - 不要在聊天表格、按钮文案、确认后的结果表格里展示 `male`、`female`、`male_lead`、`female_lead`、`male_support`、`female_support` 等内部代号。
 - 内部代号只在用户确认应用后的写入工具参数中使用，不展示给用户。
 
-可见表格后必须按全局交互协议提供一个“应用角色卡”的确认交互。用户点击应用后，再根据聊天中最终确认的角色卡逐条调用写入工具。
+可见表格后必须按全局交互协议提供一个“应用角色卡”的确认交互。用户点击应用后，再根据聊天中最终确认的角色卡，在同一次助手工具调用批次中发出全部写入调用。
 
 生成可见表格后不要只用自然语言询问“是否应用”“要不要写入”来替代按钮。自然语言说明可以保留，但确认交互不能省略。
 
@@ -496,7 +497,7 @@ AgentMemory 写入是上述业务写禁令的唯一例外，但只能保存本 S
 - 需要选择采样强度、补读或应用角色卡时，按全局交互协议输出对应选择或确认控件。
 - 首次角色卡生成必须先停在扫描范围选择；范围明确后再选择采样强度；范围和强度都明确后才读取正文。
 - 本 Skill 必须在预览阶段读取角色卡 AgentMemory；每个正文窗口先更新候选与唯一 manifest，最终预览再写入唯一 preview，成功后才输出待审核表格。
-- 角色卡写入成功后必须由本 Skill 立即更新 `apply_state`；业务写入和状态提交是两个可核验结果，不能假设 App 会自动补写。
+- 整批角色卡写入结果返回后，必须由本 Skill 使用一次 `agent_memory_batch_upsert` 更新各角色的 `apply_state`；业务写入和状态提交是两个可核验结果，不能假设 App 会自动补写。
 - 不生成任何隐藏业务协议，也不调用未声明的旁路能力。
 
 ## 质量约束
@@ -551,8 +552,8 @@ AgentMemory 写入是上述业务写禁令的唯一例外，但只能保存本 S
 
 1. 确认当前轮次是用户要求应用上面这些角色卡，而不是继续修改或询问。
 2. 调用 `agent_memory_search` 读取唯一 `memory_type=preview`，核对它与用户最后确认的表格，并整理将写入的角色列表。
-3. 逐个调用 `bookshelf_character_upsert`；每个结果后立即更新预览记忆中的 `apply_state` 并传入结果 receipt，成功后才继续下一个。不存在角色卡业务草稿保存或草稿应用工具。
-4. 所有实际结果均已写入 AgentMemory 后，再回复成功和失败项。结果展示继续使用中文性别和中文角色定位，不展示内部代号。
+3. 在同一次助手工具调用批次中，为每个角色分别发出 `bookshelf_character_upsert`；不得写一张、更新一次记忆后再写下一张。不存在角色卡业务草稿保存或草稿应用工具。
+4. 整批结果返回后，使用一次 `agent_memory_batch_upsert` 写入各角色的 `apply_state` 和 `apply_result`，并在 batch 顶层 `source_receipt_ids` 传入全部结果 receipt；状态提交完成后再回复成功和失败项。结果展示继续使用中文性别和中文角色定位，不展示内部代号。
 
 ## 回复风格
 
