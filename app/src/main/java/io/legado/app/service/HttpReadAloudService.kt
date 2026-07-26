@@ -18,7 +18,6 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.Status
 import io.legado.app.data.appDb
-import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.BookCharacterProfile
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.ai.AiConfig
@@ -48,7 +47,6 @@ import io.legado.app.help.tts.writeReadAloudAudioWithWavRetry
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.CacheBook
-import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.book.character.ChapterStoryboard
 import io.legado.app.ui.book.character.StoryboardScene
 import io.legado.app.ui.book.character.StoryboardSegment
@@ -75,7 +73,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Response
 import org.mozilla.javascript.WrappedException
 import java.io.File
 import java.io.InputStream
@@ -97,7 +94,6 @@ class HttpReadAloudService : BaseReadAloudService(),
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator
     }
-    private var legacySpeechRate: Int = AppConfig.speechRatePlay + 5
     private var downloadTask: Coroutine<*>? = null
     private var playIndexJob: Job? = null
     private var backgroundStoryboardPreloadJob: Job? = null
@@ -265,9 +261,8 @@ class HttpReadAloudService : BaseReadAloudService(),
         val productionToken = playlistProductionState.begin()
         downloadTask = execute {
             ensureActive()
-            val httpTts = ReadAloud.httpTTS
             val engineV2 = ReadAloud.httpTtsEngineV2
-            if (httpTts == null && engineV2 == null) {
+            if (engineV2 == null) {
                 throw NoStackTraceException("tts is null")
             }
             val storyboard = try {
@@ -349,7 +344,6 @@ class HttpReadAloudService : BaseReadAloudService(),
                             firstAudioReady.await()
                             preloadTask.await()?.let { nextStoryboard ->
                                 preDownloadAudios(
-                                    httpTts = httpTts,
                                     engineV2 = engineV2,
                                     chapterIndex = nextChapterIndex,
                                     storyboard = nextStoryboard,
@@ -368,7 +362,6 @@ class HttpReadAloudService : BaseReadAloudService(),
                 nextAudioPreloadJob = currentNextAudioPreloadJob
                 try {
                     prepareSpeakFilesConcurrently(
-                        httpTts = httpTts,
                         engineV2 = engineV2,
                         items = currentSpeakItems.drop(cachedPrefix.size),
                         router = currentRouter
@@ -415,8 +408,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private suspend fun preDownloadAudios(
-        httpTts: HttpTTS?,
-        engineV2: TtsEngineSetting?,
+        engineV2: TtsEngineSetting,
         chapterIndex: Int,
         storyboard: ChapterStoryboard?,
         ownerToken: Long
@@ -438,7 +430,6 @@ class HttpReadAloudService : BaseReadAloudService(),
         val preDownloadItems = allItems.take(10)
         val preparedFiles = arrayListOf<File>()
         prepareSpeakFilesConcurrently(
-            httpTts = httpTts,
             engineV2 = engineV2,
             items = preDownloadItems,
             cacheChapter = textChapter,
@@ -458,8 +449,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private suspend fun prepareSpeakFilesConcurrently(
-        httpTts: HttpTTS?,
-        engineV2: TtsEngineSetting?,
+        engineV2: TtsEngineSetting,
         items: List<SpeakItem>,
         cacheChapter: TextChapter? = null,
         router: ReadAloudTtsRouter? = ttsRouter,
@@ -478,12 +468,10 @@ class HttpReadAloudService : BaseReadAloudService(),
             }
             ReadAloudAudioTask(
                 cacheKey = fileName,
-                engineKey = routedEngine?.id ?: "legacy:${httpTts?.getKey().orEmpty()}",
-                maxConcurrency = routedEngine?.effectiveMaxConcurrency(globalConcurrency)
-                    ?: globalConcurrency,
+                engineKey = routedEngine.id,
+                maxConcurrency = routedEngine.effectiveMaxConcurrency(globalConcurrency),
                 prepare = {
                     prepareSpeakFileWithFallback(
-                        httpTts = httpTts,
                         engineV2 = engineV2,
                         item = item,
                         primaryRoute = route,
@@ -498,8 +486,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private suspend fun prepareSpeakFileWithFallback(
-        httpTts: HttpTTS?,
-        engineV2: TtsEngineSetting?,
+        engineV2: TtsEngineSetting,
         item: SpeakItem,
         primaryRoute: ReadAloudTtsRouter.Route?,
         router: ReadAloudTtsRouter?,
@@ -519,7 +506,6 @@ class HttpReadAloudService : BaseReadAloudService(),
             )
             try {
                 return prepareSpeakFile(
-                    httpTts = httpTts,
                     engineV2 = engineV2,
                     item = item,
                     route = route,
@@ -587,8 +573,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private suspend fun prepareSpeakFile(
-        httpTts: HttpTTS?,
-        engineV2: TtsEngineSetting?,
+        engineV2: TtsEngineSetting,
         item: SpeakItem,
         route: ReadAloudTtsRouter.Route?,
         fileName: String,
@@ -605,31 +590,17 @@ class HttpReadAloudService : BaseReadAloudService(),
         } else {
             removeSilentSpeakFile(fileName)
             val target = getSpeakFileAsMd5(fileName)
-            val routedEngine = route?.engine ?: engineV2
-            if (routedEngine != null) {
-                writeReadAloudAudioWithWavRetry(
-                    target = target,
-                    text = speakText,
-                    onRejected = { issue, nextAttempt ->
-                        AppLog.put(
-                            "TTS音频疑似在句中截断，正在第${nextAttempt}次合成" +
-                                    "\n实际时长：${issue.durationMillis}ms，文本长度：${issue.speechUnits}"
-                        )
-                    }
-                ) {
-                    getSpeakStream(
-                        httpTts,
-                        engineV2,
-                        speakText,
-                        route,
-                        synthesisContext
+            writeReadAloudAudioWithWavRetry(
+                target = target,
+                text = speakText,
+                onRejected = { issue, nextAttempt ->
+                    AppLog.put(
+                        "TTS音频疑似在句中截断，正在第${nextAttempt}次合成" +
+                                "\n实际时长：${issue.durationMillis}ms，文本长度：${issue.speechUnits}"
                     )
                 }
-            } else if (!hasSpeakFile(fileName)) {
-                createSpeakFile(
-                    fileName,
-                    getSpeakStream(httpTts, engineV2, speakText, route, synthesisContext)
-                )
+            ) {
+                getSpeakStream(engineV2, speakText, route, synthesisContext)
             }
         }
         return getSpeakFileAsMd5(fileName)
@@ -640,8 +611,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private suspend fun getSpeakStream(
-        httpTts: HttpTTS?,
-        engineV2: TtsEngineSetting?,
+        engineV2: TtsEngineSetting,
         speakText: String,
         route: ReadAloudTtsRouter.Route?,
         synthesisContext: TtsSynthesisContext?
@@ -649,74 +619,18 @@ class HttpReadAloudService : BaseReadAloudService(),
         while (true) {
             try {
                 val routedEngine = route?.engine ?: engineV2
-                if (routedEngine != null) {
-                    val stream = TtsScriptEngineClient.getSynthesisStream(
-                        engine = routedEngine,
-                        text = speakText,
-                        voiceId = route?.voiceId ?: routedEngine.activeVoiceId,
-                        styleId = route?.styleId,
-                        speed = TtsSpeedPolicy.synthesisSpeed(routedEngine),
-                        synthesisContext = synthesisContext,
-                        coroutineContext = currentCoroutineContext()
-                    )
-                    currentCoroutineContext().ensureActive()
-                    downloadErrorNo.set(0)
-                    return stream
-                }
-                val legacyHttpTts = httpTts ?: throw NoStackTraceException("tts is null")
-                val analyzeUrl = AnalyzeUrl(
-                    legacyHttpTts.url,
-                    speakText = speakText,
-                    speakSpeed = legacySpeechRate,
-                    source = legacyHttpTts,
-                    readTimeout = 300 * 1000L,
+                val stream = TtsScriptEngineClient.getSynthesisStream(
+                    engine = routedEngine,
+                    text = speakText,
+                    voiceId = route?.voiceId ?: routedEngine.activeVoiceId,
+                    styleId = route?.styleId,
+                    speed = TtsSpeedPolicy.synthesisSpeed(routedEngine),
+                    synthesisContext = synthesisContext,
                     coroutineContext = currentCoroutineContext()
                 )
-                val checkJs = legacyHttpTts.loginCheckJs
-                val response = kotlin.runCatching {
-                    analyzeUrl.getResponseAwait().let {
-                        currentCoroutineContext().ensureActive()
-                        if (!checkJs.isNullOrBlank()) {
-                            analyzeUrl.evalJS(checkJs, it) as Response
-                        } else {
-                            it
-                        }
-                    }
-                }.getOrElse { throwable ->
-                    currentCoroutineContext().ensureActive()
-                    if (!checkJs.isNullOrBlank()) {
-                        val errResponse = analyzeUrl.getErrResponse(throwable)
-                        try {
-                            (analyzeUrl.evalJS(checkJs, errResponse) as Response).also {
-                                if (it.code == 500) {
-                                    throw throwable
-                                }
-                            }
-                        } catch (_: Throwable) {
-                            throw throwable
-                        }
-                    } else {
-                        throw throwable
-                    }
-                }
-                response.headers["Content-Type"]?.let { contentType ->
-                    val contentType = contentType.substringBefore(";")
-                    val ct = legacyHttpTts.contentType
-                    if (contentType == "application/json" || contentType.startsWith("text/")) {
-                        throw NoStackTraceException(response.body.string())
-                    } else if (ct?.isNotBlank() == true) {
-                        if (!contentType.matches(ct.toRegex())) {
-                            throw NoStackTraceException(
-                                "TTS服务器返回错误：" + response.body.string()
-                            )
-                        }
-                    }
-                }
                 currentCoroutineContext().ensureActive()
-                response.body.byteStream().let { stream ->
-                    downloadErrorNo.set(0)
-                    return stream
-                }
+                downloadErrorNo.set(0)
+                return stream
             } catch (e: Exception) {
                 when (e) {
                     is CancellationException -> throw e
@@ -1021,34 +935,27 @@ class HttpReadAloudService : BaseReadAloudService(),
         synthesisContext: TtsSynthesisContext? = null
     ): String {
         val scenarioMode = if (AppConfig.readAloudMultiRole) "multi" else "single"
-        (route?.engine ?: ReadAloud.httpTtsEngineV2)?.let { engine ->
-            val effectiveSpeed = TtsSpeedPolicy.synthesisSpeed(engine)
-            return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
-                    MD5Utils.md5Encode16(
-                        listOf(
-                            scenarioMode,
-                            TtsScriptEngineClient.audioCacheKey(
-                                engine = engine,
-                                text = content,
-                                voiceId = route?.voiceId ?: engine.activeVoiceId,
-                                styleId = route?.styleId,
-                                speed = effectiveSpeed,
-                                synthesisContext = synthesisContext
-                            )
-                        ).joinToString("-|-")
-                    )
-        }
+        val engine = route?.engine ?: ReadAloud.httpTtsEngineV2
+            ?: throw IllegalStateException("未选择脚本朗读引擎")
+        val effectiveSpeed = TtsSpeedPolicy.synthesisSpeed(engine)
         return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
-                MD5Utils.md5Encode16("$scenarioMode-|-${ReadAloud.httpTTS?.url}-|-$legacySpeechRate-|-$content")
+                MD5Utils.md5Encode16(
+                    listOf(
+                        scenarioMode,
+                        TtsScriptEngineClient.audioCacheKey(
+                            engine = engine,
+                            text = content,
+                            voiceId = route?.voiceId ?: engine.activeVoiceId,
+                            styleId = route?.styleId,
+                            speed = effectiveSpeed,
+                            synthesisContext = synthesisContext
+                        )
+                    ).joinToString("-|-")
+                )
     }
 
     private fun applyPlaybackRate() {
-        val rate = if (ReadAloud.httpTtsEngineV2 != null) {
-            TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay)
-        } else {
-            1f
-        }
-        exoPlayer.setPlaybackSpeed(rate)
+        exoPlayer.setPlaybackSpeed(TtsSpeedPolicy.playbackRate(AppConfig.speechRatePlay))
     }
 
     private suspend fun createSilentSound(fileName: String) {
@@ -1070,10 +977,6 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     private fun getSpeakFileAsMd5(name: String): File {
         return File("${ttsFolderPath}$name.mp3")
-    }
-
-    private suspend fun createSpeakFile(name: String, inputStream: InputStream) {
-        writeReadAloudAudioAtomically(getSpeakFileAsMd5(name), inputStream)
     }
 
     /**
@@ -1167,14 +1070,9 @@ class HttpReadAloudService : BaseReadAloudService(),
      * 更新朗读速度
      */
     override fun upSpeechRate(reset: Boolean) {
-        legacySpeechRate = AppConfig.speechRatePlay + 5
-        if (ReadAloud.httpTtsEngineV2 != null) {
-            applyPlaybackRate()
-            if (!pause) {
-                upPlayPos()
-            }
-        } else {
-            refreshTtsRoute()
+        applyPlaybackRate()
+        if (!pause) {
+            upPlayPos()
         }
     }
 

@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.DatabaseMigrations
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -198,6 +199,25 @@ class MigrationTest {
                     assertEquals(1.0f, cursor.getFloat(0))
                     assertEquals("", cursor.getString(1))
                 }
+                close()
+        }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate112To113_removesLegacyHttpTtsTable() {
+        val dbName = "migration-112-113"
+        helper.createDatabase(dbName, 112).close()
+
+        Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            dbName
+        ).addMigrations(*DatabaseMigrations.migrations)
+            .build().apply {
+                openHelper.writableDatabase.query(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'httpTTS'"
+                ).use { cursor -> assertFalse(cursor.moveToFirst()) }
                 close()
             }
     }

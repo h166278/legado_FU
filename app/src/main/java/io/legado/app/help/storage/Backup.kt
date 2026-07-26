@@ -75,7 +75,6 @@ object Backup {
             "searchHistory.json",
             "sourceSub.json",
             "txtTocRule.json",
-            "httpTTS.json",
             "keyboardAssists.json",
             "dictRule.json",
             "servers.json",
@@ -148,7 +147,6 @@ object Backup {
         writeListToJson(appDb.searchKeywordDao.all, "searchHistory.json", backupPath)
         writeListToJson(appDb.ruleSubDao.all, "sourceSub.json", backupPath)
         writeListToJson(appDb.txtTocRuleDao.all, "txtTocRule.json", backupPath)
-        writeListToJson(appDb.httpTTSDao.all, "httpTTS.json", backupPath)
         writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", backupPath)
         writeListToJson(appDb.dictRuleDao.all, "dictRule.json", backupPath)
         GSON.toJson(appDb.serverDao.all).let { json ->

@@ -6,8 +6,6 @@ import android.os.Bundle
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.IntentAction
-import io.legado.app.data.appDb
-import io.legado.app.data.entities.HttpTTS
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.TtsEngineSetting
@@ -17,7 +15,6 @@ import io.legado.app.service.BaseReadAloudService
 import io.legado.app.service.HttpReadAloudService
 import io.legado.app.service.TTSReadAloudService
 import io.legado.app.utils.LogUtils
-import io.legado.app.utils.StringUtils
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startForegroundServiceCompat
 import io.legado.app.utils.toastOnUi
@@ -27,7 +24,6 @@ object ReadAloud {
     private var aloudClass: Class<*> = getReadAloudClass()
     val ttsEngine get() = ReadBook.book?.getTtsEngine() ?: AppConfig.ttsEngine
     val ttsEngineV2: TtsEngineSetting get() = TtsEngineStore.activeEngine()
-    var httpTTS: HttpTTS? = null
     var httpTtsEngineV2: TtsEngineSetting? = null
 
     private fun getReadAloudClass(): Class<*> {
@@ -47,16 +43,6 @@ object ReadAloud {
                     httpTtsEngineV2 = engineV2
                     return HttpReadAloudService::class.java
                 }
-            }
-        }
-        val ttsEngine = ttsEngine
-        if (ttsEngine.isNullOrBlank()) {
-            return TTSReadAloudService::class.java
-        }
-        if (StringUtils.isNumeric(ttsEngine)) {
-            httpTTS = appDb.httpTTSDao.get(ttsEngine.toLong())
-            if (httpTTS != null) {
-                return HttpReadAloudService::class.java
             }
         }
         return TTSReadAloudService::class.java

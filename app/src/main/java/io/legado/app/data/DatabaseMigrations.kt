@@ -25,7 +25,7 @@ object DatabaseMigrations {
             migration_99_100, migration_100_101, migration_101_102, migration_102_103,
             migration_103_104, migration_104_105, migration_105_106, migration_106_107,
             migration_107_108, migration_108_109, migration_109_110, migration_110_111,
-            migration_111_112,
+            migration_111_112, migration_112_113,
         )
     }
 
@@ -958,6 +958,12 @@ object DatabaseMigrations {
                 "ALTER TABLE `bookCharacterTtsBindings` " +
                     "ADD COLUMN `autoEvidenceSignature` TEXT NOT NULL DEFAULT ''"
             )
+        }
+    }
+
+    private val migration_112_113 = object : Migration(112, 113) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `httpTTS`")
         }
     }
 

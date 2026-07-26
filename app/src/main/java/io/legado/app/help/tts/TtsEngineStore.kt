@@ -9,7 +9,6 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
-import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.TtsEngineRuntimeEntity
 import io.legado.app.data.entities.TtsVoiceEntity
 import io.legado.app.help.config.AppConfig
@@ -306,30 +305,6 @@ object TtsEngineStore {
         }
     }
 
-    fun importLegacyHttpTts(source: HttpTTS): TtsEngineSetting? {
-        if (!isLegacyMultiTtsForwarder(source)) {
-            return null
-        }
-        val engine = scriptEngineFromAsset("multitts_forwarder.js") ?: return null
-        return importEngine(engine.copy(enabled = true))
-    }
-
-    fun isLegacyMultiTtsForwarder(source: HttpTTS): Boolean {
-        val normalizedUrl = source.url.trim()
-        if (normalizedUrl in setOf(
-                OLD_MULTITTS_FORWARDER_URL,
-                OLD_MULTITTS_FORWARDER_URL_FIXED_VOLUME,
-                OLD_MULTITTS_FORWARDER_URL_FIXED_VOLUME_NO_VOICE,
-                DEFAULT_MULTITTS_FORWARDER_URL
-            )
-        ) {
-            return true
-        }
-        return source.name.contains("MultiTTS", ignoreCase = true) &&
-                normalizedUrl.startsWith("http://localhost:8774/forward") &&
-                normalizedUrl.contains("{{java.encodeURI(speakText)}}")
-    }
-
     fun saveEngines(engines: List<TtsEngineSetting>) {
         appCtx.putPrefString(
             PreferKey.ttsEngineV2SettingsJson,
@@ -462,9 +437,6 @@ object TtsEngineStore {
             ?: throw IllegalArgumentException("不支持的朗读引擎格式")
         if (element.isJsonObject) {
             parseEngineFromJsonObject(element.asJsonObject)?.let { return listOf(it) }
-            HttpTTS.fromJson(text).getOrNull()
-                ?.let { importLegacyHttpTtsCandidate(it) }
-                ?.let { return listOf(it) }
         }
         if (element.isJsonArray) {
             val engines = element.asJsonArray.mapNotNull { item ->
@@ -474,13 +446,6 @@ object TtsEngineStore {
             }
             if (engines.isNotEmpty()) {
                 return engines
-            }
-            val legacyEngines = HttpTTS.fromJsonArray(text).getOrNull()
-                .orEmpty()
-                .mapNotNull { importLegacyHttpTtsCandidate(it) }
-                .distinctBy { it.id }
-            if (legacyEngines.isNotEmpty()) {
-                return legacyEngines
             }
         }
         throw IllegalArgumentException("不支持的朗读引擎格式")
@@ -492,14 +457,6 @@ object TtsEngineStore {
         }.getOrNull() ?: return null
         return parsed.normalizedOrNull()?.takeIf { engine ->
             engine.type == TtsEngineType.SCRIPT && engine.script.isNotBlank()
-        }
-    }
-
-    private fun importLegacyHttpTtsCandidate(source: HttpTTS): TtsEngineSetting? {
-        return if (isLegacyMultiTtsForwarder(source)) {
-            scriptEngineFromAsset("multitts_forwarder.js")?.copy(enabled = true)
-        } else {
-            null
         }
     }
 
