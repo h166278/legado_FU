@@ -54,6 +54,8 @@ class ReadAloudAudioPreparationTest {
         val stale = state.begin()
         val current = state.begin()
 
+        assertFalse(state.isCurrent(stale))
+        assertTrue(state.isCurrent(current))
         assertFalse(state.onItemAppended(stale))
         assertFalse(state.finish(stale))
         assertFalse(state.onItemAppended(current))

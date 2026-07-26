@@ -40,6 +40,7 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.tts.ReadAloudTtsRouter
+import io.legado.app.help.tts.ReadAloudBufferProgress
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsPlayerFactory
@@ -166,8 +167,9 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     private fun bindView() = binding.run {
         progressChapter.progressTintList = ColorStateList.valueOf(accentColor)
         val trackBackgroundTint = ColorStateList.valueOf(ColorUtils.adjustAlpha(accentColor, 0.18f))
+        val bufferedTrackTint = ColorStateList.valueOf(ColorUtils.adjustAlpha(accentColor, 0.42f))
         progressChapter.progressBackgroundTintList = trackBackgroundTint
-        progressChapter.secondaryProgressTintList = trackBackgroundTint
+        progressChapter.secondaryProgressTintList = bufferedTrackTint
         progressChapter.thumb = readAloudSeekThumb()
         progressChapter.thumbTintList = null
         progressChapter.thumbOffset = 11.dp
@@ -323,6 +325,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         val chapter = ReadBook.curTextChapter?.takeIf { it.isCompleted } ?: return false
         cachedChapterIndex = chapterIndex
         lastParagraphIndex = -1
+        binding.progressChapter.secondaryProgress = 0
         cachedParagraphs = chapter.getParagraphs(false).mapNotNull { paragraph ->
             val text = paragraph.text
                 .replace(Regex("\\s+"), " ")
@@ -357,6 +360,18 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         if (progress != safeIndex) {
             progress = safeIndex
         }
+        if (secondaryProgress < safeIndex) {
+            secondaryProgress = safeIndex
+        }
+    }
+
+    private fun syncParagraphBufferProgress(buffer: ReadAloudBufferProgress) {
+        if (buffer.chapterIndex != ReadBook.durChapterIndex || !ensureParagraphCache()) return
+        val bufferedIndex = currentParagraphIndex(buffer.chapterPosition)
+        binding.progressChapter.secondaryProgress = maxOf(
+            binding.progressChapter.progress,
+            bufferedIndex
+        )
     }
 
     private fun updateLyricsPage() {
@@ -420,16 +435,13 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         if (wasPlaying) {
             setPlayButtonLoading(true)
         }
-        ReadAloud.stop(this)
+        ReadAloud.play(this, play = wasPlaying, pageIndex = targetPage, startPos = pageStartPos)
         binding.root.postDelayed({
-            ReadAloud.play(this, play = wasPlaying, pageIndex = targetPage, startPos = pageStartPos)
-            binding.root.postDelayed({
-                switchingParagraph = false
-                if (!wasPlaying) {
-                    setPlayButtonLoading(false)
-                }
-            }, 1200L)
-        }, 180L)
+            switchingParagraph = false
+            if (!wasPlaying) {
+                setPlayButtonLoading(false)
+            }
+        }, 1200L)
     }
 
     private fun togglePlay() {
@@ -477,6 +489,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         lastParagraphIndex = -1
         lastProgress = -1
         binding.progressChapter.progress = 0
+        binding.progressChapter.secondaryProgress = 0
         binding.progressChapter.max = 1
         toastOnUi("正在刷新当前章节")
         lifecycleScope.launch {
@@ -839,7 +852,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
             val result = runCatching {
                 withContext(IO) {
                     val router = ReadBook.book?.let { ReadAloudTtsRouter.create(it) }
-                    val route = router?.route(segment, baseEngine)
+                    val route = router?.route(segment, baseEngine, scene)
                     val engine = (route?.engine ?: baseEngine)
                         .takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
                         ?: error("角色绑定的朗读引擎不可用")
@@ -896,6 +909,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         lastParagraphIndex = -1
         lastProgress = -1
         binding.progressChapter.progress = 0
+        binding.progressChapter.secondaryProgress = 0
         binding.progressChapter.max = 1
         ReadBook.openChapter(chapterIndex, durChapterPos = 0, upContent = false) {
             refreshStaticState()
@@ -1034,6 +1048,9 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 setPlayButtonLoading(false)
             }
             refreshProgress(it)
+        }
+        observeEvent<ReadAloudBufferProgress>(EventBus.TTS_BUFFER_PROGRESS) {
+            syncParagraphBufferProgress(it)
         }
         observeEvent<Int>(EventBus.READ_ALOUD_DS) {
             refreshStaticState()

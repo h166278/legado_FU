@@ -36,6 +36,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Status
 import io.legado.app.help.MediaHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.tts.ReadAloudBufferProgress
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.permission.Permissions
@@ -306,8 +307,17 @@ abstract class BaseReadAloudService : BaseService(),
                 }
             }
             paragraphStartPos = pos
+            upTtsBufferProgress(readAloudNumber + 1)
             launch(Main) {
-                if (play) play() else pageChanged = true
+                if (tryReusePreparedPlayback(play)) {
+                    return@launch
+                }
+                if (play) {
+                    play()
+                } else {
+                    playStop()
+                    pageChanged = true
+                }
             }
         }.onError {
             AppLog.put("启动朗读出错\n${it.localizedMessage}", it, true)
@@ -315,11 +325,20 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     internal fun getReadAloudText(index: Int): String {
-        var text = contentList.getOrNull(index) ?: return ""
-        if (paragraphStartPos > 0 && index == nowSpeak) {
-            text = text.substring(paragraphStartPos.coerceAtMost(text.length))
-        }
-        return removeLeadingChapterTitle(text, index)
+        val text = contentList.getOrNull(index) ?: return ""
+        val startOffset = paragraphStartPos.takeIf { index == nowSpeak } ?: 0
+        return getReadAloudText(textChapter, index, text, startOffset)
+    }
+
+    protected fun getReadAloudText(
+        chapter: TextChapter?,
+        index: Int,
+        originalText: String,
+        startOffset: Int = 0
+    ): String {
+        val safeOffset = startOffset.coerceIn(0, originalText.length)
+        val text = originalText.substring(safeOffset)
+        return removeLeadingChapterTitle(text, index, chapter, safeOffset)
     }
 
     internal fun isReadAloudTextSilent(index: Int = nowSpeak): Boolean {
@@ -365,8 +384,13 @@ abstract class BaseReadAloudService : BaseService(),
         return true
     }
 
-    private fun removeLeadingChapterTitle(text: String, index: Int): String {
-        if (!AppConfig.skipReadAloudChapterTitle || index != 0 || paragraphStartPos > 0) {
+    private fun removeLeadingChapterTitle(
+        text: String,
+        index: Int,
+        chapter: TextChapter?,
+        startOffset: Int
+    ): String {
+        if (!AppConfig.skipReadAloudChapterTitle || index != 0 || startOffset > 0) {
             return text
         }
         val trimStartIndex = text.indexOfFirst { !it.isWhitespace() && it != '　' }
@@ -374,7 +398,7 @@ abstract class BaseReadAloudService : BaseService(),
             return text
         }
         val content = text.substring(trimStartIndex)
-        readAloudChapterTitleCandidates().forEach { title ->
+        readAloudChapterTitleCandidates(chapter).forEach { title ->
             if (content == title) {
                 return ""
             }
@@ -388,9 +412,9 @@ abstract class BaseReadAloudService : BaseService(),
         return text
     }
 
-    private fun readAloudChapterTitleCandidates(): List<String> {
-        val displayTitle = textChapter?.title.orEmpty()
-        val rawTitle = textChapter?.chapter?.title.orEmpty()
+    private fun readAloudChapterTitleCandidates(chapter: TextChapter?): List<String> {
+        val displayTitle = chapter?.title.orEmpty()
+        val rawTitle = chapter?.chapter?.title.orEmpty()
         return sequenceOf(displayTitle, rawTitle)
             .flatMap { it.splitToSequence('\n') }
             .map { it.trim() }
@@ -434,6 +458,8 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     abstract fun playStop()
+
+    protected open fun tryReusePreparedPlayback(play: Boolean): Boolean = false
 
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
@@ -500,6 +526,16 @@ abstract class BaseReadAloudService : BaseService(),
 
     fun upTtsProgress(progress: Int) {
         postEvent(EventBus.TTS_PROGRESS, progress)
+    }
+
+    internal fun upTtsBufferProgress(progress: Int) {
+        postEvent(
+            EventBus.TTS_BUFFER_PROGRESS,
+            ReadAloudBufferProgress(
+                chapterIndex = textChapter?.position ?: ReadBook.durChapterIndex,
+                chapterPosition = progress
+            )
+        )
     }
 
     private fun prevP() {

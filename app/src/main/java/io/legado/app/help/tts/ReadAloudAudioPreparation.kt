@@ -34,6 +34,9 @@ internal class ReadAloudPlaylistProductionState {
     }
 
     @Synchronized
+    fun isCurrent(token: Long): Boolean = token == generation
+
+    @Synchronized
     fun onItemAppended(token: Long): Boolean {
         if (token != generation) return false
         val shouldResume = producing && endedWhileProducing
