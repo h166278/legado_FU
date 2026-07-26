@@ -25,6 +25,7 @@ object DatabaseMigrations {
             migration_99_100, migration_100_101, migration_101_102, migration_102_103,
             migration_103_104, migration_104_105, migration_105_106, migration_106_107,
             migration_107_108, migration_108_109, migration_109_110, migration_110_111,
+            migration_111_112,
         )
     }
 
@@ -944,6 +945,19 @@ object DatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoleContributions_workKey_chapterIndex` ON `bookTtsCastRoleContributions` (`workKey`, `chapterIndex`)")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoleContributions_roleId` ON `bookTtsCastRoleContributions` (`roleId`)")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoleContributions_cacheKey` ON `bookTtsCastRoleContributions` (`cacheKey`)")
+        }
+    }
+
+    private val migration_111_112 = object : Migration(111, 112) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `bookCharacterTtsBindings` " +
+                    "ADD COLUMN `autoConfidence` REAL NOT NULL DEFAULT 1.0"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookCharacterTtsBindings` " +
+                    "ADD COLUMN `autoEvidenceSignature` TEXT NOT NULL DEFAULT ''"
+            )
         }
     }
 

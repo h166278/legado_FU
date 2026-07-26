@@ -203,6 +203,9 @@ class ReadAloudModeSheet(
         itemAutoAssignVoices.setOnClickListener {
             switchAutoAssignVoices.toggle()
         }
+        itemAutoSwitchSceneVoices.setOnClickListener {
+            switchAutoSwitchSceneVoices.toggle()
+        }
         itemStoryboardResult.setOnClickListener {
             activity.openStoryboardResult()
             dismissAllowingStateLoss()
@@ -219,15 +222,22 @@ class ReadAloudModeSheet(
         itemAutoAssignVoices.isVisible = multiRole
         if (multiRole) {
             val engine = TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
+            itemAutoSwitchSceneVoices.isVisible = engine?.supportsCapability(
+                TtsEngineCapability.CASTING_METADATA
+            ) == true
             textMultiRoleEngine.text = engine?.name ?: "未选择多人 TTS 引擎"
             bindStoryboardCapabilities(engine)
             val automation = workKey()?.let(BookTtsAutomationConfig::get)
                 ?: BookTtsAutomationConfig.Settings()
             switchAutoCreateRoles.setOnCheckedChangeListener(null)
             switchAutoAssignVoices.setOnCheckedChangeListener(null)
+            switchAutoSwitchSceneVoices.setOnCheckedChangeListener(null)
             switchAutoCreateRoles.isChecked = automation.autoCreateTemporaryRoles
             switchAutoAssignVoices.isChecked = automation.autoAssignVoices
+            switchAutoSwitchSceneVoices.isChecked = automation.autoSwitchSceneVoices
             bindAutomationListeners()
+        } else {
+            itemAutoSwitchSceneVoices.isVisible = false
         }
         val storyboardAlpha = if (multiRole) 1f else 0.42f
         itemStoryboardResult.isEnabled = multiRole
@@ -254,12 +264,17 @@ class ReadAloudModeSheet(
             cornerRadius = 18.dpToPx().toFloat()
             setColor(innerSurfaceColor)
         }
+        itemAutoSwitchSceneVoices.background = GradientDrawable().apply {
+            cornerRadius = 18.dpToPx().toFloat()
+            setColor(innerSurfaceColor)
+        }
         itemStoryboardResult.background = GradientDrawable().apply {
             cornerRadius = 18.dpToPx().toFloat()
             setColor(innerSurfaceColor)
         }
         itemAutoCreateRoles.elevation = 0f
         itemAutoAssignVoices.elevation = 0f
+        itemAutoSwitchSceneVoices.elevation = 0f
         itemStoryboardResult.elevation = 0f
         val cards = listOf(
             Triple(cardSingleRole, iconSingleRole, titleSingleRole),
@@ -293,6 +308,13 @@ class ReadAloudModeSheet(
             val wasEnabled = BookTtsAutomationConfig.get(workKey).autoAssignVoices
             BookTtsAutomationConfig.setAutoAssignVoices(workKey, enabled)
             if (!wasEnabled && enabled) assignUnboundVoices(workKey)
+        }
+        switchAutoSwitchSceneVoices.setOnCheckedChangeListener { _, enabled ->
+            val workKey = workKey() ?: return@setOnCheckedChangeListener
+            BookTtsAutomationConfig.setAutoSwitchSceneVoices(workKey, enabled)
+            if (BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
+                ReadAloud.refreshTtsRoute(activity)
+            }
         }
     }
 

@@ -19,6 +19,7 @@ import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.character.ChapterStoryboard
 import io.legado.app.ui.book.character.StoryboardScene
+import io.legado.app.ui.book.character.StoryboardSceneVoiceAssignment
 import io.legado.app.ui.book.character.StoryboardIdentityLink
 import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
@@ -27,10 +28,18 @@ import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefBoolean
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import splitties.init.appCtx
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 
 object AiTtsStoryboardHelper {
@@ -128,6 +137,9 @@ object AiTtsStoryboardHelper {
     private val cacheMutex = Mutex()
     private val memoryCache = linkedMapOf<String, MemoryCacheEntry>()
     private val inFlightRequests = hashMapOf<String, CompletableDeferred<GenerateResult>>()
+    private val cachedEnrichmentScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val cachedEnrichmentMutex = Mutex()
+    private val cachedEnrichmentJobs = ConcurrentHashMap<String, Job>()
 
     suspend fun getOrGenerate(
         book: Book,
@@ -171,7 +183,7 @@ object AiTtsStoryboardHelper {
         val cacheFile = cacheFile(request)
         var owner = false
         var retryForceRegenerate = false
-        var cachedStoryboard: ChapterStoryboard? = null
+        var cachedCache: StoryboardCache? = null
         val pending = cacheMutex.withLock {
             val running = inFlightRequests[request.cacheKey]
             if (forceRegenerate && running != null) {
@@ -186,28 +198,25 @@ object AiTtsStoryboardHelper {
                 deleteLayeredCaches(request.identityCacheKey)
             } else {
                 loadMemoryCache(request)?.let {
-                    cachedStoryboard = it.toChapterStoryboard()
+                    cachedCache = it
                 }
-                if (cachedStoryboard == null) {
+                if (cachedCache == null) {
                     loadCache(cacheFile, request)?.let {
-                        val cache = persistRequestIdentity(it, request, cacheFile)
-                        cachedStoryboard = cache.toChapterStoryboard()
+                        cachedCache = persistRequestIdentity(it, request, cacheFile)
                     }
-                    if (cachedStoryboard == null) {
+                    if (cachedCache == null) {
                         loadCompatibleCache(request)?.let {
-                            val cache = persistRequestIdentity(it, request, cacheFile)
-                            cachedStoryboard = cache.toChapterStoryboard()
+                            cachedCache = persistRequestIdentity(it, request, cacheFile)
                         }
                     }
-                    if (cachedStoryboard == null) {
+                    if (cachedCache == null) {
                         loadLayeredCache(request)?.let { cache ->
-                            val normalized = persistRequestIdentity(cache, request, cacheFile)
-                            cachedStoryboard = normalized.toChapterStoryboard()
+                            cachedCache = persistRequestIdentity(cache, request, cacheFile)
                         }
                     }
                 }
             }
-            if (cachedStoryboard == null) {
+            if (cachedCache == null) {
                 running ?: CompletableDeferred<GenerateResult>().also {
                     inFlightRequests[request.cacheKey] = it
                     owner = true
@@ -228,13 +237,41 @@ object AiTtsStoryboardHelper {
                 forceRegenerate = true
             )
         }
-        cachedStoryboard?.let {
-            return BookTtsCastingCoordinator.prepareCached(book, it, characters)
+        cachedCache?.let { cache ->
+            val storyboard = BookTtsCastingCoordinator.prepareCached(
+                book,
+                cache.toChapterStoryboard(),
+                characters
+            )
+            val preparedCache = persistPreparedStoryboard(request, cacheFile, cache, storyboard)
+            scheduleCachedEnrichment(
+                request = request,
+                cacheFile = cacheFile,
+                cache = preparedCache,
+                book = book,
+                storyboard = storyboard,
+                characters = characters
+            )
+            return storyboard
         }
         checkNotNull(pending)
         if (!owner) {
-            val storyboard = pending.await().cache.toChapterStoryboard()
-            return BookTtsCastingCoordinator.prepareCached(book, storyboard, characters)
+            val result = pending.await()
+            val storyboard = BookTtsCastingCoordinator.prepareCached(
+                book,
+                result.cache.toChapterStoryboard(),
+                characters
+            )
+            val preparedCache = persistPreparedStoryboard(request, cacheFile, result.cache, storyboard)
+            scheduleCachedEnrichment(
+                request = request,
+                cacheFile = cacheFile,
+                cache = preparedCache,
+                book = book,
+                storyboard = storyboard,
+                characters = characters
+            )
+            return storyboard
         }
         try {
             val identity = loadIdentityCache(request)
@@ -261,8 +298,9 @@ object AiTtsStoryboardHelper {
                 result.cache.toChapterStoryboard(),
                 characters
             )
-            val preparedResult = if (storyboard.identityLinks != result.cache.identityLinks) {
-                result.copy(cache = result.cache.copy(identityLinks = storyboard.identityLinks)).also { enriched ->
+            val enrichedCache = result.cache.withPreparedStoryboard(storyboard)
+            val preparedResult = if (enrichedCache != result.cache) {
+                result.copy(cache = enrichedCache).also { enriched ->
                     cacheMutex.withLock {
                         if (enriched.cacheable) {
                             memoryCache[request.cacheKey] = MemoryCacheEntry(
@@ -826,6 +864,46 @@ object AiTtsStoryboardHelper {
             }
             applyAdjacentGenderEvidence(assignments, targetUnits)
         }
+    }
+
+    private fun scheduleCachedEnrichment(
+        request: StoryboardRequest,
+        cacheFile: File,
+        cache: StoryboardCache,
+        book: Book,
+        storyboard: ChapterStoryboard,
+        characters: List<BookCharacter>
+    ) {
+        val job = cachedEnrichmentJobs.compute(request.cacheKey) { _, current ->
+            if (current?.isActive == true) {
+                current
+            } else {
+                cachedEnrichmentScope.launch(start = CoroutineStart.LAZY) {
+                    try {
+                        cachedEnrichmentMutex.withLock {
+                            val enriched = BookTtsCastingCoordinator.enrichCached(
+                                book = book,
+                                storyboard = storyboard,
+                                characters = characters
+                            )
+                            persistPreparedStoryboard(request, cacheFile, cache, enriched)
+                        }
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                        io.legado.app.constant.AppLog.put(
+                            "缓存分镜后台选角失败，已继续使用现有结果\n${error.localizedMessage}",
+                            error
+                        )
+                    } finally {
+                        cachedEnrichmentJobs.remove(
+                            request.cacheKey,
+                            currentCoroutineContext()[Job]
+                        )
+                    }
+                }
+            }
+        }
+        job?.start()
     }
 
     private suspend fun requestModelUnitsOnce(
@@ -1942,7 +2020,12 @@ object AiTtsStoryboardHelper {
         val paragraphSegments = paragraphs.associate { paragraph ->
             paragraph.paragraphIndex to buildSegmentsForParagraph(paragraph, unitMap, assignmentMap)
         }
-        val storyboardScenes = buildScenes(paragraphs, paragraphSegments, scenes)
+        val storyboardScenes = buildScenes(
+            paragraphs,
+            paragraphSegments,
+            scenes,
+            sceneVoiceAssignments
+        )
         return ChapterStoryboard(
             chapterTitle = chapterTitle,
             scenes = storyboardScenes,
@@ -2108,7 +2191,8 @@ object AiTtsStoryboardHelper {
     private fun buildScenes(
         paragraphs: List<ContextParagraph>,
         paragraphSegments: Map<Int, List<StoryboardSegment>>,
-        sceneRanges: List<SceneRange>
+        sceneRanges: List<SceneRange>,
+        sceneVoiceAssignments: List<CachedSceneVoiceAssignment>
     ): List<StoryboardScene> {
         val groups: List<Pair<SceneRange?, List<ContextParagraph>>> = if (sceneRanges.isNotEmpty()) {
             sceneRanges.map { scene ->
@@ -2149,7 +2233,10 @@ object AiTtsStoryboardHelper {
                 summary = summary.replace(Regex("\\s+"), " ").trim().take(64),
                 characters = names,
                 segments = segments,
-                contextText = group.joinToString("\n") { it.text }
+                contextText = group.joinToString("\n") { it.text },
+                voiceAssignments = sceneVoiceAssignments
+                    .filter { it.sceneIndex == index + 1 }
+                    .map { it.assignment }
             )
         }
     }
@@ -2176,7 +2263,8 @@ object AiTtsStoryboardHelper {
                 expressiveCacheKey = "",
                 scenes = cache.scenes,
                 units = cache.units,
-                assignments = cache.assignments.map { it.withoutExpressiveLayer() }
+                assignments = cache.assignments.map { it.withoutExpressiveLayer() },
+                sceneVoiceAssignments = emptyList()
             )
         )
         writeJson(identityCacheFile(request.identityCacheKey), identity)
@@ -2188,7 +2276,8 @@ object AiTtsStoryboardHelper {
                 generatedAt = cache.generatedAt,
                 scenes = emptyList(),
                 units = emptyList(),
-                assignments = cache.assignments.map { it.expressiveLayerOnly() }
+                assignments = cache.assignments.map { it.expressiveLayerOnly() },
+                sceneVoiceAssignments = cache.sceneVoiceAssignments
             )
             writeJson(expressiveCacheFile(request.expressiveCacheKey), expressive)
         }
@@ -2251,9 +2340,42 @@ object AiTtsStoryboardHelper {
             },
             assignments = identity.storyboard.assignments.map { base ->
                 base.withExpressiveLayer(expressiveByUnit[base.unitId])
-            }
+            },
+            sceneVoiceAssignments = expressive?.sceneVoiceAssignments.orEmpty()
         )
     }
+
+    private suspend fun persistPreparedStoryboard(
+        request: StoryboardRequest,
+        cacheFile: File,
+        cache: StoryboardCache,
+        storyboard: ChapterStoryboard
+    ): StoryboardCache {
+        val enriched = cache.withPreparedStoryboard(storyboard)
+        if (enriched == cache) return cache
+        cacheMutex.withLock {
+            memoryCache[request.cacheKey] = MemoryCacheEntry(
+                cache = enriched,
+                expiresAt = System.currentTimeMillis() + MEMORY_CACHE_TTL
+            )
+            trimMemoryCache()
+            cacheFile.parentFile?.mkdirs()
+            cacheFile.writeText(GSON.toJson(enriched), Charsets.UTF_8)
+            persistLayeredCaches(request, enriched)
+        }
+        return enriched
+    }
+
+    private fun StoryboardCache.withPreparedStoryboard(
+        storyboard: ChapterStoryboard
+    ): StoryboardCache = copy(
+        identityLinks = storyboard.identityLinks,
+        sceneVoiceAssignments = storyboard.scenes.flatMap { scene ->
+            scene.voiceAssignments.map { assignment ->
+                CachedSceneVoiceAssignment(scene.index, assignment)
+            }
+        }
+    )
 
     private fun mergeIdentityLayer(
         identity: StoryboardIdentityCache,
@@ -2816,7 +2938,9 @@ object AiTtsStoryboardHelper {
         @SerializedName("assignments")
         val assignments: List<ModelUnitResult> = emptyList(),
         @SerializedName("identityLinks")
-        val identityLinks: List<StoryboardIdentityLink> = emptyList()
+        val identityLinks: List<StoryboardIdentityLink> = emptyList(),
+        @SerializedName("sceneVoiceAssignments")
+        val sceneVoiceAssignments: List<CachedSceneVoiceAssignment> = emptyList()
     )
 
     private data class StoryboardIdentityCache(
@@ -2844,7 +2968,21 @@ object AiTtsStoryboardHelper {
         @SerializedName("units")
         val units: List<CandidateUnit> = emptyList(),
         @SerializedName("assignments")
-        val assignments: List<ModelUnitResult> = emptyList()
+        val assignments: List<ModelUnitResult> = emptyList(),
+        @SerializedName("sceneVoiceAssignments")
+        val sceneVoiceAssignments: List<CachedSceneVoiceAssignment> = emptyList()
+    )
+
+    data class CachedSceneVoiceAssignment(
+        @SerializedName("sceneIndex")
+        val sceneIndex: Int = 0,
+        @SerializedName("assignment")
+        val assignment: StoryboardSceneVoiceAssignment = StoryboardSceneVoiceAssignment(
+            engineId = "",
+            targetType = "",
+            targetId = 0L,
+            decision = "unassigned"
+        )
     )
 
     data class ContextParagraph(

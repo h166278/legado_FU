@@ -230,6 +230,45 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/item_auto_switch_scene_voices"
+        style="@style/Ng.SettingsItem"
+        android:layout_marginTop="10dp"
+        android:clickable="true"
+        android:clipToOutline="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:minHeight="76dp"
+        android:paddingStart="18dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="12dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/Ng.SettingsTitle"
+                android:text="@string/character_auto_switch_scene_voices" />
+
+            <TextView
+                style="@style/Ng.SettingsSummary"
+                android:layout_marginTop="4dp"
+                android:maxLines="2"
+                android:text="@string/character_auto_switch_scene_voices_summary" />
+        </LinearLayout>
+
+        <io.legado.app.lib.theme.view.ThemeSwitch
+            android:id="@+id/switch_auto_switch_scene_voices"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/item_storyboard_result"
         style="@style/Ng.SettingsItem"
         android:layout_marginTop="10dp"

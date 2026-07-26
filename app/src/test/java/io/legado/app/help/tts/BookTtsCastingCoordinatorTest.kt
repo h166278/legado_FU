@@ -1,7 +1,6 @@
 package io.legado.app.help.tts
 
 import io.legado.app.data.entities.BookCharacter
-import io.legado.app.data.entities.BookCharacterTtsBinding
 import io.legado.app.data.entities.BookTtsCastRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -27,35 +26,6 @@ class BookTtsCastingCoordinatorTest {
         assertTrue(BookTtsCastingCoordinator.voiceMatchesGender("男声", BookCharacter.Gender.MALE))
         assertTrue(BookTtsCastingCoordinator.voiceMatchesGender(null, BookCharacter.Gender.FEMALE))
         assertTrue(BookTtsCastingCoordinator.voiceMatchesGender("neutral", BookCharacter.Gender.MALE))
-    }
-
-    @Test
-    fun reassign_onlyReplacesAutomaticBindings() {
-        assertTrue(BookTtsCastingCoordinator.canAssignTarget(null, replaceAuto = false))
-        assertFalse(
-            BookTtsCastingCoordinator.canAssignTarget(
-                BookCharacterTtsBinding.BindingMode.AUTO,
-                replaceAuto = false
-            )
-        )
-        assertTrue(
-            BookTtsCastingCoordinator.canAssignTarget(
-                BookCharacterTtsBinding.BindingMode.AUTO,
-                replaceAuto = true
-            )
-        )
-        assertFalse(
-            BookTtsCastingCoordinator.canAssignTarget(
-                BookCharacterTtsBinding.BindingMode.MANUAL,
-                replaceAuto = true
-            )
-        )
-        assertFalse(
-            BookTtsCastingCoordinator.canAssignTarget(
-                BookCharacterTtsBinding.BindingMode.INHERIT,
-                replaceAuto = true
-            )
-        )
     }
 
     @Test
@@ -85,6 +55,55 @@ class BookTtsCastingCoordinatorTest {
                 voiceId = null,
                 decision = "unassigned",
                 confidence = 0.1f,
+                allowedVoiceIds = allowed
+            )
+        )
+    }
+
+    @Test
+    fun sceneOverrideRequiresDifferentVoiceStrongConfidenceAndReason() {
+        val allowed = setOf("voice_scene")
+        assertEquals(
+            "voice_scene",
+            BookTtsCastingCoordinator.acceptedSceneOverrideVoiceId(
+                voiceId = "voice_scene",
+                decision = "assigned",
+                confidence = 0.9f,
+                reason = "样本显示年龄感与基础音色不符，候选更贴合",
+                baseVoiceId = "voice_base",
+                allowedVoiceIds = allowed
+            )
+        )
+        assertEquals(
+            null,
+            BookTtsCastingCoordinator.acceptedSceneOverrideVoiceId(
+                voiceId = "voice_scene",
+                decision = "assigned",
+                confidence = 0.82f,
+                reason = "只体现当前情绪",
+                baseVoiceId = "voice_base",
+                allowedVoiceIds = allowed
+            )
+        )
+        assertEquals(
+            null,
+            BookTtsCastingCoordinator.acceptedSceneOverrideVoiceId(
+                voiceId = "voice_base",
+                decision = "assigned",
+                confidence = 0.95f,
+                reason = "仍使用基础音色",
+                baseVoiceId = "voice_base",
+                allowedVoiceIds = allowed + "voice_base"
+            )
+        )
+        assertEquals(
+            null,
+            BookTtsCastingCoordinator.acceptedSceneOverrideVoiceId(
+                voiceId = "voice_scene",
+                decision = "assigned",
+                confidence = 0.95f,
+                reason = " ",
+                baseVoiceId = "voice_base",
                 allowedVoiceIds = allowed
             )
         )

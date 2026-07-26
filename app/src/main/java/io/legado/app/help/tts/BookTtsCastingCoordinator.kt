@@ -1,6 +1,7 @@
 package io.legado.app.help.tts
 
 import com.google.gson.JsonParser
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
@@ -15,9 +16,12 @@ import io.legado.app.help.ai.AiManager
 import io.legado.app.help.ai.AiMessage
 import io.legado.app.ui.book.character.ChapterStoryboard
 import io.legado.app.ui.book.character.StoryboardIdentityLink
+import io.legado.app.ui.book.character.StoryboardScene
+import io.legado.app.ui.book.character.StoryboardSceneVoiceAssignment
 import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
 import io.legado.app.utils.GSON
+import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.fromJsonObject
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,13 +36,20 @@ import java.util.concurrent.ConcurrentHashMap
 object BookTtsCastingCoordinator {
 
     private const val PROMPT_ASSET = "skills/tts_casting/SKILL.md"
-    private const val MIN_AUTO_ASSIGN_CONFIDENCE = 0.7f
+    private const val SCENE_VOICE_TARGET_TYPE = "scene_voice"
+    private const val AUTO_CAST_POLICY_VERSION = "auto_cast_v2_evidence"
+    private const val MIN_SCENE_OVERRIDE_CONFIDENCE = 0.85f
+    private const val SCENE_VOICE_POLICY_VERSION = "scene_voice_v2_anchored"
     private val reservedNames = setOf("旁白", "心声", "对白男", "对白女", "待确认说话人")
     private val pronouns = setOf("我", "你", "他", "她", "它", "他们", "她们", "对方", "某人", "那人", "这人")
     private val prepareMutexes = ConcurrentHashMap<String, Mutex>()
+    private val assignmentMutexes = ConcurrentHashMap<String, Mutex>()
 
     private fun prepareMutex(workKey: String): Mutex =
         prepareMutexes.getOrPut(workKey) { Mutex() }
+
+    private fun assignmentMutex(workKey: String, engineId: String): Mutex =
+        assignmentMutexes.getOrPut("$workKey|$engineId") { Mutex() }
 
     fun storyboardContextRoles(book: Book, chapterIndex: Int): List<BookTtsCastRole> {
         val workKey = BookCharacterProfile.workKey(book.name, book.author)
@@ -81,7 +92,15 @@ object BookTtsCastingCoordinator {
                     AppLog.put("演播角色自动选音失败，已保留对白兜底\n${error.localizedMessage}", error)
                 }
         }
-        return prepared.storyboard
+        return if (automation.autoSwitchSceneVoices) {
+            runCatching {
+                applySceneVoiceAssignments(book, prepared.storyboard, characters, prepared.roles)
+            }.onFailure { error ->
+                AppLog.put("按场景自动选音失败，已继续使用角色绑定\n${error.localizedMessage}", error)
+            }.getOrDefault(prepared.storyboard)
+        } else {
+            prepared.storyboard
+        }
     }
 
     suspend fun prepareCached(
@@ -108,13 +127,39 @@ object BookTtsCastingCoordinator {
             val enrichedStoryboard = storyboard.copy(identityLinks = roles.identityLinks)
             PreparedStoryboard(relinkStoryboard(enrichedStoryboard, roles.roles), roles.roles)
         }
+        return prepared.storyboard
+    }
+
+    /**
+     * 缓存命中后的模型富化只能在后台执行。播放前台只使用 [prepareCached] 的本地结果，
+     * 避免基础选角复评或场景选音重新把缓存章节变成网络请求。
+     */
+    suspend fun enrichCached(
+        book: Book,
+        storyboard: ChapterStoryboard,
+        characters: List<BookCharacter>
+    ): ChapterStoryboard {
+        val workKey = BookCharacterProfile.workKey(book.name, book.author)
+        val automation = BookTtsAutomationConfig.get(workKey)
+        val prepared = prepareMutex(workKey).withLock {
+            val roles = appDb.bookCharacterDao.getTtsCastRoles(workKey)
+            PreparedStoryboard(relinkStoryboard(storyboard, roles), roles)
+        }
         if (automation.autoAssignVoices) {
             runCatching { autoBindCurrentEngine(book, prepared.storyboard, characters, prepared.roles) }
                 .onFailure { error ->
-                    AppLog.put("演播角色自动选音失败，已保留对白兜底\n${error.localizedMessage}", error)
+                    AppLog.put("缓存演播角色后台自动选音失败，已保留现有绑定\n${error.localizedMessage}", error)
                 }
         }
-        return prepared.storyboard
+        return if (automation.autoSwitchSceneVoices) {
+            runCatching {
+                applySceneVoiceAssignments(book, prepared.storyboard, characters, prepared.roles)
+            }.onFailure { error ->
+                AppLog.put("缓存场景后台自动选音失败，已继续使用角色绑定\n${error.localizedMessage}", error)
+            }.getOrDefault(prepared.storyboard)
+        } else {
+            prepared.storyboard
+        }
     }
 
     suspend fun assignUnboundRoles(workKey: String): Int {
@@ -1000,18 +1045,19 @@ object BookTtsCastingCoordinator {
                 val characterSegments = segments.filter { segment ->
                     segment.speakerId == character.id || segment.speakerName == character.name
                 }
-                val samples = characterSegments.map { it.text.trim().take(120) }
+                val representativeTexts = characterSegments.map { it.text.trim().take(120) }
                     .filter { it.isNotBlank() }.distinct().take(3)
-                if (samples.isNotEmpty()) {
+                if (representativeTexts.isNotEmpty()) {
                     add(
                         CastingTarget(
-                            BookCharacterTtsBinding.TargetType.CHARACTER,
-                            character.id,
-                            character.name,
-                            character.gender,
-                            character.castingSummary(),
-                            characterSegments.size,
-                            samples
+                            targetType = BookCharacterTtsBinding.TargetType.CHARACTER,
+                            targetId = character.id,
+                            name = character.name,
+                            gender = character.gender,
+                            summary = character.castingSummary(),
+                            occurrenceCount = characterSegments.size,
+                            representativeTexts = representativeTexts,
+                            samples = characterSegments.toCastingSamples()
                         )
                     )
                 }
@@ -1021,21 +1067,26 @@ object BookTtsCastingCoordinator {
                     add(role.name)
                     GSON.fromJsonObject<List<String>>(role.aliasesJson).getOrNull().orEmpty().forEach(::add)
                 }.map(::normalizeIdentityName).toSet()
-                val samples = segments.filter { segment ->
+                val roleSegments = segments.filter { segment ->
                     segment.castRoleId == role.id ||
                         segment.speakerName?.let { normalizeIdentityName(it) in roleNames } == true
                 }
-                    .map { it.text.trim().take(120) }.filter { it.isNotBlank() }.distinct().take(3)
-                if (samples.isNotEmpty()) {
+                val representativeTexts = (roleSamples(role) + roleSegments.map { it.text })
+                    .map { it.trim().take(120) }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .take(4)
+                if (representativeTexts.isNotEmpty()) {
                     add(
                         CastingTarget(
-                            BookCharacterTtsBinding.TargetType.CAST_ROLE,
-                            role.id,
-                            role.name,
-                            role.gender,
-                            role.castSummary(),
-                            role.occurrenceCount,
-                            samples
+                            targetType = BookCharacterTtsBinding.TargetType.CAST_ROLE,
+                            targetId = role.id,
+                            name = role.name,
+                            gender = role.gender,
+                            summary = role.castSummary(),
+                            occurrenceCount = role.occurrenceCount,
+                            representativeTexts = representativeTexts,
+                            samples = roleSegments.toCastingSamples()
                         )
                     )
                 }
@@ -1043,6 +1094,264 @@ object BookTtsCastingCoordinator {
         }
         return assignTargets(engine, workKey, targets, replaceAuto = false)
     }
+
+    private suspend fun applySceneVoiceAssignments(
+        book: Book,
+        storyboard: ChapterStoryboard,
+        characters: List<BookCharacter>,
+        castRoles: List<BookTtsCastRole>
+    ): ChapterStoryboard {
+        val engine = currentMultiRoleEngine()
+            ?.takeIf { it.supportsCapability(TtsEngineCapability.CASTING_METADATA) }
+            ?: return storyboard
+        val voices = engine.enabledVoices().filter { it.id.isNotBlank() }
+        if (voices.isEmpty()) return storyboard
+        val workKey = BookCharacterProfile.workKey(book.name, book.author)
+        val enabledVoiceIds = voices.mapTo(mutableSetOf()) { it.id }
+        val engineBindings = appDb.bookCharacterDao.getTtsBindings(workKey)
+            .filter { it.engineId == engine.id }
+        val protectedBindings = engineBindings
+            .filter { it.bindingMode != BookCharacterTtsBinding.BindingMode.AUTO }
+            .mapTo(mutableSetOf()) { it.targetType to it.targetId }
+        val baseVoiceIds = engineBindings.mapNotNull { binding ->
+            binding.voiceId
+                ?.takeIf { it in enabledVoiceIds }
+                ?.let { (binding.targetType to binding.targetId) to it }
+        }.toMap()
+        val targets = sceneCastingTargets(
+            storyboard = storyboard,
+            characters = characters,
+            castRoles = castRoles,
+            protectedBindings = protectedBindings,
+            baseVoiceIds = baseVoiceIds
+        )
+        if (targets.isEmpty()) {
+            return storyboard.withSceneVoiceAssignments(engine.id, emptyList())
+        }
+        val catalogSignature = sceneVoiceAssignmentSignature(voices, baseVoiceIds)
+        val existing = storyboard.scenes.flatMap { scene ->
+            scene.voiceAssignments.filter { it.engineId == engine.id }.map { assignment ->
+                SceneTargetKey(scene.index, assignment.targetType, assignment.targetId) to assignment
+            }
+        }.toMap()
+        val reusable = targets.mapNotNull { target ->
+            existing[target.key]
+                ?.takeIf { it.engineId == engine.id && it.catalogSignature == catalogSignature }
+                ?.takeIf {
+                    it.decision == CastingAssignment.Decision.UNASSIGNED ||
+                        it.voiceId?.let(enabledVoiceIds::contains) == true
+                }
+                ?.let { target.key to it }
+        }.toMap()
+        if (reusable.size == targets.size) {
+            return storyboard.withSceneVoiceAssignments(
+                engine.id,
+                reusable.map { (key, assignment) -> SceneAssignmentResult(key.sceneIndex, assignment) }
+            )
+        }
+
+        val candidateMap = targets.associateWith { target ->
+            val languageCandidates = preferLanguageCandidates(voices, target.representativeTexts)
+            val genderCandidates = if (target.gender == BookCharacter.Gender.UNKNOWN) {
+                languageCandidates
+            } else {
+                languageCandidates.filter { voice -> voiceMatchesGender(voice.gender, target.gender) }
+            }
+            genderCandidates.filter { it.id != target.baseVoiceId }
+        }
+        val requestIndex = linkedMapOf<Long, SceneCastingTarget>()
+        val requestTargets = targets.mapIndexedNotNull { index, target ->
+            val candidates = candidateMap[target].orEmpty()
+            if (candidates.isEmpty()) return@mapIndexedNotNull null
+            val requestId = index.toLong() + 1L
+            requestIndex[requestId] = target
+            CastingTarget(
+                targetType = SCENE_VOICE_TARGET_TYPE,
+                targetId = requestId,
+                name = target.name,
+                gender = target.gender,
+                summary = target.summary,
+                occurrenceCount = target.segments.size,
+                representativeTexts = target.representativeTexts,
+                candidateVoiceIds = candidates.map { it.id },
+                sceneIndex = target.key.sceneIndex,
+                baseTargetType = target.key.targetType,
+                baseTargetId = target.key.targetId,
+                baseVoiceId = target.baseVoiceId,
+                samples = target.segments.map { segment ->
+                    CastingSample(
+                        textPreview = segment.text,
+                        performanceContext = segment.performanceContext
+                    )
+                }
+            )
+        }
+        val requestedVoiceIds = requestTargets.flatMap { target ->
+            target.candidateVoiceIds + listOfNotNull(target.baseVoiceId)
+        }.toSet()
+        val aiAssignments = if (requestTargets.isEmpty()) {
+            emptyList()
+        } else {
+            requestAssignments(
+                engine = engine,
+                voices = voices.filter { it.id in requestedVoiceIds },
+                targets = requestTargets
+            )
+        }.associateBy { it.targetId }
+        val requestIdByTarget = requestIndex.entries.associate { it.value to it.key }
+        val assignments = targets.map { target ->
+            val candidates = candidateMap[target].orEmpty()
+            val modelAssignment = requestIdByTarget[target]?.let(aiAssignments::get)
+            val acceptedVoiceId = modelAssignment?.let { assignment ->
+                acceptedSceneOverrideVoiceId(
+                    voiceId = assignment.voiceId,
+                    decision = assignment.decision,
+                    confidence = assignment.confidence,
+                    reason = assignment.reason,
+                    baseVoiceId = target.baseVoiceId,
+                    allowedVoiceIds = candidates.mapTo(mutableSetOf()) { it.id }
+                )
+            }
+            SceneAssignmentResult(
+                sceneIndex = target.key.sceneIndex,
+                assignment = StoryboardSceneVoiceAssignment(
+                    engineId = engine.id,
+                    catalogSignature = catalogSignature,
+                    targetType = target.key.targetType,
+                    targetId = target.key.targetId,
+                    voiceId = acceptedVoiceId,
+                    decision = if (acceptedVoiceId != null) {
+                        CastingAssignment.Decision.ASSIGNED
+                    } else {
+                        CastingAssignment.Decision.UNASSIGNED
+                    },
+                    confidence = modelAssignment?.confidence ?: 0f,
+                    reason = modelAssignment?.reason
+                )
+            )
+        }
+        return storyboard.withSceneVoiceAssignments(engine.id, assignments)
+    }
+
+    private fun sceneCastingTargets(
+        storyboard: ChapterStoryboard,
+        characters: List<BookCharacter>,
+        castRoles: List<BookTtsCastRole>,
+        protectedBindings: Set<Pair<String, Long>>,
+        baseVoiceIds: Map<Pair<String, Long>, String>
+    ): List<SceneCastingTarget> {
+        val characterById = characters.filter { it.enabled }.associateBy { it.id }
+        val characterByName = buildMap {
+            characterById.values.forEach { character ->
+                buildList {
+                    add(character.name)
+                    character.aliasesJson
+                        ?.let { GSON.fromJsonObject<List<String>>(it).getOrNull() }
+                        .orEmpty()
+                        .forEach(::add)
+                }.filter { it.isNotBlank() }.forEach { name ->
+                    putIfAbsent(normalizeIdentityName(name), character)
+                }
+            }
+        }
+        val activeCastRoles = castRoles.filter {
+            it.linkedCharacterId == null && it.isRoutableRole()
+        }
+        val castRoleById = activeCastRoles.associateBy { it.id }
+        val castRoleByName = buildMap {
+            activeCastRoles.forEach { role ->
+                (listOf(role.name) + roleAliases(role))
+                    .filter { it.isNotBlank() }
+                    .forEach { name -> putIfAbsent(normalizeIdentityName(name), role) }
+            }
+        }
+        return storyboard.scenes.flatMap { scene ->
+            val grouped = linkedMapOf<Pair<String, Long>, MutableList<StoryboardSegment>>()
+            scene.segments.filter { segment ->
+                segment.type == StoryboardSegmentType.DIALOGUE ||
+                    segment.type == StoryboardSegmentType.THOUGHT
+            }.forEach { segment ->
+                val normalizedName = segment.speakerName?.let(::normalizeIdentityName)
+                val character = segment.speakerId?.let(characterById::get)
+                    ?: normalizedName?.let(characterByName::get)
+                if (character != null) {
+                    val key = BookCharacterTtsBinding.TargetType.CHARACTER to character.id
+                    if (key !in protectedBindings) grouped.getOrPut(key, ::arrayListOf).add(segment)
+                    return@forEach
+                }
+                val role = segment.castRoleId?.let(castRoleById::get)
+                    ?: normalizedName?.let(castRoleByName::get)
+                if (role != null) {
+                    val key = BookCharacterTtsBinding.TargetType.CAST_ROLE to role.id
+                    if (key !in protectedBindings) grouped.getOrPut(key, ::arrayListOf).add(segment)
+                }
+            }
+            grouped.mapNotNull { (baseTarget, segments) ->
+                val baseVoiceId = baseVoiceIds[baseTarget] ?: return@mapNotNull null
+                val character = if (baseTarget.first == BookCharacterTtsBinding.TargetType.CHARACTER) {
+                    characterById[baseTarget.second]
+                } else null
+                val role = if (baseTarget.first == BookCharacterTtsBinding.TargetType.CAST_ROLE) {
+                    castRoleById[baseTarget.second]
+                } else null
+                val name = character?.name ?: role?.name ?: return@mapNotNull null
+                val representativeTexts = segments.map { it.text.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .take(3)
+                if (representativeTexts.isEmpty()) return@mapNotNull null
+                SceneCastingTarget(
+                    key = SceneTargetKey(scene.index, baseTarget.first, baseTarget.second),
+                    name = name,
+                    gender = character?.gender ?: role?.gender ?: BookCharacter.Gender.UNKNOWN,
+                    summary = character?.castingSummary() ?: role?.castSummary(),
+                    baseVoiceId = baseVoiceId,
+                    representativeTexts = representativeTexts,
+                    segments = segments.take(3)
+                )
+            }
+        }
+    }
+
+    private fun ChapterStoryboard.withSceneVoiceAssignments(
+        engineId: String,
+        assignments: List<SceneAssignmentResult>
+    ): ChapterStoryboard {
+        val byScene = assignments.groupBy { it.sceneIndex }
+        return copy(
+            scenes = scenes.map { scene ->
+                scene.copy(
+                    voiceAssignments = scene.voiceAssignments.filter { it.engineId != engineId } +
+                        byScene[scene.index].orEmpty().map { it.assignment }
+                )
+            }
+        )
+    }
+
+    private fun sceneVoiceAssignmentSignature(
+        voices: List<TtsVoice>,
+        baseVoiceIds: Map<Pair<String, Long>, String>
+    ): String = MD5Utils.md5Encode(
+        listOf(
+            SCENE_VOICE_POLICY_VERSION,
+            voices.sortedBy { it.id }.joinToString("\n") { voice ->
+                listOf(
+                    voice.id,
+                    voice.name,
+                    voice.language.orEmpty(),
+                    voice.gender.orEmpty(),
+                    voice.style.orEmpty(),
+                    voice.tags.joinToString(","),
+                    voice.extra?.toString().orEmpty()
+                ).joinToString("|")
+            },
+            baseVoiceIds.toSortedMap(
+                compareBy<Pair<String, Long>> { it.first }.thenBy { it.second }
+            ).entries.joinToString("\n") { (target, voiceId) ->
+                "${target.first}|${target.second}|$voiceId"
+            }
+        ).joinToString("\n")
+    )
 
     private fun currentMultiRoleEngine(): TtsEngineSetting? {
         return TtsEngineStore.engine(io.legado.app.help.config.AppConfig.multiRoleTtsEngineId)
@@ -1054,20 +1363,14 @@ object BookTtsCastingCoordinator {
         workKey: String,
         targets: List<CastingTarget>,
         replaceAuto: Boolean
-    ): Int {
+    ): Int = assignmentMutex(workKey, engine.id).withLock {
         val voices = engine.enabledVoices().filter { it.id.isNotBlank() }
-        if (voices.isEmpty() || targets.isEmpty()) return 0
+        if (voices.isEmpty() || targets.isEmpty()) return@withLock 0
         val dao = appDb.bookCharacterDao
         val existingBindings = dao.getTtsBindings(workKey)
             .filter { it.engineId == engine.id }
             .associateBy { it.targetType to it.targetId }
-        val eligibleTargets = targets.filter { target ->
-            val existing = existingBindings[target.targetType to target.targetId]
-            canAssignTarget(existing?.bindingMode, replaceAuto)
-        }
-        if (eligibleTargets.isEmpty()) return 0
-
-        val candidateMap = eligibleTargets.associateWith { target ->
+        val candidateMap = targets.associateWith { target ->
             val languageCandidates = preferLanguageCandidates(voices, target.representativeTexts)
             if (target.gender == BookCharacter.Gender.UNKNOWN) {
                 languageCandidates
@@ -1075,7 +1378,22 @@ object BookTtsCastingCoordinator {
                 languageCandidates.filter { voice -> voiceMatchesGender(voice.gender, target.gender) }
             }
         }
+        val evidenceSignatures = targets.associateWith { target ->
+            autoCastingEvidenceSignature(target, candidateMap[target].orEmpty())
+        }
+        val eligibleTargets = targets.filter { target ->
+            val existing = existingBindings[target.targetType to target.targetId]
+            BookTtsBindingPolicy.shouldEvaluate(
+                binding = existing,
+                usableVoiceIds = candidateMap[target].orEmpty().mapTo(mutableSetOf()) { it.id },
+                evidenceSignature = evidenceSignatures.getValue(target),
+                replaceAuto = replaceAuto
+            )
+        }
+        if (eligibleTargets.isEmpty()) return@withLock 0
+
         val aiTargets = candidateMap.filterValues { it.isNotEmpty() }.keys.toList()
+            .filter { it in eligibleTargets }
         val aiCandidateIds = aiTargets.flatMap { target -> candidateMap[target].orEmpty().map { it.id } }.toSet()
         val aiAssignments = if (aiTargets.isEmpty()) {
             emptyList()
@@ -1088,47 +1406,64 @@ object BookTtsCastingCoordinator {
                 }
             )
         }
-        val targetIndex = eligibleTargets.associateBy { it.targetType to it.targetId }
+        val assignmentIndex = aiAssignments
+            .distinctBy { it.targetType to it.targetId }
+            .associateBy { it.targetType to it.targetId }
         var savedCount = 0
         appDb.runInTransaction {
-            aiAssignments.distinctBy { it.targetType to it.targetId }.forEach { assignment ->
-                val target = targetIndex[assignment.targetType to assignment.targetId] ?: return@forEach
-                val allowed = candidateMap[target].orEmpty().map { it.id }.toSet()
-                val acceptedVoiceId = acceptedAutoAssignmentVoiceId(
-                    voiceId = assignment.voiceId,
-                    decision = assignment.decision,
-                    confidence = assignment.confidence,
-                    allowedVoiceIds = allowed
-                ) ?: return@forEach
-                val current = dao.getTtsBindings(workKey).firstOrNull {
-                    it.engineId == engine.id && it.targetType == target.targetType && it.targetId == target.targetId
-                }
-                if (current != null && (!replaceAuto || current.bindingMode != BookCharacterTtsBinding.BindingMode.AUTO)) {
+            val currentBindings = dao.getTtsBindings(workKey)
+                .filter { it.engineId == engine.id }
+                .associateBy { it.targetType to it.targetId }
+            eligibleTargets.forEach { target ->
+                val key = target.targetType to target.targetId
+                val current = currentBindings[key]
+                if (current != null && current.bindingMode != BookCharacterTtsBinding.BindingMode.AUTO) {
                     return@forEach
                 }
+                val allowed = candidateMap[target].orEmpty().mapTo(mutableSetOf()) { it.id }
+                val evidenceSignature = evidenceSignatures.getValue(target)
+                if (!BookTtsBindingPolicy.shouldEvaluate(
+                        binding = current,
+                        usableVoiceIds = allowed,
+                        evidenceSignature = evidenceSignature,
+                        replaceAuto = replaceAuto
+                    )
+                ) {
+                    return@forEach
+                }
+                val assignment = assignmentIndex[key]
+                val acceptedVoiceId = acceptedAutoAssignmentVoiceId(
+                    voiceId = assignment?.voiceId,
+                    decision = assignment?.decision,
+                    confidence = assignment?.confidence ?: 0f,
+                    allowedVoiceIds = allowed
+                )
                 val now = System.currentTimeMillis()
-                dao.upsertTtsBinding(
-                    (current ?: BookCharacterTtsBinding(
+                val resolution = BookTtsBindingPolicy.resolve(
+                    current = current,
+                    newBinding = {
+                        BookCharacterTtsBinding(
                         workKey = workKey,
                         targetType = target.targetType,
                         targetId = target.targetId,
                         engineId = engine.id,
                         createdAt = now
-                    )).copy(
-                        voiceId = acceptedVoiceId,
-                        bindingMode = BookCharacterTtsBinding.BindingMode.AUTO,
-                        updatedAt = now
-                    )
+                        )
+                    },
+                    usableVoiceIds = allowed,
+                    evidenceSignature = evidenceSignature,
+                    acceptedVoiceId = acceptedVoiceId,
+                    confidence = assignment?.confidence ?: 0f,
+                    replaceAuto = replaceAuto,
+                    now = now
                 )
-                savedCount++
+                dao.upsertTtsBinding(resolution.binding)
+                if (acceptedVoiceId != null && resolution.binding.voiceId == acceptedVoiceId) {
+                    savedCount++
+                }
             }
         }
-        return savedCount
-    }
-
-    internal fun canAssignTarget(existingBindingMode: String?, replaceAuto: Boolean): Boolean {
-        return existingBindingMode == null ||
-            replaceAuto && existingBindingMode == BookCharacterTtsBinding.BindingMode.AUTO
+        savedCount
     }
 
     internal fun acceptedAutoAssignmentVoiceId(
@@ -1138,7 +1473,42 @@ object BookTtsCastingCoordinator {
         allowedVoiceIds: Set<String>
     ): String? = voiceId
         ?.takeIf { decision == CastingAssignment.Decision.ASSIGNED }
-        ?.takeIf { confidence >= MIN_AUTO_ASSIGN_CONFIDENCE }
+        ?.takeIf { confidence >= BookTtsBindingPolicy.MIN_AUTO_CONFIDENCE }
+        ?.takeIf { it in allowedVoiceIds }
+
+    private fun autoCastingEvidenceSignature(
+        target: CastingTarget,
+        candidates: List<TtsVoice>
+    ): String = MD5Utils.md5Encode(
+        listOf(
+            AUTO_CAST_POLICY_VERSION,
+            GSON.toJson(target.copy(candidateVoiceIds = candidates.map { it.id })),
+            candidates.sortedBy { it.id }.joinToString("\n") { voice ->
+                listOf(
+                    voice.id,
+                    voice.name,
+                    voice.language.orEmpty(),
+                    voice.gender.orEmpty(),
+                    voice.style.orEmpty(),
+                    voice.tags.joinToString(","),
+                    voice.extra?.toString().orEmpty()
+                ).joinToString("|")
+            }
+        ).joinToString("\n")
+    )
+
+    internal fun acceptedSceneOverrideVoiceId(
+        voiceId: String?,
+        decision: String?,
+        confidence: Float,
+        reason: String?,
+        baseVoiceId: String,
+        allowedVoiceIds: Set<String>
+    ): String? = voiceId
+        ?.takeIf { decision == CastingAssignment.Decision.ASSIGNED }
+        ?.takeIf { confidence >= MIN_SCENE_OVERRIDE_CONFIDENCE }
+        ?.takeIf { !reason.isNullOrBlank() }
+        ?.takeIf { it != baseVoiceId }
         ?.takeIf { it in allowedVoiceIds }
 
     private suspend fun requestAssignments(
@@ -1149,7 +1519,9 @@ object BookTtsCastingCoordinator {
         val selection = AiConfig.requireReadAloudStoryboardModel()
         val payload = CastingPayload(
             engineId = engine.id,
-            voices = voices.map { CastingVoice(it.id, it.name, it.language, it.gender, it.style, it.tags) },
+            voices = voices.map {
+                CastingVoice(it.id, it.name, it.language, it.gender, it.style, it.tags, it.extra)
+            },
             targets = targets
         )
         val result = AiManager.generateText(
@@ -1246,6 +1618,19 @@ object BookTtsCastingCoordinator {
         return "$chapterSummary · 共 $occurrenceCount 次"
     }
 
+    private fun List<StoryboardSegment>.toCastingSamples(): List<CastingSample> =
+        asSequence()
+            .map { segment ->
+                CastingSample(
+                    textPreview = segment.text.trim().take(120),
+                    performanceContext = segment.performanceContext
+                )
+            }
+            .filter { it.textPreview.isNotBlank() }
+            .distinctBy { it.textPreview to it.performanceContext }
+            .take(3)
+            .toList()
+
     private data class CastingPayload(
         @SerializedName("engineId") val engineId: String,
         @SerializedName("voices") val voices: List<CastingVoice>,
@@ -1279,7 +1664,8 @@ object BookTtsCastingCoordinator {
         @SerializedName("language") val language: String?,
         @SerializedName("gender") val gender: String?,
         @SerializedName("style") val style: String?,
-        @SerializedName("tags") val tags: List<String>
+        @SerializedName("tags") val tags: List<String>,
+        @SerializedName("extra") val extra: JsonObject? = null
     )
 
     private data class CastingTarget(
@@ -1290,7 +1676,38 @@ object BookTtsCastingCoordinator {
         @SerializedName("summary") val summary: String? = null,
         @SerializedName("occurrenceCount") val occurrenceCount: Int = 0,
         @SerializedName("representativeTexts") val representativeTexts: List<String>,
-        @SerializedName("candidateVoiceIds") val candidateVoiceIds: List<String> = emptyList()
+        @SerializedName("candidateVoiceIds") val candidateVoiceIds: List<String> = emptyList(),
+        @SerializedName("sceneIndex") val sceneIndex: Int? = null,
+        @SerializedName("baseTargetType") val baseTargetType: String? = null,
+        @SerializedName("baseTargetId") val baseTargetId: Long? = null,
+        @SerializedName("baseVoiceId") val baseVoiceId: String? = null,
+        @SerializedName("samples") val samples: List<CastingSample> = emptyList()
+    )
+
+    private data class CastingSample(
+        @SerializedName("textPreview") val textPreview: String,
+        @SerializedName("performanceContext") val performanceContext: List<String>
+    )
+
+    private data class SceneTargetKey(
+        val sceneIndex: Int,
+        val targetType: String,
+        val targetId: Long
+    )
+
+    private data class SceneCastingTarget(
+        val key: SceneTargetKey,
+        val name: String,
+        val gender: String,
+        val summary: String?,
+        val baseVoiceId: String,
+        val representativeTexts: List<String>,
+        val segments: List<StoryboardSegment>
+    )
+
+    private data class SceneAssignmentResult(
+        val sceneIndex: Int,
+        val assignment: StoryboardSceneVoiceAssignment
     )
 
     private data class DiscoveredOccurrence(

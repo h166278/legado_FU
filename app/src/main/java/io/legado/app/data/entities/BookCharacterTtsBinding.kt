@@ -43,6 +43,12 @@ data class BookCharacterTtsBinding(
     @ColumnInfo(defaultValue = "{}")
     @SerializedName("emotionStyleMapJson")
     var emotionStyleMapJson: String = "{}",
+    @ColumnInfo(defaultValue = "1.0")
+    @SerializedName("autoConfidence")
+    var autoConfidence: Float = 1f,
+    @ColumnInfo(defaultValue = "")
+    @SerializedName("autoEvidenceSignature")
+    var autoEvidenceSignature: String = "",
     @ColumnInfo(defaultValue = "0")
     @SerializedName("createdAt")
     var createdAt: Long = System.currentTimeMillis(),

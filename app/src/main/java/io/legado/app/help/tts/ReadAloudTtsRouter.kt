@@ -9,6 +9,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
+import io.legado.app.ui.book.character.StoryboardScene
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 
@@ -25,10 +26,17 @@ class ReadAloudTtsRouter private constructor(
     private val knownCharacterIds: Set<Long>,
     private val knownCastRoleIds: Set<Long>,
     private val unavailableCharacterBindings: Set<Long>,
-    private val unavailableCastRoleBindings: Set<Long>
+    private val unavailableCastRoleBindings: Set<Long>,
+    private val sceneVoiceEnabled: Boolean,
+    private val protectedSceneCharacterIds: Set<Long>,
+    private val protectedSceneCastRoleIds: Set<Long>
 ) {
 
-    fun route(segment: StoryboardSegment?, fallbackEngine: TtsEngineSetting): Route {
+    fun route(
+        segment: StoryboardSegment?,
+        fallbackEngine: TtsEngineSetting,
+        scene: StoryboardScene? = null
+    ): Route {
         val characterId = segment?.characterTargetId()
         val castRoleId = segment?.castRoleTargetId(characterId)
         val characterBinding = characterId?.let { characterBindings[it] }
@@ -41,7 +49,22 @@ class ReadAloudTtsRouter private constructor(
             narratorBinding.takeUnless { isSpokenRole }
         val engine = binding?.engine?.takeIf { it.type == TtsEngineType.SCRIPT && it.enabled }
             ?: fallbackEngine
-        val voiceId = binding?.voiceId
+        val sceneVoiceId = scene?.voiceAssignments
+            ?.firstOrNull { assignment ->
+                sceneVoiceEnabled &&
+                    assignment.engineId == engine.id &&
+                    assignment.decision == "assigned" &&
+                    when (assignment.targetType) {
+                        BookCharacterTtsBinding.TargetType.CHARACTER ->
+                            characterId == assignment.targetId && characterId !in protectedSceneCharacterIds
+                        BookCharacterTtsBinding.TargetType.CAST_ROLE ->
+                            castRoleId == assignment.targetId && castRoleId !in protectedSceneCastRoleIds
+                        else -> false
+                    }
+            }
+            ?.voiceId
+            ?.takeIf { voiceId -> engine.enabledVoices().any { it.id == voiceId } }
+        val voiceId = sceneVoiceId ?: binding?.voiceId
             ?.takeIf { binding.engine.id == engine.id }
             ?.takeIf { voiceId -> engine.enabledVoices().any { it.id == voiceId } }
             ?: engine.activeVoiceId
@@ -59,7 +82,8 @@ class ReadAloudTtsRouter private constructor(
             },
             fallbackUsed = isSpokenRole && characterBinding == null && castRoleBinding == null,
             bindingUnavailable = characterId in unavailableCharacterBindings || castRoleId in unavailableCastRoleBindings,
-            bindingMode = characterBinding?.bindingMode ?: castRoleBinding?.bindingMode
+            bindingMode = characterBinding?.bindingMode ?: castRoleBinding?.bindingMode,
+            sceneOverrideUsed = sceneVoiceId != null
         )
     }
 
@@ -74,6 +98,18 @@ class ReadAloudTtsRouter private constructor(
         val isSpokenRole = segment?.type == StoryboardSegmentType.DIALOGUE ||
             segment?.type == StoryboardSegmentType.THOUGHT
         val candidates = buildList {
+            if (failedRoute?.sceneOverrideUsed == true) {
+                val baseBinding = characterId?.let { characterBindings[it] }
+                    ?: castRoleId?.let { castRoleBindings[it] }
+                baseBinding?.let { binding ->
+                    add(
+                        binding.toRoute(
+                            kind = if (characterId != null) RouteKind.CHARACTER else RouteKind.CAST_ROLE,
+                            fallbackUsed = true
+                        )
+                    )
+                }
+            }
             fallbackGender?.let(::genderBinding)?.let { binding ->
                 add(binding.toRoute(RouteKind.DIALOGUE_FALLBACK, fallbackUsed = true))
             }
@@ -117,7 +153,8 @@ class ReadAloudTtsRouter private constructor(
         val kind: RouteKind = RouteKind.ENGINE_DEFAULT,
         val fallbackUsed: Boolean = false,
         val bindingUnavailable: Boolean = false,
-        val bindingMode: String? = null
+        val bindingMode: String? = null,
+        val sceneOverrideUsed: Boolean = false
     )
 
     enum class RouteKind {
@@ -220,6 +257,10 @@ class ReadAloudTtsRouter private constructor(
                 .filter(::isBindingUnavailable)
                 .map { it.targetType to it.targetId }
                 .toSet()
+            val protectedSceneBindingKeys = currentEngineBindings
+                .filter { it.bindingMode != BookCharacterTtsBinding.BindingMode.AUTO }
+                .map { it.targetType to it.targetId }
+                .toSet()
             val narratorBinding = bindings.asSequence()
                 .filter { it.targetType == BookCharacterTtsBinding.TargetType.NARRATOR }
                 .sortedByDescending { it.updatedAt }
@@ -296,6 +337,13 @@ class ReadAloudTtsRouter private constructor(
                 unavailableCastRoleBindings = unavailableBindingKeys
                     .filter { it.first == BookCharacterTtsBinding.TargetType.CAST_ROLE }
                     .mapTo(mutableSetOf()) { it.second },
+                sceneVoiceEnabled = BookTtsAutomationConfig.get(workKey).autoSwitchSceneVoices,
+                protectedSceneCharacterIds = protectedSceneBindingKeys
+                    .filter { it.first == BookCharacterTtsBinding.TargetType.CHARACTER }
+                    .mapTo(mutableSetOf()) { it.second },
+                protectedSceneCastRoleIds = protectedSceneBindingKeys
+                    .filter { it.first == BookCharacterTtsBinding.TargetType.CAST_ROLE }
+                    .mapTo(mutableSetOf()) { it.second },
                 globalBindings = globalBindings
             )
         }
@@ -344,6 +392,9 @@ class ReadAloudTtsRouter private constructor(
                 castRoleGenderIndex.keys + castRoleBindings.keys,
             unavailableCharacterBindings: Set<Long> = emptySet(),
             unavailableCastRoleBindings: Set<Long> = emptySet(),
+            sceneVoiceEnabled: Boolean = false,
+            protectedSceneCharacterIds: Set<Long> = emptySet(),
+            protectedSceneCastRoleIds: Set<Long> = emptySet(),
             globalBindings: GlobalBindings = GlobalBindings(null, null, null)
         ): ReadAloudTtsRouter? {
             val effectiveNarratorBinding = narratorBinding ?: globalBindings.narrator
@@ -372,7 +423,10 @@ class ReadAloudTtsRouter private constructor(
                 knownCharacterIds = knownCharacterIds,
                 knownCastRoleIds = knownCastRoleIds,
                 unavailableCharacterBindings = unavailableCharacterBindings,
-                unavailableCastRoleBindings = unavailableCastRoleBindings
+                unavailableCastRoleBindings = unavailableCastRoleBindings,
+                sceneVoiceEnabled = sceneVoiceEnabled,
+                protectedSceneCharacterIds = protectedSceneCharacterIds,
+                protectedSceneCastRoleIds = protectedSceneCastRoleIds
             )
         }
 
@@ -381,7 +435,8 @@ class ReadAloudTtsRouter private constructor(
             val engine = TtsEngineStore.engine(binding.engineId)
                 ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
                 ?: return true
-            val voiceId = binding.voiceId?.takeIf { it.isNotBlank() } ?: return false
+            val voiceId = binding.voiceId?.takeIf { it.isNotBlank() }
+                ?: return binding.bindingMode == BookCharacterTtsBinding.BindingMode.AUTO
             return engine.enabledVoices().none { it.id == voiceId }
         }
 
@@ -391,6 +446,9 @@ class ReadAloudTtsRouter private constructor(
             val safeVoiceId = voiceId
                 ?.takeIf { it.isNotBlank() }
                 ?.takeIf { id -> engine.enabledVoices().any { it.id == id } }
+            if (bindingMode == BookCharacterTtsBinding.BindingMode.AUTO && safeVoiceId == null) {
+                return null
+            }
             return RouteBinding(engine, safeVoiceId, bindingMode)
         }
 

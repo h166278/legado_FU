@@ -25,6 +25,7 @@ import io.legado.app.data.entities.BookTtsCastRole
 import io.legado.app.databinding.ActivityBookCharacterTtsBinding
 import io.legado.app.databinding.ItemBookCharacterTtsBinding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.tts.BookTtsBindingPolicy
 import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
@@ -584,10 +585,29 @@ open class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBindi
                 ?: defaultDialogueVoiceName(gender)
                 ?: getString(R.string.character_tts_narrator)
 
-            is Row.Character -> bindingVoiceName(binding()) ?: fallbackVoiceName(character.gender)
-            is Row.CastRole -> bindingVoiceName(binding()) ?: fallbackVoiceName(role.gender)
+            is Row.Character -> roleVoiceName(binding(), character.gender)
+            is Row.CastRole -> roleVoiceName(binding(), role.gender)
         }
         return getString(R.string.character_tts_speaker_summary, speaker)
+    }
+
+    private fun roleVoiceName(binding: BookCharacterTtsBinding?, gender: String): String {
+        if (binding?.bindingMode == BookCharacterTtsBinding.BindingMode.INHERIT) {
+            return fallbackVoiceName(gender)
+        }
+        val engine = binding?.let { TtsEngineStore.engine(it.engineId) }?.takeIf { it.enabled }
+        val usableVoiceIds = engine?.enabledVoices()?.mapTo(mutableSetOf()) { it.id }.orEmpty()
+        return when (BookTtsBindingPolicy.autoState(binding, usableVoiceIds)) {
+            BookTtsBindingPolicy.AutoState.PENDING -> pendingVoiceName(gender)
+            BookTtsBindingPolicy.AutoState.PROVISIONAL -> getString(
+                R.string.character_tts_provisional_voice,
+                bindingVoiceName(binding) ?: pendingVoiceName(gender)
+            )
+
+            BookTtsBindingPolicy.AutoState.STABLE,
+            BookTtsBindingPolicy.AutoState.PROTECTED ->
+                bindingVoiceName(binding) ?: fallbackVoiceName(gender)
+        }
     }
 
     private fun bindingVoiceName(binding: BookCharacterTtsBinding?): String? {
@@ -609,6 +629,16 @@ open class BookCharacterTtsActivity : BaseActivity<ActivityBookCharacterTtsBindi
                 BookCharacter.Gender.MALE -> R.string.character_tts_fallback_male
                 BookCharacter.Gender.FEMALE -> R.string.character_tts_fallback_female
                 else -> R.string.character_tts_fallback_generic
+            }
+        )
+    }
+
+    private fun pendingVoiceName(gender: String): String {
+        return getString(
+            when (gender) {
+                BookCharacter.Gender.MALE -> R.string.character_tts_pending_male
+                BookCharacter.Gender.FEMALE -> R.string.character_tts_pending_female
+                else -> R.string.character_tts_pending_generic
             }
         )
     }

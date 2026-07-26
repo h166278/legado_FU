@@ -169,4 +169,36 @@ class MigrationTest {
                 close()
             }
     }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate111To112_addsAutomaticCastingEvidenceState() {
+        val dbName = "migration-111-112"
+        helper.createDatabase(dbName, 111).apply {
+            execSQL("INSERT INTO bookCharacterProfiles(workKey, bookName, bookAuthor) VALUES ('work', 'book', 'author')")
+            execSQL(
+                "INSERT INTO bookCharacterTtsBindings(" +
+                    "workKey, targetType, targetId, engineId, voiceId, bindingMode" +
+                    ") VALUES ('work', 'cast_role', 7, 'engine-a', 'voice-a', 'auto')"
+            )
+            close()
+        }
+
+        Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            dbName
+        ).addMigrations(*DatabaseMigrations.migrations)
+            .build().apply {
+                openHelper.writableDatabase.query(
+                    "SELECT autoConfidence, autoEvidenceSignature " +
+                        "FROM bookCharacterTtsBindings WHERE workKey = 'work'"
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(1.0f, cursor.getFloat(0))
+                    assertEquals("", cursor.getString(1))
+                }
+                close()
+            }
+    }
 }

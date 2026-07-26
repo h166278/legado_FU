@@ -37,7 +37,9 @@ data class StoryboardScene(
     @SerializedName("segments")
     val segments: List<StoryboardSegment>,
     @SerializedName("context_text")
-    val contextText: String = ""
+    val contextText: String = "",
+    @SerializedName("voice_assignments")
+    val voiceAssignments: List<StoryboardSceneVoiceAssignment> = emptyList()
 ) {
     val narrationCount: Int get() = segments.count { it.type == StoryboardSegmentType.NARRATION }
     val dialogueCount: Int get() = segments.count { it.type == StoryboardSegmentType.DIALOGUE }
@@ -118,6 +120,25 @@ data class StoryboardSegment(
         const val UNKNOWN = "unknown"
     }
 }
+
+data class StoryboardSceneVoiceAssignment(
+    @SerializedName("engineId")
+    val engineId: String,
+    @SerializedName("catalogSignature")
+    val catalogSignature: String = "",
+    @SerializedName("targetType")
+    val targetType: String,
+    @SerializedName("targetId")
+    val targetId: Long,
+    @SerializedName("voiceId")
+    val voiceId: String? = null,
+    @SerializedName("decision")
+    val decision: String,
+    @SerializedName("confidence")
+    val confidence: Float = 0f,
+    @SerializedName("reason")
+    val reason: String? = null
+)
 
 data class StoryboardIdentityLink(
     @SerializedName("aliasName")

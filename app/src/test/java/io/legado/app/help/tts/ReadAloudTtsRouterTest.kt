@@ -3,6 +3,8 @@ package io.legado.app.help.tts
 import io.legado.app.data.entities.BookCharacterTtsBinding
 import io.legado.app.ui.book.character.StoryboardSegment
 import io.legado.app.ui.book.character.StoryboardSegmentType
+import io.legado.app.ui.book.character.StoryboardScene
+import io.legado.app.ui.book.character.StoryboardSceneVoiceAssignment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -112,6 +114,65 @@ class ReadAloudTtsRouterTest {
 
         assertRoute(router!!, dialogue(StoryboardSegment.SpeakerGender.MALE), bookEngine, "book_voice")
         assertRoute(router, dialogue(StoryboardSegment.SpeakerGender.FEMALE), dialogueEngine, "female_voice")
+    }
+
+    @Test
+    fun sceneVoiceOverride_onlyAppliesWhenEnabledAndBindingIsNotProtected() {
+        val engine = engine(
+            id = "scene",
+            voices = listOf(voice("base_voice"), voice("scene_voice"))
+        )
+        val segment = dialogue(StoryboardSegment.SpeakerGender.FEMALE).copy(
+            speakerId = 3L,
+            speakerName = "沈言卿"
+        )
+        val scene = StoryboardScene(
+            index = 1,
+            title = "质询",
+            summary = "",
+            characters = listOf("沈言卿"),
+            segments = listOf(segment),
+            voiceAssignments = listOf(
+                StoryboardSceneVoiceAssignment(
+                    engineId = engine.id,
+                    targetType = BookCharacterTtsBinding.TargetType.CHARACTER,
+                    targetId = 3L,
+                    voiceId = "scene_voice",
+                    decision = "assigned",
+                    confidence = 0.85f
+                )
+            )
+        )
+        fun router(enabled: Boolean, protected: Boolean) = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = mapOf(
+                3L to ReadAloudTtsRouter.RouteBinding(
+                    engine,
+                    "base_voice",
+                    BookCharacterTtsBinding.BindingMode.AUTO
+                )
+            ),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = mapOf("沈言卿" to 3L),
+            characterGenderIndex = mapOf(3L to StoryboardSegment.SpeakerGender.FEMALE),
+            sceneVoiceEnabled = enabled,
+            protectedSceneCharacterIds = if (protected) setOf(3L) else emptySet()
+        )!!
+
+        val adaptive = router(enabled = true, protected = false).route(segment, engine, scene)
+        val disabled = router(enabled = false, protected = false).route(segment, engine, scene)
+        val protected = router(enabled = true, protected = true).route(segment, engine, scene)
+
+        assertEquals("scene_voice", adaptive.voiceId)
+        assertTrue(adaptive.sceneOverrideUsed)
+        val fallbacks = router(enabled = true, protected = false)
+            .fallbackRoutes(segment, engine, adaptive)
+        assertEquals("base_voice", fallbacks.first().voiceId)
+        assertEquals("base_voice", disabled.voiceId)
+        assertFalse(disabled.sceneOverrideUsed)
+        assertEquals("base_voice", protected.voiceId)
+        assertFalse(protected.sceneOverrideUsed)
     }
 
     @Test

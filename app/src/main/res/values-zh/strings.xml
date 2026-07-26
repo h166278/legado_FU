@@ -129,7 +129,9 @@
     <string name="character_auto_create_roles">自动生成临时角色</string>
     <string name="character_auto_create_roles_summary">分镜时保存可持续识别的角色，路人不保存</string>
     <string name="character_auto_assign_voices">自动分配发音人</string>
-    <string name="character_auto_assign_voices_summary">为未绑定角色选择发音人，不覆盖手动设置</string>
+    <string name="character_auto_assign_voices_summary">自动选音并更新临时音色</string>
+    <string name="character_auto_switch_scene_voices">按场景切换音色</string>
+    <string name="character_auto_switch_scene_voices_summary">按场景临时换声，不改手动绑定</string>
     <string name="character_auto_assign_done">已为 %1$d 个角色分配发音人。</string>
     <string name="character_auto_assign_no_change">没有需要自动分配的角色。</string>
     <string name="character_auto_assign_failed">自动分配发音人失败。</string>
@@ -158,6 +160,10 @@
     <string name="character_tts_fallback_male">对白兜底（男）</string>
     <string name="character_tts_fallback_female">对白兜底（女）</string>
     <string name="character_tts_fallback_generic">对白兜底</string>
+    <string name="character_tts_pending_male">待分配（暂用男对白）</string>
+    <string name="character_tts_pending_female">待分配（暂用女对白）</string>
+    <string name="character_tts_pending_generic">待分配（暂用对白兜底）</string>
+    <string name="character_tts_provisional_voice">%1$s（临时）</string>
     <string name="character_tts_voice_unset">未设置</string>
     <string name="book_storyboard">分镜</string>
     <string name="book_storyboard_empty">暂无可分析的当前章节，请先打开阅读页或听书播放页。</string>

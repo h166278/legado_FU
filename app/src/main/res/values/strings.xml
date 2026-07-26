@@ -132,7 +132,9 @@
     <string name="character_auto_create_roles">Create temporary roles automatically</string>
     <string name="character_auto_create_roles_summary">Save recurring roles from storyboards without saving guests</string>
     <string name="character_auto_assign_voices">Assign voices automatically</string>
-    <string name="character_auto_assign_voices_summary">Choose voices for unbound roles without overriding manual choices</string>
+    <string name="character_auto_assign_voices_summary">Assign and refine temporary voices</string>
+    <string name="character_auto_switch_scene_voices">Adapt voices by scene</string>
+    <string name="character_auto_switch_scene_voices_summary">Switch by scene without overriding manual voices</string>
     <string name="character_auto_assign_done">Assigned voices to %1$d roles.</string>
     <string name="character_auto_assign_no_change">No roles need automatic voice assignment.</string>
     <string name="character_auto_assign_failed">Automatic voice assignment failed.</string>
@@ -161,6 +163,10 @@
     <string name="character_tts_fallback_male">Dialogue fallback (male)</string>
     <string name="character_tts_fallback_female">Dialogue fallback (female)</string>
     <string name="character_tts_fallback_generic">Dialogue fallback</string>
+    <string name="character_tts_pending_male">Pending (using male dialogue fallback)</string>
+    <string name="character_tts_pending_female">Pending (using female dialogue fallback)</string>
+    <string name="character_tts_pending_generic">Pending (using dialogue fallback)</string>
+    <string name="character_tts_provisional_voice">%1$s (provisional)</string>
     <string name="character_tts_voice_unset">Not set</string>
     <string name="book_storyboard">Storyboard</string>
     <string name="book_storyboard_empty">No current chapter to analyze. Open the reader or read-aloud player first.</string>

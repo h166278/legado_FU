@@ -673,7 +673,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>(),
             add("第 ${segment.paragraphIndex + 1} 段")
             segment.identityStatus().takeIf { it != identity && it != segment.type.displayName() }?.let(::add)
         }.joinToString(" · ")
-        tvVoice.text = actualVoiceLabel(segment)
+        tvVoice.text = actualVoiceLabel(scene, segment)
         tvText.text = segment.text
         val details = segment.details(scene)
         tvEvidence.text = details
@@ -720,9 +720,9 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>(),
         else -> "待确认"
     }
 
-    private fun actualVoiceLabel(segment: StoryboardSegment): String {
+    private fun actualVoiceLabel(scene: StoryboardScene, segment: StoryboardSegment): String {
         val baseEngine = renderedBaseEngine ?: return "未配置可用声音"
-        val route = resolvedRoute(segment)
+        val route = resolvedRoute(scene, segment)
         val engine = route?.engine ?: baseEngine
         val voiceId = route?.voiceId ?: engine.activeVoiceId
         val voiceName = engine.enabledVoices().firstOrNull { it.id == voiceId }?.name
@@ -731,7 +731,10 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>(),
         return if (route?.bindingUnavailable == true) {
             "发音人不可用 · 已改用 $voiceName · ${engine.name}"
         } else {
-            "$voiceName · ${engine.name}"
+            buildString {
+                append(voiceName).append(" · ").append(engine.name)
+                if (route?.sceneOverrideUsed == true) append(" · 场景音色")
+            }
         }
     }
 
@@ -739,9 +742,12 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>(),
         (ReadAloud.httpTtsEngineV2 ?: runCatching { TtsEngineStore.activeEngine() }.getOrNull())
             ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
 
-    private fun resolvedRoute(segment: StoryboardSegment): ReadAloudTtsRouter.Route? {
+    private fun resolvedRoute(
+        scene: StoryboardScene,
+        segment: StoryboardSegment
+    ): ReadAloudTtsRouter.Route? {
         val baseEngine = renderedBaseEngine ?: return null
-        return renderedRouter?.route(segment, baseEngine) ?: ReadAloudTtsRouter.Route(
+        return renderedRouter?.route(segment, baseEngine, scene) ?: ReadAloudTtsRouter.Route(
             engine = baseEngine,
             voiceId = baseEngine.activeVoiceId,
             styleId = null,
@@ -822,7 +828,7 @@ class BookStoryboardActivity : BaseActivity<ActivityBookStoryboardBinding>(),
             val result = runCatching {
                 val file = withContext(IO) {
                     val router = ReadBook.book?.let { ReadAloudTtsRouter.create(it) }
-                    val route = router?.route(segment, baseEngine)
+                    val route = router?.route(segment, baseEngine, scene)
                     val engine = (route?.engine ?: baseEngine)
                         .takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
                         ?: error("角色绑定的朗读引擎不可用")
