@@ -651,6 +651,10 @@
     <string name="add_tts_engine">新建引擎</string>
     <string name="import_tts_engine">导入朗读引擎</string>
     <string name="tts_engine_url_hint">朗读引擎链接</string>
+    <string name="tts_engine_import_conflict_title">引擎已存在</string>
+    <string name="tts_engine_import_conflict_message">%1$s 使用相同标识。覆盖更新会保留已有配置、发音人选择和角色绑定。</string>
+    <string name="tts_engine_import_keep_both">另存副本</string>
+    <string name="tts_engine_import_overwrite">覆盖更新</string>
     <string name="replace_rule_title">替换净化</string>
     <string name="replace_rule_edit">替换规则编辑</string>
     <string name="replace_rule">替换规则</string>

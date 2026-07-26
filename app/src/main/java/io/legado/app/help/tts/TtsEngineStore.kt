@@ -23,6 +23,110 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefString
 import splitties.init.appCtx
 
+enum class TtsEngineImportConflictAction {
+    ASK,
+    OVERWRITE,
+    KEEP_BOTH
+}
+
+data class TtsEngineImportConflict(
+    val id: String,
+    val importedName: String,
+    val existingName: String,
+    val canOverwrite: Boolean
+)
+
+class TtsEngineImportConflictException(
+    val conflicts: List<TtsEngineImportConflict>
+) : IllegalStateException("${conflicts.size} 个朗读引擎已存在")
+
+internal object TtsEngineImportResolver {
+
+    fun conflicts(
+        imported: List<TtsEngineSetting>,
+        existing: List<TtsEngineSetting>,
+        defaultIds: Set<String>
+    ): List<TtsEngineImportConflict> {
+        val existingById = existing.associateBy { it.id }
+        return imported.mapNotNull { candidate ->
+            existingById[candidate.id]
+                ?.takeIf { candidate.id !in defaultIds }
+                ?.let { current ->
+                    TtsEngineImportConflict(
+                        id = candidate.id,
+                        importedName = candidate.name,
+                        existingName = current.name,
+                        canOverwrite = current.type == TtsEngineType.SCRIPT
+                    )
+                }
+        }.distinctBy { it.id }
+    }
+
+    fun resolve(
+        imported: List<TtsEngineSetting>,
+        existing: List<TtsEngineSetting>,
+        defaultIds: Set<String>,
+        action: TtsEngineImportConflictAction,
+        copyIdSeed: Long = System.currentTimeMillis()
+    ): List<TtsEngineSetting> {
+        val conflicts = conflicts(imported, existing, defaultIds)
+        if (conflicts.isNotEmpty() && action == TtsEngineImportConflictAction.ASK) {
+            throw TtsEngineImportConflictException(conflicts)
+        }
+        if (
+            action == TtsEngineImportConflictAction.OVERWRITE &&
+            conflicts.any { !it.canOverwrite }
+        ) {
+            throw IllegalArgumentException("系统朗读引擎不能被导入脚本覆盖")
+        }
+        if (action != TtsEngineImportConflictAction.KEEP_BOTH || conflicts.isEmpty()) {
+            return imported
+        }
+        val conflictIds = conflicts.mapTo(hashSetOf()) { it.id }
+        val usedIds = (existing.map { it.id } + imported.map { it.id }).toMutableSet()
+        var nextSuffix = copyIdSeed
+        return imported.map { candidate ->
+            if (candidate.id !in conflictIds) {
+                candidate
+            } else {
+                var newId: String
+                do {
+                    newId = "${candidate.id}_${nextSuffix++}"
+                } while (!usedIds.add(newId))
+                candidate.asImportCopy(newId)
+            }
+        }
+    }
+
+    fun mergeForOverwrite(
+        existing: TtsEngineSetting,
+        imported: TtsEngineSetting
+    ): TtsEngineSetting {
+        return imported.copy(
+            enabled = existing.enabled,
+            builtIn = existing.builtIn,
+            optionValues = existing.optionValues,
+            activeVoiceId = existing.activeVoiceId,
+            disabledVoiceIds = existing.disabledVoiceIds
+        )
+    }
+
+    private fun TtsEngineSetting.asImportCopy(newId: String): TtsEngineSetting {
+        val newName = "$name 副本"
+        return copy(
+            id = newId,
+            name = newName,
+            script = script.replaceFirst(
+                Regex("""(?m)^(\s*//\s*@uuid\s+).*$"""),
+                "$1$newId"
+            ).replaceFirst(
+                Regex("""(?m)^(\s*//\s*@name\s+).*$"""),
+                "$1$newName"
+            )
+        )
+    }
+}
+
 object TtsEngineStore {
 
     const val SYSTEM_DEFAULT_ID = "system_default"
@@ -182,14 +286,22 @@ object TtsEngineStore {
             ?: error("自定义朗读引擎模板解析失败")
     }
 
-    fun importEngineText(text: String): Result<List<TtsEngineSetting>> {
+    fun importEngineText(
+        text: String,
+        conflictAction: TtsEngineImportConflictAction = TtsEngineImportConflictAction.ASK
+    ): Result<List<TtsEngineSetting>> {
         val source = text.trim()
         if (source.isBlank()) {
             return Result.failure(IllegalArgumentException("导入内容为空"))
         }
         return runCatching {
-            val engines = parseImportEngineText(source)
-            val savedEngines = engines.map { importEngine(it) }
+            val parsedEngines = parseImportEngineText(source)
+            val savedEngines = TtsEngineImportResolver.resolve(
+                imported = parsedEngines,
+                existing = engines(),
+                defaultIds = defaultScriptIds(),
+                action = conflictAction
+            ).map { importEngine(it) }
             savedEngines
         }
     }
@@ -327,29 +439,29 @@ object TtsEngineStore {
         if (engine.id in defaultScriptIds()) {
             saveDeletedEngineIds(deletedEngineIds() - engine.id)
         }
-        val existing = engines().associateBy { it.id }
-        val imported = if (engine.id in existing) {
-            engine.copy(enabled = existing.getValue(engine.id).enabled)
+        val currentEngines = engines()
+        val existing = currentEngines.firstOrNull { it.id == engine.id }
+        val imported = existing?.let {
+            TtsEngineImportResolver.mergeForOverwrite(it, engine)
+        } ?: engine
+        val merged = if (existing != null) {
+            currentEngines.map { if (it.id == imported.id) imported else it }
         } else {
-            engine
-        }
-        val merged = if (imported.id in existing) {
-            engines().map { if (it.id == imported.id) imported else it }
-        } else {
-            engines() + imported
+            currentEngines + imported
         }
         saveEngines(merged)
-        appDb.ttsVoiceDao.deleteByEngine(imported.id)
-        appDb.ttsEngineRuntimeDao.deleteByEngine(imported.id)
+        if (existing?.shouldClearVoiceCacheFor(imported) == true) {
+            appDb.ttsVoiceDao.deleteByEngine(imported.id)
+        }
         return engine(imported.id) ?: imported
     }
 
     private fun parseImportEngineText(text: String): List<TtsEngineSetting> {
-        scriptEngineFromScript(text)?.let { return listOf(it.withImportSafeId()) }
+        scriptEngineFromScript(text)?.let { return listOf(it) }
         val element = runCatching { JsonParser.parseString(text) }.getOrNull()
             ?: throw IllegalArgumentException("不支持的朗读引擎格式")
         if (element.isJsonObject) {
-            parseEngineFromJsonObject(element.asJsonObject)?.let { return listOf(it.withImportSafeId()) }
+            parseEngineFromJsonObject(element.asJsonObject)?.let { return listOf(it) }
             HttpTTS.fromJson(text).getOrNull()
                 ?.let { importLegacyHttpTtsCandidate(it) }
                 ?.let { return listOf(it) }
@@ -358,7 +470,7 @@ object TtsEngineStore {
             val engines = element.asJsonArray.mapNotNull { item ->
                 item.takeIf { it.isJsonObject }
                     ?.asJsonObject
-                    ?.let { parseEngineFromJsonObject(it)?.withImportSafeId() }
+                    ?.let { parseEngineFromJsonObject(it) }
             }
             if (engines.isNotEmpty()) {
                 return engines
@@ -389,29 +501,6 @@ object TtsEngineStore {
         } else {
             null
         }
-    }
-
-    private fun TtsEngineSetting.withImportSafeId(): TtsEngineSetting {
-        if (id !in engines().map { it.id }) {
-            return this
-        }
-        if (id in defaultScriptIds()) {
-            return this
-        }
-        val suffix = System.currentTimeMillis()
-        val newId = "${id}_$suffix"
-        val newName = "$name 副本"
-        return copy(
-            id = newId,
-            name = newName,
-            script = script.replaceFirst(
-                Regex("""(?m)^(\s*//\s*@uuid\s+).*$"""),
-                "$1$newId"
-            ).replaceFirst(
-                Regex("""(?m)^(\s*//\s*@name\s+).*$"""),
-                "$1$newName"
-            )
-        )
     }
 
     fun saveRuntimeParams(

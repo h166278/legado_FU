@@ -1,6 +1,7 @@
 package io.legado.app.ui.config
 
 import android.annotation.SuppressLint
+import android.app.Dialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -54,6 +55,8 @@ import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
 import io.legado.app.help.tts.TtsEngineSetting
+import io.legado.app.help.tts.TtsEngineImportConflictAction
+import io.legado.app.help.tts.TtsEngineImportConflictException
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsScriptEngineClient
@@ -71,6 +74,7 @@ import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.ui.widget.code.addJsPattern
+import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
@@ -111,6 +115,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private var voicePreviewController: TtsVoicePreviewController? = null
     private var voiceParamPopup: PopupWindow? = null
     private var voiceParamPopupBinding: LayoutTtsVoiceParamsPopupBinding? = null
+    private var importConflictDialog: Dialog? = null
     private var engineMenuButton: ImageButton? = null
     private val autoFetchedVoiceEngineIds = hashSetOf<String>()
     private val selectedVoiceLanguageFilters = linkedSetOf<String>()
@@ -184,6 +189,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         voiceParamPopup?.dismiss()
         voiceParamPopup = null
         voiceParamPopupBinding = null
+        importConflictDialog?.dismiss()
+        importConflictDialog = null
         voicePreviewController?.release()
         voicePreviewController = null
         super.onDestroyView()
@@ -335,10 +342,11 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    TtsEngineStore.importEngineText(uri.readText(requireContext())).getOrThrow()
+                    uri.readText(requireContext())
                 }
             }
-            handleTtsEngineImportResult(result)
+            result.onSuccess { importTtsEngineText(it) }
+                .onFailure { requireContext().toastOnUi(it.localizedMessage ?: "导入失败") }
         }
     }
 
@@ -368,7 +376,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    val content = okHttpClient.newCallResponseBody {
+                    okHttpClient.newCallResponseBody {
                         if (target.endsWith("#requestWithoutUA")) {
                             url(target.substringBeforeLast("#requestWithoutUA"))
                             header(AppConst.UA_NAME, "null")
@@ -376,21 +384,80 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                             url(target)
                         }
                     }.decompressed().text()
-                    TtsEngineStore.importEngineText(content).getOrThrow()
                 }
             }
-            handleTtsEngineImportResult(result)
+            result.onSuccess { importTtsEngineText(it) }
+                .onFailure { requireContext().toastOnUi(it.localizedMessage ?: "导入失败") }
         }
     }
 
-    private fun handleTtsEngineImportResult(result: Result<List<TtsEngineSetting>>) {
+    private fun importTtsEngineText(
+        content: String,
+        conflictAction: TtsEngineImportConflictAction = TtsEngineImportConflictAction.ASK
+    ) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                TtsEngineStore.importEngineText(content, conflictAction)
+            }
+            handleTtsEngineImportResult(result, content)
+        }
+    }
+
+    private fun handleTtsEngineImportResult(
+        result: Result<List<TtsEngineSetting>>,
+        content: String
+    ) {
         result.onSuccess { engines ->
             autoFetchedVoiceEngineIds.removeAll(engines.map { it.id }.toSet())
             refreshEngines()
             requireContext().toastOnUi("已导入 ${engines.size} 个朗读引擎")
         }.onFailure {
-            requireContext().toastOnUi(it.localizedMessage ?: "导入失败")
+            val conflict = it as? TtsEngineImportConflictException
+            if (conflict != null) {
+                showTtsEngineImportConflictDialog(content, conflict)
+            } else {
+                requireContext().toastOnUi(it.localizedMessage ?: "导入失败")
+            }
         }
+    }
+
+    private fun showTtsEngineImportConflictDialog(
+        content: String,
+        conflict: TtsEngineImportConflictException
+    ) {
+        importConflictDialog?.dismiss()
+        val dialog = Dialog(requireContext()).apply {
+            setContentView(R.layout.dialog_tts_engine_import_conflict)
+            setCanceledOnTouchOutside(true)
+        }
+        val names = conflict.conflicts
+            .map { it.existingName }
+            .distinct()
+            .take(3)
+            .joinToString("、") { "“$it”" }
+        dialog.findViewById<TextView>(R.id.tv_import_conflict_message).text = getString(
+            R.string.tts_engine_import_conflict_message,
+            names
+        )
+        dialog.findViewById<TextView>(R.id.tv_import_keep_both).setOnClickListener {
+            dialog.dismiss()
+            importTtsEngineText(content, TtsEngineImportConflictAction.KEEP_BOTH)
+        }
+        dialog.findViewById<TextView>(R.id.tv_import_overwrite).apply {
+            isVisible = conflict.conflicts.all { it.canOverwrite }
+            setOnClickListener {
+                dialog.dismiss()
+                importTtsEngineText(content, TtsEngineImportConflictAction.OVERWRITE)
+            }
+        }
+        dialog.setOnShowListener { dialog.applyNgWindow() }
+        dialog.setOnDismissListener {
+            if (importConflictDialog === dialog) {
+                importConflictDialog = null
+            }
+        }
+        importConflictDialog = dialog
+        dialog.show()
     }
 
     private fun bindSystemEngineDetail(engine: TtsEngineSetting) = binding.run {

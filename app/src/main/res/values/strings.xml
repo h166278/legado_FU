@@ -655,6 +655,10 @@
     <string name="add_tts_engine">New engine</string>
     <string name="import_tts_engine">Import TTS engine</string>
     <string name="tts_engine_url_hint">TTS engine URL</string>
+    <string name="tts_engine_import_conflict_title">Engine already exists</string>
+    <string name="tts_engine_import_conflict_message">%1$s uses the same identifier. Updating it keeps the existing settings, voice selection, and character bindings.</string>
+    <string name="tts_engine_import_keep_both">Keep both</string>
+    <string name="tts_engine_import_overwrite">Update</string>
     <string name="replace_rule_title">Replacement</string>
     <string name="replace_rule_edit">Edit replacement rule</string>
     <string name="replace_rule">Pattern</string>
