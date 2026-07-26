@@ -539,8 +539,11 @@ object TtsEngineStore {
         )
     }
 
-    private fun TtsEngineSetting.withUpdatedDefaultScript(builtIn: TtsEngineSetting): TtsEngineSetting {
-        if (id !in defaultScriptIds()) {
+    private fun TtsEngineSetting.withUpdatedDefaultScript(
+        builtIn: TtsEngineSetting,
+        defaultIds: Set<String> = defaultScriptIds()
+    ): TtsEngineSetting {
+        if (id !in defaultIds) {
             return this
         }
         val updatedUrl = if (url in setOf(
@@ -553,7 +556,10 @@ object TtsEngineStore {
         } else {
             url
         }
-        val replaceScript = shouldReplaceDefaultScriptWith(builtIn)
+        val replaceScript = shouldReplaceDefaultScriptWith(
+            builtIn = builtIn,
+            isDefaultScript = id in defaultIds
+        )
         return copy(
             name = if (
                 id == STEPAUDIO_25_TTS_ID &&
@@ -569,6 +575,11 @@ object TtsEngineStore {
             } else {
                 script
             },
+            capabilities = if (replaceScript) {
+                builtIn.capabilities
+            } else {
+                capabilities
+            },
             contentType = if (replaceScript && id == STEPAUDIO_25_TTS_ID) {
                 builtIn.contentType
             } else {
@@ -581,14 +592,23 @@ object TtsEngineStore {
         )
     }
 
-    private fun TtsEngineSetting.shouldReplaceDefaultScriptWith(
+    internal fun updateDefaultScriptForTest(
+        saved: TtsEngineSetting,
         builtIn: TtsEngineSetting
+    ): TtsEngineSetting = saved.withUpdatedDefaultScript(
+        builtIn = builtIn,
+        defaultIds = setOf(saved.id)
+    )
+
+    private fun TtsEngineSetting.shouldReplaceDefaultScriptWith(
+        builtIn: TtsEngineSetting,
+        isDefaultScript: Boolean
     ): Boolean {
         if (script.isBlank()) {
             return true
         }
         if (
-            id in defaultScriptIds() &&
+            isDefaultScript &&
             script.contains("params.speed * 2") &&
             !builtIn.script.contains("params.speed * 2")
         ) {
@@ -611,9 +631,14 @@ object TtsEngineStore {
                                 script.contains("// @version 1.0.1") ||
                                 script.contains("// @version 1.0.2") ||
                                 script.contains("// @version 1.0.3") ||
-                                script.contains("// @version 1.0.4")
+                                script.contains("// @version 1.0.4") ||
+                                script.contains("// @version 1.0.5")
                         ) &&
-                builtIn.script.contains("// @version 1.0.5")
+                builtIn.script.contains("// @version 1.0.6")
+        val shouldUpdateMimoExpressiveFields = id == MIMO_V25_TTS_ID &&
+                script.contains("// @version 1.0.0") &&
+                builtIn.script.contains("// @version 1.0.1") &&
+                builtIn.script.contains("// @capabilities style_tags,emotion,emotion_intensity")
         val shouldUpdateStepAudioPlanEndpoint = id == STEPAUDIO_25_TTS_ID &&
                 script.contains("https://api.stepfun.com/v1/audio/speech") &&
                 builtIn.script.contains("https://api.stepfun.com/step_plan/v1/audio/speech")
@@ -652,6 +677,7 @@ object TtsEngineStore {
         return shouldUpdateMultiTtsTemplate ||
                 shouldUpdateStaticPreviewText ||
                 shouldUpdateNextEdgeProxy ||
+                shouldUpdateMimoExpressiveFields ||
                 shouldUpdateStepAudioPlanEndpoint ||
                 shouldUpdateStepAudioSampleRate ||
                 shouldRemoveStepAudioStreamFormat ||

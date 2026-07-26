@@ -3,7 +3,7 @@ id: character_card_generate
 name: 角色卡生成
 description: 基于指定书籍和章节范围采样阅读原文，生成主要角色的待审核角色卡。
 scope: AGENT
-version: 19
+version: 20
 suggestions: 给当前书生成角色卡|从上次继续扫描角色卡|指定章节范围生成角色卡
 mcp_capabilities: bookshelf.query|bookshelf.read_content|bookshelf.cache_status|bookshelf.manage_characters|ai.memory
 conversation_group: 书籍相关
@@ -39,6 +39,12 @@ hook.core.memory_flush: {"watch_tools":["bookshelf_text_window_get","bookshelf_c
 - 未具名人物。
 - 只在章节标题、简介、评论、作者话或推测中出现但正文证据不足的人物。
 - 用户没有要求且没有明显主线重要性的短期人物。
+
+如果入口上下文包含 `candidate_source=tts_cast_role`，说明用户是从听书演播角色发起审核：
+
+- 优先围绕 `candidate_character_name` 和代表台词核实该人物，不把候选自动视为正式角色卡。
+- 仍然严格执行 preview → 用户确认 → apply；候选信息只用于缩小审核目标，不能绕过正文证据。
+- 若正文证据表明只是临时人物或泛化称谓，应明确建议保留为演播角色，不写入正式角色卡。
 
 生成数量由作品规模、章节范围和采样结果决定，但始终围绕主要角色筛选。
 

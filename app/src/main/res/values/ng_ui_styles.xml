@@ -301,14 +301,21 @@
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="Ng.Spinner.Compact" parent="android:Widget.Material.Spinner.Underlined">
+    <style name="Ng.Spinner" parent="android:Widget.Material.Spinner.Underlined">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/ng_field_height</item>
+        <item name="android:background">@drawable/ng_bg_spinner_compact</item>
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">34dp</item>
+        <item name="android:spinnerMode">dropdown</item>
+    </style>
+
+    <style name="Ng.Spinner.Compact" parent="@style/Ng.Spinner">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">34dp</item>
         <item name="android:minHeight">0dp</item>
-        <item name="android:background">@drawable/ng_bg_spinner_compact</item>
         <item name="android:paddingStart">10dp</item>
         <item name="android:paddingEnd">34dp</item>
-        <item name="android:spinnerMode">dropdown</item>
     </style>
 
     <style name="Ng.Tag" parent="android:Widget.TextView">

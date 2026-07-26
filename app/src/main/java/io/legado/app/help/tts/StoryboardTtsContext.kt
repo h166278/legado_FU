@@ -13,7 +13,13 @@ fun StoryboardSegment.toTtsSynthesisContext(
         .filter { it.isNotEmpty() }
         .take(3)
     val instruction = performanceInstruction.trim()
-    if (contextTexts.isEmpty() && instruction.isEmpty()) return null
+    val expressive = TtsExpressiveContext(
+        styleConcepts = styleConcepts.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(4),
+        emotion = emotion?.trim()?.takeIf { it.isNotEmpty() },
+        intensity = emotionIntensity?.coerceIn(0f, 1f),
+        confidence = expressiveConfidence?.coerceIn(0f, 1f)
+    ).takeUnless { it.styleConcepts.isEmpty() && it.emotion == null && it.intensity == null }
+    if (contextTexts.isEmpty() && instruction.isEmpty() && expressive == null) return null
     return TtsSynthesisContext(
         mode = TtsSynthesisContext.Mode.PERFORMANCE,
         role = TtsRoleContext(
@@ -32,7 +38,8 @@ fun StoryboardSegment.toTtsSynthesisContext(
                 contextTexts = it
             )
         },
-        performanceInstruction = instruction
+        performanceInstruction = instruction,
+        expressive = expressive
     )
 }
 
@@ -45,9 +52,18 @@ fun TtsSynthesisContext.forEngineCapabilities(engine: TtsEngineSetting?): TtsSyn
     ) == true
     val filteredScene = scene.takeIf { supportsScene }
     val filteredInstruction = performanceInstruction.takeIf { supportsInstruction }.orEmpty()
-    if (filteredScene == null && filteredInstruction.isEmpty()) return null
+    val supportsStyle = engine?.supportsCapability(TtsEngineCapability.STYLE_TAGS) == true
+    val supportsEmotion = engine?.supportsCapability(TtsEngineCapability.EMOTION) == true
+    val supportsIntensity = engine?.supportsCapability(TtsEngineCapability.EMOTION_INTENSITY) == true
+    val filteredExpressive = expressive?.copy(
+        styleConcepts = expressive.styleConcepts.takeIf { supportsStyle }.orEmpty(),
+        emotion = expressive.emotion.takeIf { supportsEmotion },
+        intensity = expressive.intensity.takeIf { supportsIntensity }
+    )?.takeUnless { it.styleConcepts.isEmpty() && it.emotion == null && it.intensity == null }
+    if (filteredScene == null && filteredInstruction.isEmpty() && filteredExpressive == null) return null
     return copy(
         scene = filteredScene,
-        performanceInstruction = filteredInstruction
+        performanceInstruction = filteredInstruction,
+        expressive = filteredExpressive
     )
 }

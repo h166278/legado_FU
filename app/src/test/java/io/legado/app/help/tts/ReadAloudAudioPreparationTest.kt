@@ -29,6 +29,37 @@ import kotlin.io.path.createTempDirectory
 class ReadAloudAudioPreparationTest {
 
     @Test
+    fun playlistProduction_defersEndUntilAllItemsAreProduced() {
+        val state = ReadAloudPlaylistProductionState()
+        val token = state.begin()
+
+        assertFalse(state.onPlaybackEnded())
+        assertTrue(state.onItemAppended(token))
+        assertFalse(state.finish(token))
+        assertTrue(state.onPlaybackEnded())
+    }
+
+    @Test
+    fun playlistProduction_finishesPendingEndWhenProducerCompletes() {
+        val state = ReadAloudPlaylistProductionState()
+        val token = state.begin()
+
+        assertFalse(state.onPlaybackEnded())
+        assertTrue(state.finish(token))
+    }
+
+    @Test
+    fun playlistProduction_ignoresCallbacksFromCancelledGeneration() {
+        val state = ReadAloudPlaylistProductionState()
+        val stale = state.begin()
+        val current = state.begin()
+
+        assertFalse(state.onItemAppended(stale))
+        assertFalse(state.finish(stale))
+        assertFalse(state.onItemAppended(current))
+    }
+
+    @Test
     fun scheduler_skipsSaturatedEngineAndKeepsPlaybackOrder() = runBlocking {
         val firstAStarted = CompletableDeferred<Unit>()
         val firstARelease = CompletableDeferred<Unit>()

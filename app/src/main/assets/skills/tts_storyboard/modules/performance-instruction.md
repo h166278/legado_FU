@@ -4,7 +4,7 @@
 
 每个输出 unit 都必须包含 `performanceInstruction` 字符串。启用演员层时，`character` 和 `thought` 必须返回一句简短指导；`narrator` 和 `other` 使用空字符串。
 
-演员层将公共协议中的 unit 对象扩展为以下结构；公共字段保持原义：
+演员层填充公共协议固定 unit 结构中的 `performanceInstruction`；其它公共字段保持原义：
 
 ```json
 {
@@ -12,7 +12,13 @@
   "roleType": "character",
   "characterName": "角色名或空字符串",
   "characterId": 0,
+  "castRoleId": 0,
   "speakerGender": "female",
+  "identityType": "guest",
+  "nameType": "generic_label",
+  "identityEvidence": "contextual",
+  "genderEvidence": "explicit",
+  "mergeCastRoleIds": [],
   "status": "unknown",
   "confidence": 0.88,
   "evidence": "前文动作: 角色名",

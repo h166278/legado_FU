@@ -5,6 +5,9 @@
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
     android:background="@drawable/ng_bg_settings_item"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:minHeight="78dp"
     android:orientation="horizontal"
@@ -51,6 +54,16 @@
                 tools:text="旁白" />
 
             <TextView
+                android:id="@+id/tv_gender"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:includeFontPadding="false"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                tools:text="♂" />
+
+            <TextView
                 android:id="@+id/tv_role"
                 android:layout_width="wrap_content"
                 android:layout_height="24dp"
@@ -70,9 +83,11 @@
         <TextView
             android:id="@+id/tv_voice"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_height="32dp"
+            android:clickable="true"
             android:ellipsize="end"
+            android:focusable="true"
+            android:gravity="center_vertical"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="@color/tv_text_summary"
@@ -109,5 +124,13 @@
         android:text="@string/character_tts_select_voice"
         android:textColor="@color/primaryText"
         android:textSize="13sp" />
+
+    <io.legado.app.ui.widget.text.AccentStrokeTextView
+        android:id="@+id/tv_promote"
+        style="@style/Ng.SmallButton.Secondary"
+        android:layout_marginStart="@dimen/ng_space_s"
+        android:minWidth="68dp"
+        android:text="@string/character_promote"
+        android:visibility="gone" />
 
 </LinearLayout>

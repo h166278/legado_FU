@@ -36,10 +36,10 @@
             android:layout_marginTop="10dp"
             android:ellipsize="end"
             android:includeFontPadding="false"
-            android:maxLines="2"
+            android:maxLines="1"
             android:textColor="@color/ng_on_surface_variant"
             android:textSize="14sp"
-            tools:text="5 个分镜 · 38 个片段 · 对白 16 · 心声 2" />
+            tools:text="5 个场景 · 16 段对白 · 2 段心声" />
 
         <FrameLayout
             android:id="@+id/layout_storyboard_content"
@@ -100,6 +100,20 @@
         android:foreground="?android:attr/selectableItemBackgroundBorderless"
         android:padding="8dp"
         android:src="@drawable/ic_chevron_left_search"
+        app:tint="@color/ng_on_surface" />
+
+    <ImageButton
+        android:id="@+id/btn_more"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="end|top"
+        android:layout_marginTop="32dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/ng_bg_read_aloud_top_button"
+        android:contentDescription="@string/more"
+        android:foreground="?android:attr/selectableItemBackgroundBorderless"
+        android:padding="8dp"
+        android:src="@drawable/ic_more_vert"
         app:tint="@color/ng_on_surface" />
 
     <TextView

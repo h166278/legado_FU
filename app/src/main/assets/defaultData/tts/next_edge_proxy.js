@@ -1,6 +1,6 @@
 // @name Next Edge TTS
 // @schema 1
-// @version 1.0.5
+// @version 1.0.6
 // @uuid next_edge_proxy
 // @author Legado
 // @url http://36.248.181.23:22335/tts
@@ -11,6 +11,7 @@
 // @defaultVolume 50
 // @defaultPitch 50
 // @sampleText 前不见古人，后不见来者。念天地之悠悠，独怆然而涕下。
+// @capabilities style_tags,emotion
 // @description 第三方 Edge TTS 中转调试模板，发音人画像和 styles 参考 Edge VoiceTag 与 Azure Speech 文档。
 
 var STYLE_NAMES = {
@@ -75,6 +76,32 @@ var STYLE_NAMES = {
     "voice-assistant": "语音助手",
     "whispering": "耳语"
 };
+
+var EXPRESSIVE_STYLE_ALIASES = [
+    { style: "angry", terms: ["angry", "愤怒", "生气", "恼怒", "暴怒"] },
+    { style: "anxious", terms: ["anxious", "焦虑", "紧张", "不安"] },
+    { style: "calm", terms: ["calm", "平静", "克制", "冷静", "沉着"] },
+    { style: "cheerful", terms: ["cheerful", "欢快", "开心", "喜悦", "活泼"] },
+    { style: "comforting", terms: ["comforting", "安慰", "宽慰"] },
+    { style: "curious", terms: ["curious", "好奇", "疑惑"] },
+    { style: "depressed", terms: ["depressed", "沮丧", "低落", "压抑"] },
+    { style: "disappointed", terms: ["disappointed", "失望"] },
+    { style: "embarrassed", terms: ["embarrassed", "尴尬", "窘迫"] },
+    { style: "empathetic", terms: ["empathetic", "共情", "同情"] },
+    { style: "excited", terms: ["excited", "兴奋", "激动", "高昂"] },
+    { style: "fearful", terms: ["fearful", "恐惧", "害怕", "惊恐"] },
+    { style: "gentle", terms: ["gentle", "温柔", "柔和", "轻柔"] },
+    { style: "sad", terms: ["sad", "悲伤", "难过", "哀伤"] },
+    { style: "serious", terms: ["serious", "严肃", "郑重", "庄重"] },
+    { style: "shy", terms: ["shy", "害羞", "羞涩"] },
+    { style: "sorry", terms: ["sorry", "歉意", "抱歉", "愧疚"] },
+    { style: "surprised", terms: ["surprised", "惊讶", "震惊", "意外"] },
+    { style: "whispering", terms: ["whispering", "耳语", "低语", "悄声"] },
+    { style: "newscast", terms: ["newscast", "新闻播报", "播报"] },
+    { style: "poetry-reading", terms: ["poetry-reading", "诗歌朗诵", "朗诵"] },
+    { style: "story", terms: ["story", "故事", "讲故事", "叙事"] },
+    { style: "story-telling", terms: ["story-telling", "故事", "讲故事", "叙事"] }
+];
 
 var API_OPTIONS = [
     { label: "36.248.181.23", value: "http://36.248.181.23:22335/tts" },
@@ -272,7 +299,7 @@ function appendAll(target, values) {
 function synthesize(text, voice, params, options, ctx) {
     var api = String(options.api || "http://36.248.181.23:22335/tts").replace(/\/+$/, "");
     var voiceId = String((voice && voice.id) || "zh-CN-XiaoxiaoNeural");
-    var style = selectedStyleValue(voice);
+    var style = selectedStyleValue(voice) || automaticStyleValue(voice, ctx);
     var rate = clamp((Number(params.speed || 50) - 50) * 2, -100, 100);
     var pitch = clamp((Number(params.pitch || 50) - 50) * 2, -100, 100);
     var query = [
@@ -300,6 +327,67 @@ function selectedStyleValue(voice) {
         return String(voice.style_value);
     }
     return "";
+}
+
+function automaticStyleValue(voice, ctx) {
+    var supported = voice && voice.extra && voice.extra.azure_styles
+        ? voice.extra.azure_styles
+        : [];
+    if (!supported.length) {
+        return "";
+    }
+    var expressive = ctx && ctx.synthesis && ctx.synthesis.expressive
+        ? ctx.synthesis.expressive
+        : null;
+    if (!expressive) {
+        return "";
+    }
+    var concepts = [];
+    if (expressive.emotion) {
+        concepts.push(String(expressive.emotion));
+    }
+    var styleConcepts = expressive.style_concepts || [];
+    for (var i = 0; i < styleConcepts.length; i++) {
+        concepts.push(String(styleConcepts[i]));
+    }
+    for (var j = 0; j < concepts.length; j++) {
+        var matched = styleForConcept(concepts[j], supported);
+        if (matched) {
+            return matched;
+        }
+    }
+    return "";
+}
+
+function styleForConcept(concept, supported) {
+    var normalized = String(concept || "").toLowerCase().replace(/^\s+|\s+$/g, "");
+    if (!normalized) {
+        return "";
+    }
+    if (containsStyle(supported, normalized)) {
+        return normalized;
+    }
+    for (var i = 0; i < EXPRESSIVE_STYLE_ALIASES.length; i++) {
+        var item = EXPRESSIVE_STYLE_ALIASES[i];
+        if (!containsStyle(supported, item.style)) {
+            continue;
+        }
+        for (var j = 0; j < item.terms.length; j++) {
+            if (normalized.indexOf(item.terms[j]) >= 0) {
+                return item.style;
+            }
+        }
+    }
+    return "";
+}
+
+function containsStyle(styles, expected) {
+    for (var i = 0; i < styles.length; i++) {
+        if (String(styles[i]).toLowerCase() === expected) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function languageOf(voiceId) {

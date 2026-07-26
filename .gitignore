@@ -31,3 +31,4 @@ AGENTS.md
 *.log
 __pycache__/
 *.pyc
+/outputs/

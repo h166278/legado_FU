@@ -1,9 +1,161 @@
 package io.legado.app.help.ai
 
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookCharacter
+import io.legado.app.data.entities.BookTtsCastRole
+import io.legado.app.ui.book.character.StoryboardSegment
+import io.legado.app.ui.book.character.StoryboardSegmentType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AiTtsStoryboardHelperTest {
+
+    @Test
+    fun fallbackRequestCombinesOnlyWhenAutomationAndActorGuidanceAreOff() {
+        assertTrue(
+            AiTtsStoryboardHelper.shouldCombineFallbackRequest(
+                autoCreateTemporaryRoles = false,
+                autoAssignVoices = false,
+                capabilities = listOf("style_tags", "emotion")
+            )
+        )
+        assertFalse(
+            AiTtsStoryboardHelper.shouldCombineFallbackRequest(
+                autoCreateTemporaryRoles = true,
+                autoAssignVoices = false,
+                capabilities = emptyList()
+            )
+        )
+        assertFalse(
+            AiTtsStoryboardHelper.shouldCombineFallbackRequest(
+                autoCreateTemporaryRoles = false,
+                autoAssignVoices = false,
+                capabilities = listOf("performance_instruction")
+            )
+        )
+    }
+
+    @Test
+    fun combinedFallbackResponseValidatesScenesAndUnitsTogether() {
+        val paragraphs = listOf(
+            AiTtsStoryboardHelper.ContextParagraph(0, "陈升走进车棚。"),
+            AiTtsStoryboardHelper.ContextParagraph(1, "“你来了？”")
+        )
+        val units = listOf(
+            AiTtsStoryboardHelper.CandidateUnit(
+                unitId = "u1",
+                ranges = listOf(AiTtsStoryboardHelper.TextRange(paragraphIndex = 1)),
+                textPreview = "“你来了？”"
+            )
+        )
+        val raw = """
+            {
+              "scenes": [{
+                "sceneId": "scene_1",
+                "title": "陈升走进车棚",
+                "startParagraphIndex": 0,
+                "endParagraphIndex": 1
+              }],
+              "units": [{
+                "unitId": "u1",
+                "roleType": "character",
+                "characterName": "",
+                "characterId": 0,
+                "castRoleId": 0,
+                "speakerGender": "unknown",
+                "identityType": "guest",
+                "nameType": "generic_label",
+                "identityEvidence": "contextual",
+                "genderEvidence": "unknown",
+                "mergeCastRoleIds": [],
+                "status": "unknown",
+                "confidence": 0.8,
+                "evidence": "场景人物开口",
+                "performanceContext": [],
+                "performanceInstruction": "",
+                "styleConcepts": [],
+                "emotion": null,
+                "emotionIntensity": null,
+                "expressiveConfidence": null
+              }],
+              "newCharacters": []
+            }
+        """.trimIndent()
+
+        val (scenes, assignments) = AiTtsStoryboardHelper.parseAndValidateCombinedForTest(
+            raw = raw,
+            paragraphs = paragraphs,
+            targetUnits = units
+        )
+
+        assertEquals("陈升走进车棚", scenes.single().title)
+        assertEquals("u1", assignments.single().unitId)
+    }
+
+    @Test
+    fun cacheIdentityDoesNotDependOnMutableCharacterProfiles() {
+        val key = AiTtsStoryboardHelper.storyboardCacheKeyForTest(
+            book = Book(bookUrl = "book-url", name = "Book", author = "Author"),
+            chapterIndex = 7,
+            chapterTitle = "Chapter",
+            contentHash = "content-hash",
+            mode = "performance",
+            capabilities = listOf("scene_context", "performance_instruction"),
+            providerId = "provider",
+            modelId = "model"
+        )
+
+        assertEquals("14bce68d36a03f7f6f3ff5609ee1a42e", key)
+    }
+
+    @Test
+    fun identityAndExpressiveCachesHaveIndependentInvalidationKeys() {
+        val book = Book(bookUrl = "book-url", name = "Book", author = "Author")
+        val identity = AiTtsStoryboardHelper.storyboardIdentityCacheKeyForTest(
+            book = book,
+            chapterIndex = 7,
+            chapterTitle = "Chapter",
+            contentHash = "content-hash",
+            providerId = "provider",
+            modelId = "model"
+        )
+        val scene = AiTtsStoryboardHelper.storyboardExpressiveCacheKeyForTest(
+            identity,
+            listOf("scene_context")
+        )
+        val actor = AiTtsStoryboardHelper.storyboardExpressiveCacheKeyForTest(
+            identity,
+            listOf("performance_instruction")
+        )
+
+        assertEquals(identity, AiTtsStoryboardHelper.storyboardIdentityCacheKeyForTest(
+            book, 7, "Chapter", "content-hash", "provider", "model"
+        ))
+        assertTrue(scene != actor)
+    }
+
+    @Test
+    fun semanticSceneTitlesAreValidatedAndKept() {
+        val paragraphs = listOf(
+            AiTtsStoryboardHelper.ContextParagraph(0, "陈升推车走进车棚。"),
+            AiTtsStoryboardHelper.ContextParagraph(1, "沈言卿站在车棚门口。"),
+            AiTtsStoryboardHelper.ContextParagraph(2, "回家后，陈升向妈妈撒娇。")
+        )
+
+        val scenes = AiTtsStoryboardHelper.parseAndValidateScenesForTest(
+            raw = """
+                {"scenes":[
+                  {"sceneId":"scene_1","title":"陈升与沈言卿在车棚","startParagraphIndex":0,"endParagraphIndex":1},
+                  {"sceneId":"scene_2","title":"陈升向妈妈撒娇","startParagraphIndex":2,"endParagraphIndex":2}
+                ]}
+            """.trimIndent(),
+            paragraphs = paragraphs
+        )
+
+        assertEquals(listOf("陈升与沈言卿在车棚", "陈升向妈妈撒娇"), scenes.map { it.title })
+    }
 
     @Test
     fun narratedQuoteReferencesAreNotHintedAsDialogue() {
@@ -115,6 +267,290 @@ class AiTtsStoryboardHelperTest {
             )
         )
     }
+
+    @Test
+    fun basicModeAcceptsStableExpressiveShapeAndClearsUnsupportedFields() {
+        val raw = """
+            {
+              "units": [
+                {
+                  "unitId": "u1",
+                  "roleType": "character",
+                  "characterName": "",
+                  "characterId": 0,
+                  "castRoleId": 0,
+                  "speakerGender": "unknown",
+                  "identityType": "guest",
+                  "nameType": "generic_label",
+                  "identityEvidence": "contextual",
+                  "genderEvidence": "unknown",
+                  "mergeCastRoleIds": [],
+                  "status": "unknown",
+                  "confidence": 0.8,
+                  "evidence": "场景路人开口",
+                  "performanceContext": ["不应透传"],
+                  "performanceInstruction": "不应透传",
+                  "styleConcepts": ["不应透传"],
+                  "emotion": "愤怒",
+                  "emotionIntensity": 0.9,
+                  "expressiveConfidence": 0.9
+                }
+              ],
+              "newCharacters": []
+            }
+        """.trimIndent()
+
+        val unit = AiTtsStoryboardHelper.parseAndValidateForTest(
+            raw = raw,
+            targetUnits = listOf(
+                AiTtsStoryboardHelper.CandidateUnit(
+                    unitId = "u1",
+                    roleHint = "character",
+                    textPreview = "你好。"
+                )
+            ),
+            capabilities = emptyList(),
+            allowNewCharacters = false
+        ).single()
+
+        assertEquals(emptyList<String>(), unit.performanceContext)
+        assertEquals("", unit.performanceInstruction)
+        assertEquals(emptyList<String>(), unit.styleConcepts)
+        assertEquals(null, unit.emotion)
+        assertEquals(null, unit.emotionIntensity)
+        assertEquals(null, unit.expressiveConfidence)
+    }
+
+    @Test
+    fun classifiedSpeakerIsKeptEvenWhenGenderNeedsLaterCorrection() {
+        assertTrue(
+            AiTtsStoryboardHelper.shouldKeepUnboundSpeaker(
+                displayName = "阿糯",
+                identityType = StoryboardSegment.IdentityType.STABLE_CANDIDATE,
+                nameType = StoryboardSegment.NameType.PROPER_NAME
+            )
+        )
+        assertTrue(
+            AiTtsStoryboardHelper.shouldKeepUnboundSpeaker(
+                displayName = "小道童",
+                identityType = StoryboardSegment.IdentityType.PENDING,
+                nameType = StoryboardSegment.NameType.GENERIC_LABEL
+            )
+        )
+        assertFalse(
+            AiTtsStoryboardHelper.shouldKeepUnboundSpeaker(
+                displayName = "",
+                identityType = StoryboardSegment.IdentityType.NONE,
+                nameType = StoryboardSegment.NameType.UNKNOWN
+            )
+        )
+    }
+
+    @Test
+    fun pendingAndGuestSpeakersRemainDialogueWithoutKnownGender() {
+        val pending = AiTtsStoryboardHelper.ModelUnitResult(
+            unitId = "pending",
+            roleType = "character",
+            characterName = "小道童",
+            speakerGender = StoryboardSegment.SpeakerGender.UNKNOWN,
+            identityType = StoryboardSegment.IdentityType.PENDING,
+            nameType = StoryboardSegment.NameType.GENERIC_LABEL,
+            status = "unknown"
+        )
+        val guest = pending.copy(
+            unitId = "guest",
+            characterName = "镇魔司下属",
+            speakerGender = StoryboardSegment.SpeakerGender.MALE,
+            identityType = StoryboardSegment.IdentityType.GUEST
+        )
+
+        assertEquals(StoryboardSegmentType.DIALOGUE, AiTtsStoryboardHelper.resolvedSegmentType(pending))
+        assertEquals(StoryboardSegmentType.DIALOGUE, AiTtsStoryboardHelper.resolvedSegmentType(guest))
+    }
+
+    @Test
+    fun explicitAdjacentAddressCorrectsUnknownSpeakerGender() {
+        val address = AiTtsStoryboardHelper.ModelUnitResult(
+            unitId = "u1",
+            roleType = "character",
+            characterName = "沈棠",
+            castRoleId = 7,
+            speakerGender = StoryboardSegment.SpeakerGender.FEMALE,
+            genderEvidence = StoryboardSegment.Evidence.EXPLICIT
+        )
+        val reply = AiTtsStoryboardHelper.ModelUnitResult(
+            unitId = "u2",
+            roleType = "character",
+            characterName = "小道童",
+            castRoleId = 3,
+            speakerGender = StoryboardSegment.SpeakerGender.UNKNOWN,
+            genderEvidence = StoryboardSegment.Evidence.UNKNOWN,
+            evidence = "提示语: 小道童高兴起来"
+        )
+        val units = listOf(
+            AiTtsStoryboardHelper.CandidateUnit(
+                unitId = "u1",
+                ranges = listOf(AiTtsStoryboardHelper.TextRange(paragraphIndex = 10)),
+                textPreview = "“小妹妹你以后会比任何人都漂亮。”"
+            ),
+            AiTtsStoryboardHelper.CandidateUnit(
+                unitId = "u2",
+                ranges = listOf(AiTtsStoryboardHelper.TextRange(paragraphIndex = 11)),
+                textPreview = "“真的吗？师父嫌我胖。”"
+            )
+        )
+
+        val result = AiTtsStoryboardHelper.applyAdjacentGenderEvidence(
+            assignments = listOf(address, reply),
+            targetUnits = units
+        ).last()
+
+        assertEquals(StoryboardSegment.SpeakerGender.FEMALE, result.speakerGender)
+        assertEquals(StoryboardSegment.Evidence.EXPLICIT, result.genderEvidence)
+        assertTrue(result.evidence.contains("小妹妹"))
+    }
+
+    @Test
+    fun properNameCanNotRemainGuestIdentity() {
+        assertEquals(
+            StoryboardSegment.IdentityType.STABLE_CANDIDATE,
+            AiTtsStoryboardHelper.normalizedUnboundIdentityType(
+                identityType = StoryboardSegment.IdentityType.GUEST,
+                nameType = StoryboardSegment.NameType.PROPER_NAME
+            )
+        )
+        assertEquals(
+            StoryboardSegment.IdentityType.GUEST,
+            AiTtsStoryboardHelper.normalizedUnboundIdentityType(
+                identityType = StoryboardSegment.IdentityType.GUEST,
+                nameType = StoryboardSegment.NameType.GENERIC_LABEL
+            )
+        )
+    }
+
+    @Test
+    fun explicitNicknameOwnerIsRecoveredFromNarrationWithoutSpokenUnit() {
+        val mappings = AiTtsStoryboardHelper.findExplicitAliasMappings(
+            paragraphs = listOf(
+                AiTtsStoryboardHelper.ContextParagraph(0, "QQ上有一个添加信息，打开一看，青青子衿是谁？"),
+                AiTtsStoryboardHelper.ContextParagraph(1, "来源是群添加。"),
+                AiTtsStoryboardHelper.ContextParagraph(2, "到同学群看了下，哦，是沈言卿。")
+            ),
+            canonicalNames = listOf("陈升", "沈言卿", "赵文博")
+        )
+
+        assertEquals("沈言卿", mappings["青青子衿"])
+    }
+
+    @Test
+    fun explicitNicknameAssignmentKeepsAliasAndCreatesFormalIdentityLink() {
+        val character = BookCharacter(id = 8L, name = "沈言卿")
+        val assignment = AiTtsStoryboardHelper.parseAndValidateForTest(
+            raw = explicitAliasResponse(characterId = 8L),
+            targetUnits = listOf(
+                AiTtsStoryboardHelper.CandidateUnit(unitId = "u1", textPreview = "你好。")
+            ),
+            capabilities = emptyList(),
+            allowNewCharacters = false,
+            knownCharacters = listOf(character)
+        ).single()
+
+        assertEquals("青青子衿", assignment.characterName)
+        val link = AiTtsStoryboardHelper.identityLinksFromAssignments(
+            assignments = listOf(assignment),
+            characters = listOf(character),
+            castRoles = emptyList()
+        ).single()
+        assertEquals("青青子衿", link.aliasName)
+        assertEquals(8L, link.characterId)
+        assertEquals(null, link.castRoleId)
+    }
+
+    @Test
+    fun explicitNicknameAssignmentCreatesTemporaryRoleIdentityLink() {
+        val role = BookTtsCastRole(id = 6L, name = "沈言卿")
+        val link = AiTtsStoryboardHelper.identityLinksFromAssignments(
+            assignments = listOf(
+                AiTtsStoryboardHelper.ModelUnitResult(
+                    unitId = "u1",
+                    roleType = "character",
+                    characterName = "青青子衿",
+                    castRoleId = 6L,
+                    identityType = StoryboardSegment.IdentityType.CAST_ROLE,
+                    nameType = StoryboardSegment.NameType.ALIAS,
+                    identityEvidence = StoryboardSegment.Evidence.EXPLICIT,
+                    confidence = 0.95f,
+                    evidence = "正文明确说明青青子衿是沈言卿"
+                )
+            ),
+            characters = emptyList(),
+            castRoles = listOf(role)
+        ).single()
+
+        assertEquals("青青子衿", link.aliasName)
+        assertEquals(null, link.characterId)
+        assertEquals(6L, link.castRoleId)
+    }
+
+    @Test
+    fun contextualNicknameAssignmentDoesNotCreateIdentityLink() {
+        val links = AiTtsStoryboardHelper.identityLinksFromAssignments(
+            assignments = listOf(
+                AiTtsStoryboardHelper.ModelUnitResult(
+                    characterName = "青青子衿",
+                    castRoleId = 6L,
+                    nameType = StoryboardSegment.NameType.ALIAS,
+                    identityEvidence = StoryboardSegment.Evidence.CONTEXTUAL,
+                    confidence = 0.95f
+                )
+            ),
+            characters = emptyList(),
+            castRoles = listOf(BookTtsCastRole(id = 6L, name = "沈言卿"))
+        )
+
+        assertTrue(links.isEmpty())
+    }
+
+    @Test
+    fun nicknameQuestionWithoutExplicitOwnerDoesNotGuessIdentity() {
+        val mappings = AiTtsStoryboardHelper.findExplicitAliasMappings(
+            paragraphs = listOf(
+                AiTtsStoryboardHelper.ContextParagraph(0, "青青子衿是谁？群里没人回答。"),
+                AiTtsStoryboardHelper.ContextParagraph(1, "沈言卿稍后也上线了。")
+            ),
+            canonicalNames = listOf("沈言卿")
+        )
+
+        assertTrue(mappings.isEmpty())
+    }
+
+    private fun explicitAliasResponse(characterId: Long): String = """
+        {
+          "units": [{
+            "unitId": "u1",
+            "roleType": "character",
+            "characterName": "青青子衿",
+            "characterId": $characterId,
+            "castRoleId": 0,
+            "speakerGender": "female",
+            "identityType": "formal_character",
+            "nameType": "alias",
+            "identityEvidence": "explicit",
+            "genderEvidence": "unknown",
+            "mergeCastRoleIds": [],
+            "status": "assigned",
+            "confidence": 0.95,
+            "evidence": "正文明确说明青青子衿是沈言卿",
+            "performanceContext": [],
+            "performanceInstruction": "",
+            "styleConcepts": [],
+            "emotion": null,
+            "emotionIntensity": null,
+            "expressiveConfidence": null
+          }],
+          "newCharacters": []
+        }
+    """.trimIndent()
 
     private fun quoteHint(text: String): String {
         val start = text.indexOf('“')

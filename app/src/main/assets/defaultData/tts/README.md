@@ -35,6 +35,16 @@ App 主动调用的协议函数只有：
 
 用户在试听时选择风格后，App 会在传给 `synthesize()` 的 `voice` 对象里附加 `style_id`、`style_value`、`style_tag` 和 `selected_style`。脚本需要合成风格参数时优先读取 `voice.style_value` 或 `voice.selected_style.value`；未选择时这些字段为空。
 
+脚本只有在确实读取并转换相应字段时，才应通过 `@capabilities` 声明多人朗读能力。当前支持：
+
+- `scene_context`：读取 `ctx.synthesis.scene`。
+- `performance_instruction`：读取 `ctx.synthesis.performance_instruction`，并隐含 `scene_context`。
+- `style_tags`：读取 `ctx.synthesis.expressive.style_concepts`。
+- `emotion`：读取 `ctx.synthesis.expressive.emotion`。
+- `emotion_intensity`：读取 `ctx.synthesis.expressive.intensity`，并隐含 `emotion`。
+
+这些字段是供应商无关的中间语义，脚本负责映射成服务商的 style ID、标签或自然语言指导。用户手动选择的音色风格应优先于自动映射；不支持的字段不要声明，也不要直接透传给上游。
+
 注意：`java.ajax()` 等 Java 侧能力返回到 Rhino 后，不要依赖 `typeof value === "string"` 判断。需要解析 JSON 时建议先写 `JSON.parse(String(value || "{}"))`。
 
 `synthesize()` 可以返回字符串 URL，也可以返回对象：

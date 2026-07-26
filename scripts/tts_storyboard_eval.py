@@ -201,7 +201,12 @@ def parse_args() -> argparse.Namespace:
         "--scene-pass",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Run a first model pass that supplies explicit full-scene boundaries to performance mode.",
+        help="Run the engine-independent natural-scene boundary and title pass first.",
+    )
+    parser.add_argument(
+        "--scene-only",
+        action="store_true",
+        help="Only generate and validate natural scenes; skip unit attribution.",
     )
     parser.add_argument(
         "--engine-capability",
@@ -443,21 +448,26 @@ def validate_scene_result(payload: dict[str, Any], result: dict[str, Any]) -> li
     for index, item in enumerate(result["scenes"], 1):
         if not isinstance(item, dict) or set(item) != {
             "sceneId",
+            "title",
             "startParagraphIndex",
             "endParagraphIndex",
         }:
             raise ValueError(f"scene {index} has invalid fields")
         scene_id = str(item.get("sceneId") or "").strip()
+        title = " ".join(str(item.get("title") or "").split())
         start = item.get("startParagraphIndex")
         end = item.get("endParagraphIndex")
         if not scene_id or scene_id in scene_ids:
             raise ValueError(f"scene {index} has invalid sceneId")
+        if not 2 <= len(title) <= 30:
+            raise ValueError(f"scene {scene_id} has invalid title")
         if not isinstance(start, int) or not isinstance(end, int) or start > end:
             raise ValueError(f"scene {scene_id} has invalid range")
         scene_ids.add(scene_id)
         normalized.append(
             {
                 "sceneId": scene_id,
+                "title": title,
                 "startParagraphIndex": start,
                 "endParagraphIndex": end,
             }
@@ -1271,8 +1281,7 @@ def main() -> int:
     summary: list[dict[str, Any]] = []
     for chapter, payload in cases:
         if (
-            args.scene_pass
-            and CAP_SCENE_CONTEXT in payload_storyboard_capabilities(payload)
+            (args.scene_pass or args.scene_only)
             and payload.get("contextParagraphs")
         ):
             print(f"request scene boundaries chapter {chapter.index}: {chapter.title}", flush=True)
@@ -1322,6 +1331,17 @@ def main() -> int:
                 )
                 summary.append(error_payload)
                 print(json.dumps(error_payload, ensure_ascii=False), flush=True)
+                continue
+            if args.scene_only:
+                summary.append(
+                    {
+                        "chapter": chapter.index,
+                        "title": chapter.title,
+                        "scene_count": len(scenes),
+                        "scenes": scenes,
+                    }
+                )
+                time.sleep(args.sleep)
                 continue
         print(f"request chapter {chapter.index}: {chapter.title}", flush=True)
         (out_dir / f"chapter_{chapter.index:03d}.payload.json").write_text(

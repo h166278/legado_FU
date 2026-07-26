@@ -1,6 +1,6 @@
 // @name Xiaomi MiMo V2.5 TTS
 // @schema 1
-// @version 1.0.0
+// @version 1.0.1
 // @uuid mimo_v25_tts
 // @author Legado
 // @url https://api.xiaomimimo.com/v1
@@ -11,6 +11,7 @@
 // @defaultVolume 50
 // @defaultPitch 50
 // @sampleText 前不见古人，后不见来者。念天地之悠悠，独怆然而涕下。
+// @capabilities style_tags,emotion,emotion_intensity
 // @description 小米 MiMo V2.5 预置音色 TTS 模板。当前按非流式 wav/base64 接入，不处理 stream=true 的 PCM 增量音频。
 
 var MIMO_STYLE_OPTIONS = [
@@ -143,10 +144,34 @@ function speedInstruction(params) {
     return "";
 }
 
-function buildUserInstruction(voice, params, options) {
+function expressiveInstruction(ctx) {
+    var expressive = ctx && ctx.synthesis && ctx.synthesis.expressive
+        ? ctx.synthesis.expressive
+        : null;
+    if (!expressive) {
+        return "";
+    }
+    var parts = [];
+    var concepts = expressive.style_concepts || [];
+    if (concepts.length) {
+        parts.push("本句表达风格：" + concepts.join("、") + "。");
+    }
+    if (expressive.emotion) {
+        var emotionText = "本句情绪：" + String(expressive.emotion);
+        var intensity = Number(expressive.intensity);
+        if (expressive.intensity != null && !isNaN(intensity)) {
+            emotionText += intensity >= 0.67 ? "，强烈" : (intensity >= 0.34 ? "，中等" : "，轻微");
+        }
+        parts.push(emotionText + "。");
+    }
+    return parts.join("\n");
+}
+
+function buildUserInstruction(voice, params, options, ctx) {
     var parts = [];
     var styleInstruction = selectedStyleInstruction(voice);
     var rateInstruction = speedInstruction(params);
+    var dynamicInstruction = expressiveInstruction(ctx);
     var profile = voice && voice.extra && voice.extra.profile ? String(voice.extra.profile) : "";
     if (profile) {
         parts.push("当前基础音色画像：" + profile + "。");
@@ -156,6 +181,9 @@ function buildUserInstruction(voice, params, options) {
     }
     if (rateInstruction) {
         parts.push(rateInstruction);
+    }
+    if (dynamicInstruction) {
+        parts.push(dynamicInstruction);
     }
     return parts.join("\n");
 }
@@ -175,7 +203,7 @@ function synthesize(text, voice, params, options, ctx) {
     }
     var voiceId = voice && voice.id ? String(voice.id) : "白桦";
     var messages = [];
-    var userInstruction = buildUserInstruction(voice, params, options);
+    var userInstruction = buildUserInstruction(voice, params, options, ctx);
     if (userInstruction) {
         messages.push({
             role: "user",

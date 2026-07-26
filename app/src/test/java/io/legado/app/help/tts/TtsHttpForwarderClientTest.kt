@@ -347,7 +347,10 @@ class TtsHttpForwarderClientTest {
         assertEquals(false, engine.enabled)
         assertEquals("audio/mpeg", engine.contentType)
         assertTrue(engine.supportsVoiceFetch())
-        assertTrue(engine.script.contains("// @version 1.0.5"))
+        assertTrue(engine.script.contains("// @version 1.0.6"))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.STYLE_TAGS))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.EMOTION))
+        assertFalse(engine.supportsCapability(TtsEngineCapability.EMOTION_INTENSITY))
         assertEquals("前不见古人，后不见来者。念天地之悠悠，独怆然而涕下。", engine.sampleText)
         assertTrue(engine.script.contains("STYLE_NAMES"))
         assertTrue(engine.script.contains("profile: \"少女感-温柔旁白\""))
@@ -355,12 +358,60 @@ class TtsHttpForwarderClientTest {
         assertTrue(engine.script.contains("categories: [\"News\", \"Novel\"]"))
         assertTrue(engine.script.contains("selected_style"))
         assertTrue(engine.script.contains("style_value"))
+        assertTrue(engine.script.contains("function automaticStyleValue(voice, ctx)"))
+        assertTrue(engine.script.contains("ctx.synthesis.expressive"))
         assertFalse(engine.script.contains("0.5s"))
         assertFalse(engine.script.contains("0.7s"))
         assertFalse(engine.script.contains("0.9s"))
         assertFalse(engine.script.contains("sample_text: \"前不见古人，后不见来者。念天地之悠悠，独怆然而涕下。\""))
         assertTrue(engine.script.contains("zh-CN-XiaoxiaoNeural"))
         assertTrue(engine.script.contains("function synthesize(text, voice, params, options, ctx)"))
+    }
+
+    @Test
+    fun mimoBuiltInEngineConsumesExpressiveFieldsAsInstructions() {
+        val engine = scriptEngineFromAssetFile("mimo_v25_tts.js")
+
+        assertEquals(TtsEngineStore.MIMO_V25_TTS_ID, engine.id)
+        assertTrue(engine.script.contains("// @version 1.0.1"))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.STYLE_TAGS))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.EMOTION))
+        assertTrue(engine.supportsCapability(TtsEngineCapability.EMOTION_INTENSITY))
+        assertFalse(engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertFalse(engine.supportsCapability(TtsEngineCapability.PERFORMANCE_INSTRUCTION))
+        assertTrue(engine.script.contains("function expressiveInstruction(ctx)"))
+        assertTrue(engine.script.contains("expressive.style_concepts"))
+        assertTrue(engine.script.contains("expressive.emotion"))
+        assertTrue(engine.script.contains("expressive.intensity"))
+        assertTrue(engine.script.contains("buildUserInstruction(voice, params, options, ctx)"))
+    }
+
+    @Test
+    fun expressiveBuiltInUpgradeRefreshesScriptAndCapabilitiesTogether() {
+        val nextEdge = scriptEngineFromAssetFile("next_edge_proxy.js")
+        val savedNextEdge = TtsEngineStore.scriptEngineFromScript(
+            nextEdge.script
+                .replace("// @version 1.0.6", "// @version 1.0.5")
+                .replace(Regex("// @capabilities style_tags,emotion\\r?\\n"), "")
+        )!!
+        val updatedNextEdge = TtsEngineStore.updateDefaultScriptForTest(savedNextEdge, nextEdge)
+
+        assertEquals(nextEdge.script, updatedNextEdge.script)
+        assertEquals(nextEdge.capabilities, updatedNextEdge.capabilities)
+
+        val mimo = scriptEngineFromAssetFile("mimo_v25_tts.js")
+        val savedMimo = TtsEngineStore.scriptEngineFromScript(
+            mimo.script
+                .replace("// @version 1.0.1", "// @version 1.0.0")
+                .replace(
+                    Regex("// @capabilities style_tags,emotion,emotion_intensity\\r?\\n"),
+                    ""
+                )
+        )!!
+        val updatedMimo = TtsEngineStore.updateDefaultScriptForTest(savedMimo, mimo)
+
+        assertEquals(mimo.script, updatedMimo.script)
+        assertEquals(mimo.capabilities, updatedMimo.capabilities)
     }
 
     @Test

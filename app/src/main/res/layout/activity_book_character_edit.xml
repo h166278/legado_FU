@@ -17,130 +17,42 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:clipToPadding="false"
         android:fillViewport="true"
         android:overScrollMode="never">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/ng_page_padding"
+            android:layout_marginTop="@dimen/ng_space_m"
+            android:layout_marginEnd="@dimen/ng_page_padding"
+            android:layout_marginBottom="@dimen/ng_space_l"
+            android:background="@drawable/ng_bg_settings_item"
             android:orientation="vertical"
-            android:padding="@dimen/ng_page_padding">
+            android:padding="18dp">
 
-            <EditText
-                android:id="@+id/edit_name"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:hint="@string/character_name"
-                android:inputType="text"
-                android:singleLine="true" />
-
-            <EditText
-                android:id="@+id/edit_aliases"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:hint="@string/character_aliases"
-                android:inputType="text"
-                android:singleLine="true" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="72dp"
-                    android:layout_height="match_parent"
-                    android:gravity="center_vertical"
-                    android:text="@string/character_gender"
-                    android:textColor="@color/primaryText"
-                    android:textSize="16sp" />
-
-                <Spinner
-                    android:id="@+id/spinner_gender"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1" />
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="72dp"
-                    android:layout_height="match_parent"
-                    android:gravity="center_vertical"
-                    android:text="@string/character_role"
-                    android:textColor="@color/primaryText"
-                    android:textSize="16sp" />
-
-                <Spinner
-                    android:id="@+id/spinner_role"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1" />
-
-            </LinearLayout>
-
-            <EditText
-                android:id="@+id/edit_intro"
-                android:layout_width="match_parent"
-                android:layout_height="120dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:gravity="top"
-                android:hint="@string/character_intro"
-                android:inputType="textMultiLine"
-                android:minLines="4" />
-
-            <EditText
-                android:id="@+id/edit_avatar_uri"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:hint="@string/character_avatar_uri"
-                android:inputType="textUri"
-                android:singleLine="true" />
-
-            <EditText
-                android:id="@+id/edit_portrait_uri"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:hint="@string/character_portrait_uri"
-                android:inputType="textUri"
-                android:singleLine="true" />
-
-            <EditText
-                android:id="@+id/edit_image_prompt"
-                android:layout_width="match_parent"
-                android:layout_height="96dp"
-                android:layout_marginTop="@dimen/ng_space_m"
-                android:gravity="top"
-                android:hint="@string/character_image_prompt"
-                android:inputType="textMultiLine"
-                android:minLines="3" />
+            <include
+                android:id="@+id/form"
+                layout="@layout/view_book_character_form" />
 
         </LinearLayout>
 
     </ScrollView>
 
-    <io.legado.app.ui.widget.text.AccentBgTextView
-        android:id="@+id/tv_save"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginStart="@dimen/ng_page_padding"
-        android:layout_marginEnd="@dimen/ng_page_padding"
-        android:layout_marginBottom="@dimen/ng_space_m"
-        android:gravity="center"
-        android:text="@string/save"
-        android:textSize="16sp"
-        app:radius="@dimen/ng_radius_m" />
+    <LinearLayout style="@style/Ng.ActionBar">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <io.legado.app.ui.widget.text.AccentBgTextView
+            android:id="@+id/tv_save"
+            style="@style/Ng.SmallButton.Primary"
+            android:minWidth="112dp"
+            android:text="@string/save" />
+
+    </LinearLayout>
 
 </LinearLayout>

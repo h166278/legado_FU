@@ -29,6 +29,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.ReadAloudAudioTask
+import io.legado.app.help.tts.ReadAloudPlaylistProductionState
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsPlayerFactory
 import io.legado.app.help.tts.TtsSynthesisContext
@@ -58,8 +59,11 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -94,12 +98,14 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var legacySpeechRate: Int = AppConfig.speechRatePlay + 5
     private var downloadTask: Coroutine<*>? = null
     private var playIndexJob: Job? = null
+    private var backgroundStoryboardPreloadJob: Job? = null
     private val downloadErrorNo = AtomicInteger()
     private var playErrorNo = 0
     private var ttsRouter: ReadAloudTtsRouter? = null
     private var speakItems: List<SpeakItem> = emptyList()
     private var speakItemIndex = 0
     private val downloadTaskActiveLock = Mutex()
+    private val playlistProductionState = ReadAloudPlaylistProductionState()
 
     override fun onCreate() {
         super.onCreate()
@@ -110,6 +116,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun onDestroy() {
         super.onDestroy()
         downloadTask?.cancel()
+        backgroundStoryboardPreloadJob?.cancel()
         exoPlayer.release()
         Coroutine.async {
             removeCacheFile()
@@ -129,6 +136,13 @@ class HttpReadAloudService : BaseReadAloudService(),
                     return
                 }
             }
+            updatePreparationStage(
+                if (AppConfig.readAloudMultiRole) {
+                    BaseReadAloudService.PREPARATION_STORYBOARD
+                } else {
+                    BaseReadAloudService.PREPARATION_AUDIO
+                }
+            )
             super.play()
             postEvent(EventBus.ALOUD_STATE, Status.LOADING)
             downloadAndPlayAudios()
@@ -136,6 +150,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     override fun playStop() {
+        updatePreparationStage(BaseReadAloudService.PREPARATION_NONE)
         exoPlayer.stop()
         playIndexJob?.cancel()
         speakItems = emptyList()
@@ -184,21 +199,52 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun downloadAndPlayAudios() {
+        if (!pause) {
+            updatePreparationStage(
+                if (AppConfig.readAloudMultiRole) {
+                    BaseReadAloudService.PREPARATION_STORYBOARD
+                } else {
+                    BaseReadAloudService.PREPARATION_AUDIO
+                }
+            )
+            postEvent(EventBus.ALOUD_STATE, Status.LOADING)
+        }
         exoPlayer.clearMediaItems()
         downloadTask?.cancel()
+        val productionToken = playlistProductionState.begin()
         downloadTask = execute {
             downloadTaskActiveLock.withLock {
                 ensureActive()
-                ttsRouter = ReadAloudTtsRouter.createForCurrentBook()
                 val httpTts = ReadAloud.httpTTS
                 val engineV2 = ReadAloud.httpTtsEngineV2
                 if (httpTts == null && engineV2 == null) {
                     throw NoStackTraceException("tts is null")
                 }
-                val storyboard = loadCurrentAiStoryboard()
+                val storyboard = try {
+                    loadCurrentAiStoryboard()
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    playlistProductionState.cancel(productionToken)
+                    AppLog.put(
+                        "AI听书分镜生成失败，朗读已暂停\n${error.localizedMessage}",
+                        error,
+                        true
+                    )
+                    pauseReadAloud()
+                    return@execute
+                }
+                if (!pause) {
+                    updatePreparationStage(BaseReadAloudService.PREPARATION_AUDIO)
+                    postEvent(EventBus.ALOUD_STATE, Status.LOADING)
+                }
+                // 分镜准备可能按本书开关发现临时角色或自动绑定发音人，完成后再创建路由快照。
+                ttsRouter = ReadAloudTtsRouter.createForCurrentBook()
+                val nextStoryboardTask = startNextStoryboardPreload()
+                scheduleAdditionalStoryboardPreloads(nextStoryboardTask)
                 speakItems = buildSpeakItems(storyboard)
                 speakItemIndex = 0
                 if (speakItems.isEmpty()) {
+                    playlistProductionState.cancel(productionToken)
                     nextChapter()
                     return@execute
                 }
@@ -209,26 +255,46 @@ class HttpReadAloudService : BaseReadAloudService(),
                         items = speakItems
                     ) { file ->
                         withContext(Main) {
+                            val nextIndex = exoPlayer.mediaItemCount
                             exoPlayer.addMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+                            if (playlistProductionState.onItemAppended(productionToken)) {
+                                exoPlayer.seekTo(nextIndex, 0L)
+                                exoPlayer.prepare()
+                            }
+                        }
+                    }
+                    withContext(Main) {
+                        if (playlistProductionState.finish(productionToken)) {
+                            finishPlaybackBatch()
                         }
                     }
                 } catch (e: Throwable) {
+                    playlistProductionState.cancel(productionToken)
                     if (e !is CancellationException) {
                         AppLog.put("朗读音频合成失败\n${e.localizedMessage}", e, true)
                         pauseReadAloud()
                     }
                     return@execute
                 }
-                preDownloadAudios(httpTts, engineV2)
+                val nextStoryboard = nextStoryboardTask?.await()
+                if (nextStoryboard != null) {
+                    preDownloadAudios(httpTts, engineV2, nextStoryboard)
+                }
             }
         }.onError {
+            playlistProductionState.cancel(productionToken)
             AppLog.put("朗读下载出错\n${it.localizedMessage}", it, true)
         }
     }
 
-    private suspend fun preDownloadAudios(httpTts: HttpTTS?, engineV2: TtsEngineSetting?) {
+    private suspend fun preDownloadAudios(
+        httpTts: HttpTTS?,
+        engineV2: TtsEngineSetting?,
+        storyboard: ChapterStoryboard?
+    ) {
         val textChapter = ReadBook.nextTextChapter ?: return
-        val storyboard = preGenerateAiStoryboards()
+        // 预生成下一章也可能新增角色或绑定，预下载应使用更新后的路由。
+        ttsRouter = ReadAloudTtsRouter.createForCurrentBook()
         val contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0, 1)
             .splitToSequence("\n")
             .filter { it.isNotEmpty() }
@@ -271,19 +337,70 @@ class HttpReadAloudService : BaseReadAloudService(),
                 maxConcurrency = routedEngine?.effectiveMaxConcurrency(globalConcurrency)
                     ?: globalConcurrency,
                 prepare = {
-                    prepareSpeakFile(
-                        httpTts,
-                        engineV2,
-                        item,
-                        route,
-                        fileName,
-                        synthesisContext,
-                        synthesisText
+                    prepareSpeakFileWithFallback(
+                        httpTts = httpTts,
+                        engineV2 = engineV2,
+                        item = item,
+                        primaryRoute = route,
+                        cacheChapter = cacheChapter,
+                        synthesisText = synthesisText
                     )
                 }
             )
         }
         prepareReadAloudAudioTasks(tasks, globalConcurrency, onPrepared)
+    }
+
+    private suspend fun prepareSpeakFileWithFallback(
+        httpTts: HttpTTS?,
+        engineV2: TtsEngineSetting?,
+        item: SpeakItem,
+        primaryRoute: ReadAloudTtsRouter.Route?,
+        cacheChapter: TextChapter?,
+        synthesisText: String
+    ): File {
+        val routes = buildList<ReadAloudTtsRouter.Route?> {
+            add(primaryRoute)
+            if (engineV2 != null) {
+                addAll(ttsRouter?.fallbackRoutes(item.segment, engineV2, primaryRoute).orEmpty())
+            }
+        }.distinctBy { route ->
+            listOf(route?.engine?.id, route?.voiceId, route?.styleId)
+        }
+        var lastError: Throwable? = null
+        routes.forEachIndexed { index, route ->
+            val routedEngine = route?.engine ?: engineV2
+            val synthesisContext = item.synthesisContext?.forEngineCapabilities(routedEngine)
+            val fileName = md5SpeakFileName(
+                content = synthesisText,
+                route = route,
+                textChapter = cacheChapter ?: textChapter,
+                synthesisContext = synthesisContext
+            )
+            try {
+                return prepareSpeakFile(
+                    httpTts = httpTts,
+                    engineV2 = engineV2,
+                    item = item,
+                    route = route,
+                    fileName = fileName,
+                    synthesisContext = synthesisContext,
+                    synthesisText = synthesisText
+                )
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                lastError = error
+                val fallback = routes.getOrNull(index + 1)
+                if (fallback != null) {
+                    AppLog.put(
+                        "TTS片段合成失败，改用${fallback.kind.displayName()}继续朗读" +
+                            "\n片段：${item.text.take(80)}\n${error.localizedMessage}",
+                        error
+                    )
+                }
+            }
+        }
+        throw lastError ?: NoStackTraceException("TTS片段无可用合成路径")
     }
 
     private suspend fun prepareSpeakFile(
@@ -460,24 +577,16 @@ class HttpReadAloudService : BaseReadAloudService(),
             .takeIf { it.isNotBlank() } ?: return null
         val workKey = BookCharacterProfile.workKey(book.name, book.author)
         val characters = appDb.bookCharacterDao.getCharacters(workKey)
-        return runCatching {
-            AiTtsStoryboardHelper.getOrGenerate(
-                book = book,
-                chapterIndex = ReadBook.durChapterIndex,
-                chapterTitle = chapter.title,
-                content = content,
-                characters = characters
-            )
-        }.getOrElse { error ->
-            if (error is CancellationException) {
-                throw error
-            }
-            AppLog.put("AI听书分镜生成失败，已回退旁白朗读\n${error.localizedMessage}", error)
-            null
-        }
+        return AiTtsStoryboardHelper.getOrGenerate(
+            book = book,
+            chapterIndex = ReadBook.durChapterIndex,
+            chapterTitle = chapter.title,
+            content = content,
+            characters = characters
+        )
     }
 
-    private suspend fun preGenerateAiStoryboards(): ChapterStoryboard? {
+    private fun startNextStoryboardPreload(): Deferred<ChapterStoryboard?>? {
         if (!AppConfig.readAloudMultiRole) {
             return null
         }
@@ -485,35 +594,62 @@ class HttpReadAloudService : BaseReadAloudService(),
         if (preloadCount <= 0) {
             return null
         }
-        val book = ReadBook.book ?: return null
-        val workKey = BookCharacterProfile.workKey(book.name, book.author)
-        val characters = appDb.bookCharacterDao.getCharacters(workKey)
-        var nextStoryboard: ChapterStoryboard? = null
+        val chapterIndex = ReadBook.durChapterIndex + 1
+        if (chapterIndex !in 0 until ReadBook.chapterSize) {
+            return null
+        }
+        return lifecycleScope.async(IO) {
+            preGenerateAiStoryboard(chapterIndex)
+        }
+    }
+
+    private fun scheduleAdditionalStoryboardPreloads(
+        nextStoryboardTask: Deferred<ChapterStoryboard?>?
+    ) {
+        if (!AppConfig.readAloudMultiRole || backgroundStoryboardPreloadJob?.isActive == true) {
+            return
+        }
+        val preloadCount = AiConfig.readAloudStoryboardPreloadCount
+        if (preloadCount <= 1) {
+            return
+        }
+        val firstChapterIndex = ReadBook.durChapterIndex + 2
         val maxChapterIndex = minOf(
             ReadBook.durChapterIndex + preloadCount,
             ReadBook.chapterSize - 1
         )
-        for (chapterIndex in (ReadBook.durChapterIndex + 1)..maxChapterIndex) {
-            currentCoroutineContext().ensureActive()
-            val chapter = loadStoryboardTextChapter(chapterIndex) ?: continue
-            val content = AiTtsStoryboardHelper.readAloudContentFromChapter(chapter, readAloudByPage)
-                .takeIf { it.isNotBlank() } ?: continue
-            val storyboard = runCatching {
-                AiTtsStoryboardHelper.getOrGenerate(
-                    book = book,
-                    chapterIndex = chapterIndex,
-                    chapterTitle = chapter.title,
-                    content = content,
-                    characters = characters
-                )
-            }.onFailure {
-                AppLog.put("AI听书分镜预处理失败，章节 $chapterIndex\n${it.localizedMessage}", it)
-            }.getOrNull()
-            if (chapterIndex == ReadBook.durChapterIndex + 1) {
-                nextStoryboard = storyboard
+        if (firstChapterIndex > maxChapterIndex) {
+            return
+        }
+        backgroundStoryboardPreloadJob = lifecycleScope.launch(IO) {
+            if (nextStoryboardTask?.await() == null) return@launch
+            for (chapterIndex in firstChapterIndex..maxChapterIndex) {
+                currentCoroutineContext().ensureActive()
+                preGenerateAiStoryboard(chapterIndex)
             }
         }
-        return nextStoryboard
+    }
+
+    private suspend fun preGenerateAiStoryboard(chapterIndex: Int): ChapterStoryboard? {
+        val book = ReadBook.book ?: return null
+        val chapter = loadStoryboardTextChapter(chapterIndex) ?: return null
+        val content = AiTtsStoryboardHelper.readAloudContentFromChapter(chapter, readAloudByPage)
+            .takeIf { it.isNotBlank() } ?: return null
+        val workKey = BookCharacterProfile.workKey(book.name, book.author)
+        val characters = appDb.bookCharacterDao.getCharacters(workKey)
+        return runCatching {
+            AiTtsStoryboardHelper.getOrGenerate(
+                book = book,
+                chapterIndex = chapterIndex,
+                chapterTitle = chapter.title,
+                content = content,
+                characters = characters
+            )
+        }.onFailure {
+            if (it !is CancellationException) {
+                AppLog.put("AI听书分镜预处理失败，章节 $chapterIndex\n${it.localizedMessage}", it)
+            }
+        }.getOrNull()
     }
 
     private suspend fun loadStoryboardTextChapter(chapterIndex: Int): TextChapter? {
@@ -676,6 +812,14 @@ class HttpReadAloudService : BaseReadAloudService(),
     ): ReadAloudTtsRouter.Route? {
         val baseEngine = engineV2 ?: return null
         return ttsRouter?.route(segment, baseEngine)
+    }
+
+    private fun ReadAloudTtsRouter.RouteKind.displayName(): String = when (this) {
+        ReadAloudTtsRouter.RouteKind.DIALOGUE_FALLBACK -> "对白兜底"
+        ReadAloudTtsRouter.RouteKind.NARRATOR -> "旁白"
+        ReadAloudTtsRouter.RouteKind.ENGINE_DEFAULT -> "默认声音"
+        ReadAloudTtsRouter.RouteKind.CHARACTER,
+        ReadAloudTtsRouter.RouteKind.CAST_ROLE -> "角色声音"
     }
 
     private fun md5SpeakFileName(
@@ -868,6 +1012,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
             Player.STATE_READY -> {
                 // 准备好
+                updatePreparationStage(BaseReadAloudService.PREPARATION_NONE)
                 if (pause) return
                 exoPlayer.play()
                 upPlayPos()
@@ -875,13 +1020,18 @@ class HttpReadAloudService : BaseReadAloudService(),
             }
 
             Player.STATE_ENDED -> {
-                // 结束
-                playErrorNo = 0
-                updateNextPos()
-                exoPlayer.stop()
-                exoPlayer.clearMediaItems()
+                if (playlistProductionState.onPlaybackEnded()) {
+                    finishPlaybackBatch()
+                }
             }
         }
+    }
+
+    private fun finishPlaybackBatch() {
+        playErrorNo = 0
+        updateNextPos()
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {

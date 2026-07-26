@@ -401,13 +401,19 @@ object AiConfig {
 
     fun readAloudStoryboardParams(
         targetUnitCount: Int,
-        supportsReasoning: Boolean
+        supportsReasoning: Boolean,
+        largeUnitOutput: Boolean = true
     ): AiTextParams {
         val level = readAloudStoryboardReasoningLevel
             .takeIf { supportsReasoning }
             ?: AiReasoningLevel.OFF
         return AiTextParams(
             temperature = 0f,
+            maxTokens = when {
+                !largeUnitOutput -> 4_096
+                targetUnitCount > 40 -> 16_384
+                else -> 8_192
+            },
             enableThinking = level != AiReasoningLevel.OFF && level != AiReasoningLevel.AUTO,
             disableThinking = level == AiReasoningLevel.OFF,
             reasoningEffort = level.reasoningEffort,

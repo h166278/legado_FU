@@ -95,9 +95,25 @@ abstract class BaseReadAloudService : BaseService(),
         @Volatile
         private var actualPlaybackConfirmed = false
 
+        @Volatile
+        var preparationStage: Int = PREPARATION_NONE
+            private set
+
         fun isPlay(): Boolean {
             return isRun && (actualPlaybackConfirmed || !pause)
         }
+
+        fun isPreparing(): Boolean = isRun && preparationStage != PREPARATION_NONE
+
+        fun preparationMessage(): String = when (preparationStage) {
+            PREPARATION_STORYBOARD -> "正在生成分镜…"
+            PREPARATION_AUDIO -> "正在准备朗读…"
+            else -> ""
+        }
+
+        const val PREPARATION_NONE = 0
+        const val PREPARATION_STORYBOARD = 1
+        const val PREPARATION_AUDIO = 2
 
         private const val TAG = "BaseReadAloudService"
 
@@ -157,6 +173,7 @@ abstract class BaseReadAloudService : BaseService(),
         super.onCreate()
         playbackStateOwner = this
         actualPlaybackConfirmed = false
+        preparationStage = PREPARATION_NONE
         isRun = true
         pause = false
         observeLiveBus()
@@ -210,6 +227,7 @@ abstract class BaseReadAloudService : BaseService(),
             isRun = false
             pause = true
             actualPlaybackConfirmed = false
+            preparationStage = PREPARATION_NONE
             playbackStateOwner = null
             activeBookUrl = null
             abandonFocus()
@@ -425,6 +443,7 @@ abstract class BaseReadAloudService : BaseService(),
         }
         if (playbackStateOwner !== this) return
         actualPlaybackConfirmed = false
+        preparationStage = PREPARATION_NONE
         pause = true
         if (abandonFocus) {
             abandonFocus()
@@ -466,6 +485,11 @@ abstract class BaseReadAloudService : BaseService(),
             upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
             postEvent(EventBus.ALOUD_STATE, Status.PLAY)
         }
+    }
+
+    protected fun updatePreparationStage(stage: Int) {
+        if (playbackStateOwner !== this) return
+        preparationStage = stage
     }
 
     protected fun ownsPlaybackState(): Boolean = playbackStateOwner === this

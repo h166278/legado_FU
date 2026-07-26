@@ -14,4 +14,20 @@
         android:title="@string/add_character"
         app:showAsAction="always" />
 
+    <item
+        android:id="@+id/menu_quick_delete"
+        android:checkable="true"
+        android:title="@string/character_quick_delete"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_refresh"
+        android:title="@string/character_reassign"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_restore_temporary"
+        android:title="@string/character_restore_deleted"
+        app:showAsAction="never" />
+
 </menu>

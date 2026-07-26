@@ -115,7 +115,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         bindActions()
         setupActionItems()
         refreshStaticState()
-        refreshPlayState()
+        refreshPreparationState()
         refreshProgress(ReadBook.durChapterPos)
         consumeAutoStart(intent)
     }
@@ -124,7 +124,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         super.onNewIntent(intent)
         setIntent(intent)
         refreshStaticState()
-        refreshPlayState()
+        refreshPreparationState()
         refreshProgress(ReadBook.durChapterPos)
         consumeAutoStart(intent)
     }
@@ -136,9 +136,9 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 if (!BaseReadAloudService.isPlay()) {
                     ReadAloud.resume(this)
                 }
-                setPlayButtonLoading(false)
+                setPlayButtonLoading(BaseReadAloudService.isPreparing())
                 refreshStaticState()
-                refreshPlayState()
+                refreshPreparationState()
                 refreshProgress(ReadBook.durChapterPos)
                 return
             }
@@ -160,7 +160,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         super.onResume()
         ReadAloudMiniPlayer.detach(this)
         refreshStaticState()
-        refreshPlayState()
+        refreshPreparationState()
     }
 
     private fun bindView() = binding.run {
@@ -275,6 +275,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
             else -> "朗读音色 · $voice"
         }
         refreshPlayerPage()
+        refreshPreparationState()
         actionTimer.tvLabel.text = if (BaseReadAloudService.timeMinute > 0) {
             "${BaseReadAloudService.timeMinute}分"
         } else {
@@ -296,6 +297,10 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     private fun refreshProgress(progress: Int) {
         if (paragraphSeeking || progress == lastProgress) return
         lastProgress = progress
+        if (BaseReadAloudService.isPreparing()) {
+            showPreparationMessage()
+            return
+        }
         val chapter = ReadBook.curTextChapter
         if (chapter?.isCompleted == true) {
             refreshSubtitle(progress)
@@ -598,6 +603,27 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 "已切换单人模式"
             }
         )
+    }
+
+    fun selectMultiRoleEngine(engineId: String?) {
+        val changed = AppConfig.multiRoleTtsEngineId != engineId
+        AppConfig.multiRoleTtsEngineId = engineId
+        if (changed) {
+            val hadDialogueVoice = !AppConfig.defaultDialogueMaleTtsVoiceId.isNullOrBlank() ||
+                !AppConfig.defaultDialogueFemaleTtsVoiceId.isNullOrBlank()
+            AppConfig.defaultDialogueMaleTtsVoiceId = null
+            AppConfig.defaultDialogueFemaleTtsVoiceId = null
+            if (hadDialogueVoice && engineId != null) {
+                toastOnUi(R.string.default_tts_voice_changed_engine)
+            }
+            storyboardLoadJob?.cancel()
+            storyboardLoadingChapterIndex = -1
+            storyboardLoadedChapterIndex = -1
+            if (BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
+                ReadAloud.refreshTtsRoute(this)
+            }
+        }
+        refreshStaticState()
     }
 
     private fun openVoiceOrRoleBindings() {
@@ -905,6 +931,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
             return@run
         }
         playButtonLoading = loading
+        btnPlay.isEnabled = !loading
         if (loading) {
             btnPlay.setImageResource(R.drawable.avd_read_aloud_loading_bars)
             btnPlay.contentDescription = "正在准备朗读"
@@ -933,6 +960,23 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 putExtra("bookUrl", it.bookUrl)
             }
         }
+    }
+
+    private fun refreshPreparationState() {
+        val preparing = BaseReadAloudService.isPreparing()
+        setPlayButtonLoading(preparing)
+        if (preparing) {
+            showPreparationMessage()
+        } else if (!paragraphSeeking) {
+            val index = currentParagraphIndex(ReadBook.durChapterPos)
+            binding.tvSubtitle.text = cachedParagraphs.getOrNull(index)?.text
+                ?: "正在准备朗读..."
+        }
+    }
+
+    private fun showPreparationMessage() {
+        binding.tvSubtitle.text = BaseReadAloudService.preparationMessage()
+            .ifBlank { "正在准备朗读…" }
     }
 
     private fun openCharacterTtsBindings() {
@@ -973,9 +1017,12 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     override fun observeLiveBus() {
         observeEvent<Int>(EventBus.ALOUD_STATE) {
             when (it) {
-                Status.LOADING -> setPlayButtonLoading(true)
+                Status.LOADING -> {
+                    setPlayButtonLoading(true)
+                    showPreparationMessage()
+                }
                 Status.PAUSE, Status.STOP -> setPlayButtonLoading(false)
-                Status.PLAY -> setPlayButtonLoading(false)
+                Status.PLAY -> setPlayButtonLoading(BaseReadAloudService.isPreparing())
             }
             refreshStaticState()
             if (it == Status.STOP && !switchingChapter && !switchingVoice && !switchingParagraph) {
@@ -983,7 +1030,9 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
             }
         }
         observeEvent<Int>(EventBus.TTS_PROGRESS) {
-            setPlayButtonLoading(false)
+            if (!BaseReadAloudService.isPreparing()) {
+                setPlayButtonLoading(false)
+            }
             refreshProgress(it)
         }
         observeEvent<Int>(EventBus.READ_ALOUD_DS) {

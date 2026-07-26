@@ -42,13 +42,26 @@ data class TtsSynthesisContext(
     @SerializedName("scene")
     val scene: TtsSceneContext? = null,
     @SerializedName("performance_instruction")
-    val performanceInstruction: String = ""
+    val performanceInstruction: String = "",
+    @SerializedName("expressive")
+    val expressive: TtsExpressiveContext? = null
 ) {
     object Mode {
         const val BASIC = "basic"
         const val PERFORMANCE = "performance"
     }
 }
+
+data class TtsExpressiveContext(
+    @SerializedName("style_concepts")
+    val styleConcepts: List<String> = emptyList(),
+    @SerializedName("emotion")
+    val emotion: String? = null,
+    @SerializedName("intensity")
+    val intensity: Float? = null,
+    @SerializedName("confidence")
+    val confidence: Float? = null
+)
 
 data class TtsRoleContext(
     @SerializedName("id")
@@ -74,6 +87,9 @@ object TtsEngineCapability {
     const val PERSONA = "persona"
     const val SCENE_CONTEXT = "scene_context"
     const val PERFORMANCE_INSTRUCTION = "performance_instruction"
+    const val STYLE_TAGS = "style_tags"
+    const val EMOTION = "emotion"
+    const val EMOTION_INTENSITY = "emotion_intensity"
     const val CASTING_METADATA = "casting_metadata"
 }
 
@@ -260,7 +276,7 @@ data class TtsEngineSetting(
     }
 
     fun supportsCapability(capability: String): Boolean {
-        return capabilities.any { it.equals(capability, ignoreCase = true) }
+        return TtsCapabilityRegistry.supports(capabilities, capability)
     }
 
     fun effectiveSpeed(): Int {

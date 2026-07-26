@@ -17,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.annotation.LayoutRes
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -29,6 +30,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookCharacterProfile
 import io.legado.app.databinding.DialogReadAloudModeSheetBinding
 import io.legado.app.databinding.DialogReadAloudMoreSheetBinding
 import io.legado.app.databinding.DialogReadAloudSpeedSheetBinding
@@ -36,9 +38,12 @@ import io.legado.app.databinding.DialogReadAloudTimerSheetBinding
 import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.help.tts.BookTtsAutomationConfig
+import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.help.tts.TtsEngineCapability
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
+import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsSpeedPolicy
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.view.ThemeSwitch
@@ -48,12 +53,15 @@ import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
+import io.legado.app.ui.config.TtsEngineSelectionSheet
 import io.legado.app.ui.config.TtsVoiceOption
 import io.legado.app.ui.config.TtsVoiceSelectionSheet
 import io.legado.app.ui.widget.dialog.NgLongListBottomSheet
 import io.legado.app.ui.widget.dialog.applyNgDialogWindow
+import io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.StringUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
@@ -188,6 +196,13 @@ class ReadAloudModeSheet(
         cardMultiRole.setOnClickListener {
             selectMultiRole(true)
         }
+        itemMultiRoleEngine.setOnClickListener(::showMultiRoleEngineSheet)
+        itemAutoCreateRoles.setOnClickListener {
+            switchAutoCreateRoles.toggle()
+        }
+        itemAutoAssignVoices.setOnClickListener {
+            switchAutoAssignVoices.toggle()
+        }
         itemStoryboardResult.setOnClickListener {
             activity.openStoryboardResult()
             dismissAllowingStateLoss()
@@ -200,10 +215,19 @@ class ReadAloudModeSheet(
         cardMultiRole.isSelected = multiRole
         applyReadAloudModeCardStyles()
         layoutMultiRoleDetails.isVisible = multiRole
+        itemAutoCreateRoles.isVisible = multiRole
+        itemAutoAssignVoices.isVisible = multiRole
         if (multiRole) {
             val engine = TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
             textMultiRoleEngine.text = engine?.name ?: "未选择多人 TTS 引擎"
             bindStoryboardCapabilities(engine)
+            val automation = workKey()?.let(BookTtsAutomationConfig::get)
+                ?: BookTtsAutomationConfig.Settings()
+            switchAutoCreateRoles.setOnCheckedChangeListener(null)
+            switchAutoAssignVoices.setOnCheckedChangeListener(null)
+            switchAutoCreateRoles.isChecked = automation.autoCreateTemporaryRoles
+            switchAutoAssignVoices.isChecked = automation.autoAssignVoices
+            bindAutomationListeners()
         }
         val storyboardAlpha = if (multiRole) 1f else 0.42f
         itemStoryboardResult.isEnabled = multiRole
@@ -222,10 +246,20 @@ class ReadAloudModeSheet(
             cornerRadius = 14.dpToPx().toFloat()
             setColor(innerSurfaceColor)
         }
+        itemAutoCreateRoles.background = GradientDrawable().apply {
+            cornerRadius = 18.dpToPx().toFloat()
+            setColor(innerSurfaceColor)
+        }
+        itemAutoAssignVoices.background = GradientDrawable().apply {
+            cornerRadius = 18.dpToPx().toFloat()
+            setColor(innerSurfaceColor)
+        }
         itemStoryboardResult.background = GradientDrawable().apply {
             cornerRadius = 18.dpToPx().toFloat()
             setColor(innerSurfaceColor)
         }
+        itemAutoCreateRoles.elevation = 0f
+        itemAutoAssignVoices.elevation = 0f
         itemStoryboardResult.elevation = 0f
         val cards = listOf(
             Triple(cardSingleRole, iconSingleRole, titleSingleRole),
@@ -248,6 +282,72 @@ class ReadAloudModeSheet(
     private fun selectMultiRole(enabled: Boolean) {
         activity.setMultiRoleEnabled(enabled)
         renderState()
+    }
+
+    private fun bindAutomationListeners() = binding.run {
+        switchAutoCreateRoles.setOnCheckedChangeListener { _, enabled ->
+            workKey()?.let { BookTtsAutomationConfig.setAutoCreateTemporaryRoles(it, enabled) }
+        }
+        switchAutoAssignVoices.setOnCheckedChangeListener { _, enabled ->
+            val workKey = workKey() ?: return@setOnCheckedChangeListener
+            val wasEnabled = BookTtsAutomationConfig.get(workKey).autoAssignVoices
+            BookTtsAutomationConfig.setAutoAssignVoices(workKey, enabled)
+            if (!wasEnabled && enabled) assignUnboundVoices(workKey)
+        }
+    }
+
+    private fun showMultiRoleEngineSheet(@Suppress("UNUSED_PARAMETER") view: View) {
+        val selectedId = AppConfig.multiRoleTtsEngineId
+        TtsEngineSelectionSheet(
+            context = activity,
+            title = getString(R.string.multi_role_tts_engine),
+            searchHint = getString(R.string.multi_role_tts_engine_search),
+            emptyText = getString(R.string.multi_role_tts_engine_empty),
+            engines = TtsEngineStore.engines().filter {
+                it.enabled && it.type == TtsEngineType.SCRIPT
+            },
+            selectedEngineId = selectedId,
+            onSelect = { engine ->
+                activity.selectMultiRoleEngine(engine.id)
+                renderState()
+            },
+            titleAction = selectedId?.takeIf { it.isNotBlank() }?.let {
+                getString(R.string.clear) to {
+                    activity.selectMultiRoleEngine(null)
+                    renderState()
+                }
+            }
+        ).show()
+    }
+
+    private fun assignUnboundVoices(workKey: String) {
+        activity.lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { BookTtsCastingCoordinator.assignUnboundRoles(workKey) }
+                .onSuccess { count ->
+                    withContext(Dispatchers.Main) {
+                        activity.toastOnUi(
+                            if (count > 0) {
+                                activity.getString(R.string.character_auto_assign_done, count)
+                            } else {
+                                activity.getString(R.string.character_auto_assign_no_change)
+                            }
+                        )
+                        if (count > 0 && BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
+                            ReadAloud.refreshTtsRoute(activity)
+                        }
+                    }
+                }
+                .onFailure {
+                    withContext(Dispatchers.Main) {
+                        activity.toastOnUi(R.string.character_auto_assign_failed)
+                    }
+                }
+        }
+    }
+
+    private fun workKey(): String? {
+        val book = ReadBook.book ?: return null
+        return BookCharacterProfile.workKey(book.name, book.author).takeIf { it.isNotBlank() }
     }
 
     private fun bindStoryboardCapabilities(engine: TtsEngineSetting?) = binding.run {
@@ -502,9 +602,10 @@ class ReadAloudCatalogSheet(
     private val activity: ReadAloudPlayerActivity
 ) {
     private lateinit var sheet: NgLongListBottomSheet
-    private lateinit var recyclerChapters: RecyclerView
+    private lateinit var recyclerChapters: FastScrollRecyclerView
     private lateinit var textSummary: TextView
     private lateinit var textEmpty: TextView
+    private lateinit var buttonJumpEdge: AppCompatImageButton
     private val adapter by lazy {
         ReadAloudCatalogAdapter(
             context = activity,
@@ -526,12 +627,29 @@ class ReadAloudCatalogSheet(
             includeFontPadding = false
             setPadding(0, 2.dpToPx(), 0, 12.dpToPx())
         }
-        recyclerChapters = RecyclerView(activity).apply {
+        recyclerChapters = FastScrollRecyclerView(activity).apply {
+            id = View.generateViewId()
             layoutManager = LinearLayoutManager(activity)
             adapter = this@ReadAloudCatalogSheet.adapter
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            setPadding(0, 0, 0, 8.dpToPx())
+            setPadding(0, 0, 20.dpToPx(), 64.dpToPx())
+            setFastScrollEnabled(true)
+            setTrackVisible(true)
+            setHideScrollbar(false)
+            setBubbleVisible(false)
+            setHandleColor(activity.accentColor)
+            setTrackColor(
+                ColorUtils.adjustAlpha(
+                    ContextCompat.getColor(activity, R.color.ng_on_surface_variant),
+                    0.2f
+                )
+            )
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    updateJumpButton()
+                }
+            })
         }
         textEmpty = TextView(activity).apply {
             text = activity.getString(R.string.chapter_list_empty)
@@ -539,6 +657,30 @@ class ReadAloudCatalogSheet(
             textSize = 15f
             gravity = Gravity.CENTER
             isVisible = false
+        }
+        buttonJumpEdge = AppCompatImageButton(activity).apply {
+            background = LayerDrawable(
+                arrayOf(
+                    GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(ColorUtils.adjustAlpha(activity.accentColor, 0.12f))
+                        setStroke(
+                            1.dpToPx(),
+                            ColorUtils.adjustAlpha(activity.accentColor, 0.2f)
+                        )
+                    }
+                )
+            ).apply {
+                val inset = 5.dpToPx()
+                setLayerInset(0, inset, inset, inset, inset)
+            }
+            imageTintList = ColorStateList.valueOf(
+                ColorUtils.adjustAlpha(activity.accentColor, 0.9f)
+            )
+            elevation = 1.dpToPx().toFloat()
+            setPadding(13.dpToPx(), 13.dpToPx(), 13.dpToPx(), 13.dpToPx())
+            isVisible = false
+            setOnClickListener { jumpToOppositeEdge() }
         }
         val content = FrameLayout(activity).apply {
             addView(
@@ -552,7 +694,30 @@ class ReadAloudCatalogSheet(
                         )
                     )
                     addView(
-                        recyclerChapters,
+                        FrameLayout(activity).apply {
+                            addView(
+                                recyclerChapters,
+                                FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            )
+                            addView(
+                                textEmpty,
+                                FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            )
+                            addView(
+                                buttonJumpEdge,
+                                FrameLayout.LayoutParams(44.dpToPx(), 44.dpToPx()).apply {
+                                    gravity = Gravity.END or Gravity.BOTTOM
+                                    marginEnd = 10.dpToPx()
+                                    bottomMargin = 10.dpToPx()
+                                }
+                            )
+                        },
                         LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             0,
@@ -560,13 +725,6 @@ class ReadAloudCatalogSheet(
                         )
                     )
                 },
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-            addView(
-                textEmpty,
                 FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -599,6 +757,7 @@ class ReadAloudCatalogSheet(
         textSummary.isVisible = !empty
         textEmpty.isVisible = empty
         scrollToCurrent()
+        recyclerChapters.post(::updateJumpButton)
     }
 
     private fun scrollToCurrent() {
@@ -607,8 +766,35 @@ class ReadAloudCatalogSheet(
             recyclerChapters.post {
                 (recyclerChapters.layoutManager as? LinearLayoutManager)
                     ?.scrollToPositionWithOffset((position - 2).coerceAtLeast(0), 0)
+                updateJumpButton()
             }
         }
+    }
+
+    private fun updateJumpButton() {
+        if (!::buttonJumpEdge.isInitialized || !::recyclerChapters.isInitialized) return
+        val itemCount = adapter.itemCount
+        val canScroll = recyclerChapters.canScrollVertically(-1) ||
+            recyclerChapters.canScrollVertically(1)
+        buttonJumpEdge.isVisible = itemCount > 0 && canScroll
+        if (!buttonJumpEdge.isVisible) return
+        val layoutManager = recyclerChapters.layoutManager as? LinearLayoutManager ?: return
+        val first = layoutManager.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val last = layoutManager.findLastVisibleItemPosition().coerceAtLeast(first)
+        val jumpToTop = (first + last) / 2 >= itemCount / 2
+        buttonJumpEdge.tag = jumpToTop
+        buttonJumpEdge.setImageResource(
+            if (jumpToTop) R.drawable.ic_expand_less else R.drawable.ic_expand_more
+        )
+        buttonJumpEdge.contentDescription = if (jumpToTop) "回到顶部" else "跳到底部"
+    }
+
+    private fun jumpToOppositeEdge() {
+        val layoutManager = recyclerChapters.layoutManager as? LinearLayoutManager ?: return
+        val jumpToTop = buttonJumpEdge.tag as? Boolean ?: true
+        val target = if (jumpToTop) 0 else (adapter.itemCount - 1).coerceAtLeast(0)
+        layoutManager.scrollToPositionWithOffset(target, 0)
+        recyclerChapters.post(::updateJumpButton)
     }
 
     private fun selectChapter(chapter: BookChapter) {
@@ -757,7 +943,13 @@ private class ReadAloudCatalogAdapter(
             )
             val meta = chapter.tag?.takeIf { it.isNotBlank() }
                 ?: "第 ${chapter.index + 1} 章"
-            metaView.text = if (isCurrent) "$meta · 当前播放" else meta
+            metaView.text = buildList {
+                add(meta)
+                StringUtils.wordCountFormat(chapter.wordCount)
+                    .takeIf { it.isNotBlank() }
+                    ?.let(::add)
+                if (isCurrent) add("当前播放")
+            }.joinToString(" · ")
             metaView.setTextColor(ContextCompat.getColor(context, R.color.ng_on_surface_variant))
             container.setOnClickListener { onSelect(chapter) }
             container.layoutParams = RecyclerView.LayoutParams(

@@ -24,6 +24,7 @@ object DatabaseMigrations {
             migration_94_95, migration_95_96, migration_96_97, migration_97_98, migration_98_99,
             migration_99_100, migration_100_101, migration_101_102, migration_102_103,
             migration_103_104, migration_104_105, migration_105_106, migration_106_107,
+            migration_107_108, migration_108_109, migration_109_110, migration_110_111,
         )
     }
 
@@ -812,6 +813,137 @@ object DatabaseMigrations {
                 "ALTER TABLE `aiChatConversations` " +
                     "ADD COLUMN `modeEntryStarted` INTEGER NOT NULL DEFAULT 0"
             )
+        }
+    }
+
+    private val migration_107_108 = object : Migration(107, 108) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `bookTtsCastRoles` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `workKey` TEXT NOT NULL DEFAULT '',
+                    `name` TEXT NOT NULL DEFAULT '',
+                    `gender` TEXT NOT NULL DEFAULT 'unknown',
+                    `aliasesJson` TEXT NOT NULL DEFAULT '[]',
+                    `firstChapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `lastChapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `occurrenceCount` INTEGER NOT NULL DEFAULT 0,
+                    `representativeTextsJson` TEXT NOT NULL DEFAULT '[]',
+                    `linkedCharacterId` INTEGER,
+                    `source` TEXT NOT NULL DEFAULT 'ai_storyboard',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(`workKey`) REFERENCES `bookCharacterProfiles`(`workKey`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoles_workKey` ON `bookTtsCastRoles` (`workKey`)")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_bookTtsCastRoles_workKey_name` ON `bookTtsCastRoles` (`workKey`, `name`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoles_linkedCharacterId` ON `bookTtsCastRoles` (`linkedCharacterId`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `bookCharacterTtsBindings_new` (
+                    `workKey` TEXT NOT NULL DEFAULT '',
+                    `targetType` TEXT NOT NULL DEFAULT 'character',
+                    `targetId` INTEGER NOT NULL DEFAULT 0,
+                    `engineId` TEXT NOT NULL DEFAULT '',
+                    `voiceId` TEXT,
+                    `bindingMode` TEXT NOT NULL DEFAULT 'manual',
+                    `emotionStyleMapJson` TEXT NOT NULL DEFAULT '{}',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`workKey`, `targetType`, `targetId`, `engineId`),
+                    FOREIGN KEY(`workKey`) REFERENCES `bookCharacterProfiles`(`workKey`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT OR REPLACE INTO `bookCharacterTtsBindings_new` (
+                    `workKey`, `targetType`, `targetId`, `engineId`, `voiceId`,
+                    `bindingMode`, `emotionStyleMapJson`, `createdAt`, `updatedAt`
+                )
+                SELECT `workKey`, `targetType`, `targetId`, `engineId`, `voiceId`,
+                    'manual', `emotionStyleMapJson`, `createdAt`, `updatedAt`
+                FROM `bookCharacterTtsBindings`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `bookCharacterTtsBindings`")
+            db.execSQL("ALTER TABLE `bookCharacterTtsBindings_new` RENAME TO `bookCharacterTtsBindings`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookCharacterTtsBindings_workKey` ON `bookCharacterTtsBindings` (`workKey`)")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_bookCharacterTtsBindings_workKey_targetType_targetId_engineId` ON `bookCharacterTtsBindings` (`workKey`, `targetType`, `targetId`, `engineId`)")
+        }
+    }
+
+    private val migration_108_109 = object : Migration(108, 109) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `ignored` INTEGER NOT NULL DEFAULT 0"
+            )
+        }
+    }
+
+    private val migration_109_110 = object : Migration(109, 110) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `identityState` TEXT NOT NULL DEFAULT 'stable'"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `nameType` TEXT NOT NULL DEFAULT 'unknown'"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `identityEvidence` TEXT NOT NULL DEFAULT 'unknown'"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `genderEvidence` TEXT NOT NULL DEFAULT 'unknown'"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `chapterOccurrencesJson` TEXT NOT NULL DEFAULT '{}'"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookTtsCastRoles` " +
+                    "ADD COLUMN `identityEvidenceJson` TEXT NOT NULL DEFAULT '[]'"
+            )
+        }
+    }
+
+    private val migration_110_111 = object : Migration(110, 111) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `bookTtsCastRoleContributions` (
+                    `workKey` TEXT NOT NULL DEFAULT '',
+                    `chapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `roleId` INTEGER NOT NULL DEFAULT 0,
+                    `cacheKey` TEXT NOT NULL DEFAULT '',
+                    `cacheRevision` INTEGER NOT NULL DEFAULT 0,
+                    `namesJson` TEXT NOT NULL DEFAULT '[]',
+                    `gender` TEXT NOT NULL DEFAULT 'unknown',
+                    `identityState` TEXT NOT NULL DEFAULT 'pending',
+                    `nameType` TEXT NOT NULL DEFAULT 'unknown',
+                    `identityEvidence` TEXT NOT NULL DEFAULT 'unknown',
+                    `genderEvidence` TEXT NOT NULL DEFAULT 'unknown',
+                    `occurrenceCount` INTEGER NOT NULL DEFAULT 0,
+                    `representativeTextsJson` TEXT NOT NULL DEFAULT '[]',
+                    `identityEvidenceJson` TEXT NOT NULL DEFAULT '[]',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`workKey`, `chapterIndex`, `roleId`),
+                    FOREIGN KEY(`workKey`) REFERENCES `bookCharacterProfiles`(`workKey`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`roleId`) REFERENCES `bookTtsCastRoles`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoleContributions_workKey_chapterIndex` ON `bookTtsCastRoleContributions` (`workKey`, `chapterIndex`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoleContributions_roleId` ON `bookTtsCastRoleContributions` (`roleId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_bookTtsCastRoleContributions_cacheKey` ON `bookTtsCastRoleContributions` (`cacheKey`)")
         }
     }
 

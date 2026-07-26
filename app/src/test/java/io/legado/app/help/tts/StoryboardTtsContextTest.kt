@@ -9,6 +9,31 @@ import org.junit.Test
 
 class StoryboardTtsContextTest {
 
+    @Test
+    fun expressiveContext_isFilteredByEngineCapabilities() {
+        val context = TtsSynthesisContext(
+            expressive = TtsExpressiveContext(
+                styleConcepts = listOf("温柔", "低沉"),
+                emotion = "sad",
+                intensity = 0.7f,
+                confidence = 0.9f
+            )
+        )
+
+        val styleOnly = context.forEngineCapabilities(
+            engine(setOf(TtsEngineCapability.STYLE_TAGS))
+        )
+        assertEquals(listOf("温柔", "低沉"), styleOnly?.expressive?.styleConcepts)
+        assertEquals(null, styleOnly?.expressive?.emotion)
+        assertEquals(null, styleOnly?.expressive?.intensity)
+
+        val emotion = context.forEngineCapabilities(
+            engine(setOf(TtsEngineCapability.EMOTION, TtsEngineCapability.EMOTION_INTENSITY))
+        )
+        assertEquals("sad", emotion?.expressive?.emotion)
+        assertEquals(0.7f, emotion?.expressive?.intensity)
+    }
+
     private val scene = StoryboardScene(
         index = 1,
         title = "宿舍楼下",

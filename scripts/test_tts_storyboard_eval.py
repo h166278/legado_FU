@@ -45,6 +45,37 @@ class TtsStoryboardEvalTest(unittest.TestCase):
         self.assertNotIn("你不是", scene)
         self.assertNotIn("你不是", actor)
 
+    def test_base_prompt_merges_explicit_online_alias_with_known_identity(self) -> None:
+        prompt = storyboard.build_system_prompt("basic")
+
+        self.assertIn("网名、QQ 昵称、账号名、群名片", prompt)
+        self.assertIn("青青子衿是谁？来源是群添加。哦，是沈言卿", prompt)
+        self.assertIn("不得为 X 返回新的 `stable_candidate`", prompt)
+        self.assertIn("禁止反向把规范人物并入别名记录", prompt)
+
+    def test_online_alias_mapping_and_message_are_in_same_storyboard_context(self) -> None:
+        chapter = storyboard.Chapter(
+            9,
+            "购彩",
+            "\n".join(
+                [
+                    "QQ上有一个添加信息，打开一看，青青子衿是谁？",
+                    "来源是群添加。",
+                    "到同学群看了下，哦，是沈言卿。",
+                    "陈升以为是赵文博，坐到书桌前却发现是【青青子衿】。",
+                    "“你在干嘛？”",
+                ]
+            ),
+        )
+
+        payload = storyboard.build_storyboard_payload(chapter, max_chars=2000)
+        context = "\n".join(item["text"] for item in payload["contextParagraphs"])
+        message = next(unit for unit in payload["units"] if unit["textPreview"] == "“你在干嘛？”")
+
+        self.assertIn("青青子衿是谁", context)
+        self.assertIn("哦，是沈言卿", context)
+        self.assertIn("发现是【青青子衿】", message["cueBefore"])
+
     def test_actor_capability_implicitly_loads_scene_context(self) -> None:
         resolved = storyboard.resolve_storyboard_capabilities(
             "performance",
@@ -59,8 +90,10 @@ class TtsStoryboardEvalTest(unittest.TestCase):
     def test_performance_scene_pass_loads_shared_skill_resource(self) -> None:
         prompt = storyboard.SCENE_SKILL_FILE.read_text(encoding="utf-8").strip()
 
-        self.assertIn("场景边界分析器", prompt)
+        self.assertIn("场景边界与场景标题分析器", prompt)
         self.assertIn("scene_1", prompt)
+        self.assertIn('"title"', prompt)
+        self.assertIn("陈升与沈言卿在车棚", prompt)
         self.assertNotIn("你不是", prompt)
 
     def test_unknown_mode_has_no_prompt_fallback(self) -> None:
@@ -638,8 +671,18 @@ class TtsStoryboardEvalTest(unittest.TestCase):
             payload,
             {
                 "scenes": [
-                    {"sceneId": "scene_1", "startParagraphIndex": 0, "endParagraphIndex": 1},
-                    {"sceneId": "scene_2", "startParagraphIndex": 2, "endParagraphIndex": 3},
+                    {
+                        "sceneId": "scene_1",
+                        "title": "甲乙交谈",
+                        "startParagraphIndex": 0,
+                        "endParagraphIndex": 1,
+                    },
+                    {
+                        "sceneId": "scene_2",
+                        "title": "夜访操场",
+                        "startParagraphIndex": 2,
+                        "endParagraphIndex": 3,
+                    },
                 ]
             },
         )
@@ -658,8 +701,18 @@ class TtsStoryboardEvalTest(unittest.TestCase):
                 payload,
                 {
                     "scenes": [
-                        {"sceneId": "scene_1", "startParagraphIndex": 0, "endParagraphIndex": 0},
-                        {"sceneId": "scene_2", "startParagraphIndex": 2, "endParagraphIndex": 2},
+                        {
+                            "sceneId": "scene_1",
+                            "title": "第一段",
+                            "startParagraphIndex": 0,
+                            "endParagraphIndex": 0,
+                        },
+                        {
+                            "sceneId": "scene_2",
+                            "title": "第三段",
+                            "startParagraphIndex": 2,
+                            "endParagraphIndex": 2,
+                        },
                     ]
                 },
             )

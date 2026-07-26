@@ -49,6 +49,8 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.data.entities.BookCharacterProfile
 import io.legado.app.data.entities.BookCharacterTtsBinding
+import io.legado.app.data.entities.BookTtsCastRole
+import io.legado.app.data.entities.BookTtsCastRoleContribution
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
@@ -86,7 +88,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 107,
+    version = 111,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -94,6 +96,7 @@ val appDb by lazy {
         RssStar::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         BookCharacterProfile::class, BookCharacter::class, BookCharacterTtsBinding::class,
+        BookTtsCastRole::class, BookTtsCastRoleContribution::class,
         AiChatConversation::class, AiChatMessageNode::class, AiSkill::class,
         AgentMemory::class, AgentToolResultArtifact::class,
         AgentToolExecutionIntent::class, AgentToolReceiptAcknowledgement::class,

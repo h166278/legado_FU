@@ -17,6 +17,55 @@ internal data class ReadAloudAudioTask<T>(
 )
 
 /**
+ * Tracks whether an empty ExoPlayer queue means a real chapter end or only a
+ * temporary gap while later TTS items are still being prepared.
+ */
+internal class ReadAloudPlaylistProductionState {
+    private var generation = 0L
+    private var producing = false
+    private var endedWhileProducing = false
+
+    @Synchronized
+    fun begin(): Long {
+        generation += 1L
+        producing = true
+        endedWhileProducing = false
+        return generation
+    }
+
+    @Synchronized
+    fun onItemAppended(token: Long): Boolean {
+        if (token != generation) return false
+        val shouldResume = producing && endedWhileProducing
+        endedWhileProducing = false
+        return shouldResume
+    }
+
+    @Synchronized
+    fun onPlaybackEnded(): Boolean {
+        if (!producing) return true
+        endedWhileProducing = true
+        return false
+    }
+
+    @Synchronized
+    fun finish(token: Long): Boolean {
+        if (token != generation) return false
+        producing = false
+        val shouldFinishChapter = endedWhileProducing
+        endedWhileProducing = false
+        return shouldFinishChapter
+    }
+
+    @Synchronized
+    fun cancel(token: Long) {
+        if (token != generation) return
+        producing = false
+        endedWhileProducing = false
+    }
+}
+
+/**
  * 按播放顺序交付结果，同时让不同引擎在各自配额内并行准备音频。
  */
 internal suspend fun <T> prepareReadAloudAudioTasks(

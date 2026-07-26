@@ -98,7 +98,8 @@ class FastScroller : LinearLayout {
         defStyleAttr
     ) {
         layout(context, attrs)
-        layoutParams = generateLayoutParams(attrs)
+        layoutParams = attrs?.let(::generateLayoutParams)
+            ?: LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT)
     }
 
     override fun setLayoutParams(params: ViewGroup.LayoutParams) {

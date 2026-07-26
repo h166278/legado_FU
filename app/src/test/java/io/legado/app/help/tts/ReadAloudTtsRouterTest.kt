@@ -48,6 +48,49 @@ class ReadAloudTtsRouterTest {
     }
 
     @Test
+    fun unknownGenderDialogue_usesDialogueEngineInsteadOfNarrator() {
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = ReadAloudTtsRouter.RouteBinding(narratorEngine, "narrator_voice"),
+            characterBindings = emptyMap(),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = emptyMap(),
+            characterGenderIndex = emptyMap()
+        )!!
+
+        val route = router.route(dialogue(StoryboardSegment.SpeakerGender.UNKNOWN), dialogueEngine)
+
+        assertEquals(dialogueEngine.id, route.engine.id)
+        assertEquals(ReadAloudTtsRouter.RouteKind.DIALOGUE_FALLBACK, route.kind)
+        assertTrue(route.fallbackUsed)
+    }
+
+    @Test
+    fun staleCharacterId_relinksByCurrentAlias() {
+        val characterVoice = voice("character_voice")
+        val characterEngine = engine(id = "character", voices = listOf(characterVoice))
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = mapOf(3L to ReadAloudTtsRouter.RouteBinding(characterEngine, characterVoice.id)),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = mapOf("老赵" to 3L),
+            characterGenderIndex = mapOf(3L to StoryboardSegment.SpeakerGender.MALE),
+            knownCharacterIds = setOf(3L)
+        )!!
+
+        assertRoute(
+            router,
+            dialogue(StoryboardSegment.SpeakerGender.MALE).copy(
+                speakerId = 999L,
+                speakerName = "老赵"
+            ),
+            characterEngine,
+            characterVoice.id
+        )
+    }
+
+    @Test
     fun bookBinding_overridesGlobalDialogueDefault() {
         val bookEngine = engine(
             id = "book",
@@ -69,6 +112,127 @@ class ReadAloudTtsRouterTest {
 
         assertRoute(router!!, dialogue(StoryboardSegment.SpeakerGender.MALE), bookEngine, "book_voice")
         assertRoute(router, dialogue(StoryboardSegment.SpeakerGender.FEMALE), dialogueEngine, "female_voice")
+    }
+
+    @Test
+    fun castRoleBinding_routesUnknownNamedSpeakerBeforeGenderFallback() {
+        val castVoice = voice("cast_voice")
+        val castEngine = engine(id = "cast", voices = listOf(castVoice))
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = emptyMap(),
+            castRoleBindings = mapOf(9L to ReadAloudTtsRouter.RouteBinding(castEngine, castVoice.id)),
+            dialogueMaleBinding = ReadAloudTtsRouter.RouteBinding(dialogueEngine, "male_voice"),
+            dialogueFemaleBinding = null,
+            characterNameIndex = emptyMap(),
+            characterGenderIndex = emptyMap(),
+            castRoleNameIndex = mapOf("赵文博" to 9L),
+            castRoleGenderIndex = mapOf(9L to StoryboardSegment.SpeakerGender.MALE)
+        )
+
+        assertRoute(
+            router!!,
+            dialogue(StoryboardSegment.SpeakerGender.MALE).copy(speakerName = "赵文博"),
+            castEngine,
+            castVoice.id
+        )
+    }
+
+    @Test
+    fun explicitCastRoleId_survivesSpeakerRenameAndRoutesBeforeNarrator() {
+        val castVoice = voice("cast_voice")
+        val castEngine = engine(id = "cast", voices = listOf(castVoice))
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = ReadAloudTtsRouter.RouteBinding(narratorEngine, "narrator_voice"),
+            characterBindings = emptyMap(),
+            castRoleBindings = mapOf(9L to ReadAloudTtsRouter.RouteBinding(castEngine, castVoice.id)),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = emptyMap(),
+            characterGenderIndex = emptyMap(),
+            knownCastRoleIds = setOf(9L)
+        )
+
+        assertRoute(
+            router!!,
+            dialogue(StoryboardSegment.SpeakerGender.UNKNOWN).copy(
+                speakerName = "小道童",
+                castRoleId = 9L
+            ),
+            castEngine,
+            castVoice.id
+        )
+    }
+
+    @Test
+    fun canonicalCharacterBinding_winsWhenCastAliasLinksToCharacter() {
+        val characterVoice = voice("character_voice")
+        val characterEngine = engine(id = "character", voices = listOf(characterVoice))
+        val castEngine = engine(id = "cast", voices = listOf(voice("cast_voice")))
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = mapOf(3L to ReadAloudTtsRouter.RouteBinding(characterEngine, characterVoice.id)),
+            castRoleBindings = mapOf(9L to ReadAloudTtsRouter.RouteBinding(castEngine, "cast_voice")),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = mapOf("老赵" to 3L),
+            characterGenderIndex = mapOf(3L to StoryboardSegment.SpeakerGender.MALE),
+            castRoleNameIndex = mapOf("老赵" to 9L),
+            castRoleGenderIndex = mapOf(9L to StoryboardSegment.SpeakerGender.MALE)
+        )
+
+        assertRoute(
+            router!!,
+            dialogue(StoryboardSegment.SpeakerGender.MALE).copy(speakerName = "老赵"),
+            characterEngine,
+            characterVoice.id
+        )
+    }
+
+    @Test
+    fun unavailableCharacterBinding_isVisibleWhileRouteUsesDialogueFallback() {
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = emptyMap(),
+            dialogueMaleBinding = ReadAloudTtsRouter.RouteBinding(dialogueEngine, "male_voice"),
+            dialogueFemaleBinding = null,
+            characterNameIndex = mapOf("赵文博" to 3L),
+            characterGenderIndex = mapOf(3L to StoryboardSegment.SpeakerGender.MALE),
+            unavailableCharacterBindings = setOf(3L)
+        )
+
+        val route = router!!.route(
+            dialogue(StoryboardSegment.SpeakerGender.MALE).copy(speakerName = "赵文博"),
+            narratorEngine
+        )
+
+        assertEquals(dialogueEngine.id, route.engine.id)
+        assertEquals("male_voice", route.voiceId)
+        assertEquals(ReadAloudTtsRouter.RouteKind.DIALOGUE_FALLBACK, route.kind)
+        assertTrue(route.fallbackUsed)
+        assertTrue(route.bindingUnavailable)
+    }
+
+    @Test
+    fun failedCharacterRoute_fallsBackToDifferentNarratorEngineBeforeSameEngineVoice() {
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = ReadAloudTtsRouter.RouteBinding(narratorEngine, "narrator_voice"),
+            characterBindings = mapOf(
+                3L to ReadAloudTtsRouter.RouteBinding(dialogueEngine, "female_voice")
+            ),
+            dialogueMaleBinding = ReadAloudTtsRouter.RouteBinding(dialogueEngine, "male_voice"),
+            dialogueFemaleBinding = null,
+            characterNameIndex = mapOf("赵文博" to 3L),
+            characterGenderIndex = mapOf(3L to StoryboardSegment.SpeakerGender.MALE)
+        )!!
+        val segment = dialogue(StoryboardSegment.SpeakerGender.MALE).copy(speakerName = "赵文博")
+        val primary = router.route(segment, dialogueEngine)
+
+        val fallbacks = router.fallbackRoutes(segment, dialogueEngine, primary)
+
+        assertEquals(narratorEngine.id, fallbacks.first().engine.id)
+        assertEquals("narrator_voice", fallbacks.first().voiceId)
+        assertTrue(fallbacks.all { it.fallbackUsed })
     }
 
     @Test

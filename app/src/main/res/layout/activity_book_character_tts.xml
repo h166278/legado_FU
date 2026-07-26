@@ -15,7 +15,7 @@
             android:id="@+id/title_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:title="@string/character_tts_bindings" />
+            app:title="@string/book_characters" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_view"
@@ -29,6 +29,74 @@
             android:paddingBottom="@dimen/ng_space_l"
             tools:listitem="@layout/item_book_character_tts" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginStart="@dimen/ng_page_padding"
+            android:layout_marginEnd="@dimen/ng_page_padding"
+            android:layout_marginBottom="@dimen/ng_space_m"
+            android:background="@drawable/ng_bg_character_tabs"
+            android:orientation="horizontal"
+            android:padding="4dp">
+
+            <TextView
+                android:id="@+id/tv_tab_formal"
+                style="@style/Ng.Summary"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/ng_bg_character_tab_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/ng_character_tab_text"
+                android:textSize="14sp"
+                tools:text="正式角色\n4" />
+
+            <TextView
+                android:id="@+id/tv_tab_temporary"
+                style="@style/Ng.Summary"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/ng_bg_character_tab_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/ng_character_tab_text"
+                android:textSize="14sp"
+                tools:text="临时角色\n8" />
+
+            <TextView
+                android:id="@+id/tv_tab_defaults"
+                style="@style/Ng.Summary"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@drawable/ng_bg_character_tab_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="@color/ng_character_tab_text"
+                android:textSize="14sp"
+                tools:text="默认声音\n3" />
+
+        </LinearLayout>
+
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_empty"
+        style="@style/Ng.Summary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:padding="@dimen/ng_page_padding"
+        android:textSize="15sp"
+        android:visibility="gone" />
 
 </FrameLayout>
