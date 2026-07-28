@@ -26,6 +26,8 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.tts.BookTtsAutomationConfig
+import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.ReadAloudAudioTask
 import io.legado.app.help.tts.ReadAloudPreparedItemRange
@@ -78,6 +80,8 @@ import java.io.File
 import java.io.InputStream
 import java.net.ConnectException
 import java.net.SocketTimeoutException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val SILENT_SOUND_FILE_SIZE = 2160L
@@ -89,7 +93,10 @@ private const val SILENT_SOUND_FILE_SIZE = 2160L
 class HttpReadAloudService : BaseReadAloudService(),
     Player.Listener {
     private val exoPlayer: ExoPlayer by lazy {
-        TtsPlayerFactory.create(this)
+        TtsPlayerFactory.create(
+            context = this,
+            allowFormatChanges = AppConfig.readAloudMultiRole
+        )
     }
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator
@@ -170,7 +177,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
         val targetItemIndex = preparedReadAloudItemIndex(
             ranges = speakItems.map { item ->
-                ReadAloudPreparedItemRange(item.paragraphIndex, item.end)
+                ReadAloudPreparedItemRange(item.paragraphIndex, item.start, item.end)
             },
             targetParagraphIndex = nowSpeak,
             targetParagraphOffset = paragraphStartPos,
@@ -259,13 +266,14 @@ class HttpReadAloudService : BaseReadAloudService(),
         nextStoryboardPreloadJob?.cancel()
         nextAudioPreloadJob?.cancel()
         val productionToken = playlistProductionState.begin()
+        val routeWarningTracker = RouteWarningTracker(productionToken)
         downloadTask = execute {
             ensureActive()
             val engineV2 = ReadAloud.httpTtsEngineV2
             if (engineV2 == null) {
                 throw NoStackTraceException("tts is null")
             }
-            val storyboard = try {
+                val storyboard = try {
                     prefetchedPlan?.storyboard ?: loadCurrentAiStoryboard()
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
@@ -278,11 +286,24 @@ class HttpReadAloudService : BaseReadAloudService(),
                     pauseReadAloud()
                     return@execute
                 }
+                try {
+                    ensurePlaybackVoiceBindings(showPreparation = true)
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    playlistProductionState.cancel(productionToken)
+                    AppLog.put(
+                        "发音人分配失败，朗读已暂停\n${error.localizedMessage}",
+                        error,
+                        true
+                    )
+                    pauseReadAloud()
+                    return@execute
+                }
                 if (!pause) {
                     updatePreparationStage(BaseReadAloudService.PREPARATION_AUDIO)
                     postEvent(EventBus.ALOUD_STATE, Status.LOADING)
                 }
-                // 缓存分镜前台只完成本地角色同步；后台选角不会改变本章已经创建的路由快照。
+                // 缓存分镜只在首声前补缺失绑定；证据复评仍留在后台，不在章中途换声。
                 ttsRouter = prefetchedPlan?.router ?: ReadAloudTtsRouter.createForCurrentBook()
                 val currentRouter = ttsRouter
                 speakItems = prefetchedPlan?.items ?: buildSpeakItems(storyboard)
@@ -347,7 +368,8 @@ class HttpReadAloudService : BaseReadAloudService(),
                                     engineV2 = engineV2,
                                     chapterIndex = nextChapterIndex,
                                     storyboard = nextStoryboard,
-                                    ownerToken = productionToken
+                                    ownerToken = productionToken,
+                                    routeWarningTracker = routeWarningTracker
                                 )
                             }
                         } catch (error: Throwable) {
@@ -364,7 +386,8 @@ class HttpReadAloudService : BaseReadAloudService(),
                     prepareSpeakFilesConcurrently(
                         engineV2 = engineV2,
                         items = currentSpeakItems.drop(cachedPrefix.size),
-                        router = currentRouter
+                        router = currentRouter,
+                        routeWarningTracker = routeWarningTracker
                     ) { file ->
                         val preparedItem = currentSpeakItems.getOrNull(preparedItemIndex++)
                         withContext(Main) {
@@ -388,6 +411,12 @@ class HttpReadAloudService : BaseReadAloudService(),
                         }
                     }
                     withContext(Main) {
+                        if (playlistProductionState.isCurrent(productionToken) &&
+                            routeWarningTracker.roleEngineSucceeded.get() &&
+                            routeWarningTracker.failureKeys.isEmpty()
+                        ) {
+                            clearTtsRouteWarning(ReadBook.book?.bookUrl)
+                        }
                         if (playlistProductionState.finish(productionToken)) {
                             finishPlaybackBatch()
                         }
@@ -411,9 +440,11 @@ class HttpReadAloudService : BaseReadAloudService(),
         engineV2: TtsEngineSetting,
         chapterIndex: Int,
         storyboard: ChapterStoryboard?,
-        ownerToken: Long
+        ownerToken: Long,
+        routeWarningTracker: RouteWarningTracker
     ) {
         val textChapter = loadStoryboardTextChapter(chapterIndex) ?: return
+        ensurePlaybackVoiceBindings(showPreparation = false)
         // 下一章使用独立路由快照，不能在当前章仍合成时替换全局路由。
         val preloadRouter = ReadAloudTtsRouter.createForCurrentBook()
         val contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0, 1)
@@ -434,7 +465,8 @@ class HttpReadAloudService : BaseReadAloudService(),
             items = preDownloadItems,
             cacheChapter = textChapter,
             router = preloadRouter,
-            globalConcurrency = 1
+            globalConcurrency = 1,
+            routeWarningTracker = routeWarningTracker
         ) { file ->
             if (!playlistProductionState.isCurrent(ownerToken)) return@prepareSpeakFilesConcurrently
             preparedFiles += file
@@ -448,12 +480,26 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    private suspend fun ensurePlaybackVoiceBindings(showPreparation: Boolean) {
+        if (!AppConfig.readAloudMultiRole) return
+        val book = ReadBook.book ?: return
+        val workKey = BookCharacterProfile.workKey(book.name, book.author)
+        if (!BookTtsAutomationConfig.get(workKey).autoAssignVoices) return
+        BookTtsCastingCoordinator.assignMissingRolesForPlayback(workKey) {
+            if (showPreparation && !pause) {
+                updatePreparationStage(BaseReadAloudService.PREPARATION_CASTING)
+                postEvent(EventBus.ALOUD_STATE, Status.LOADING)
+            }
+        }
+    }
+
     private suspend fun prepareSpeakFilesConcurrently(
         engineV2: TtsEngineSetting,
         items: List<SpeakItem>,
         cacheChapter: TextChapter? = null,
         router: ReadAloudTtsRouter? = ttsRouter,
         globalConcurrency: Int = AppConfig.readAloudWorkerCount,
+        routeWarningTracker: RouteWarningTracker,
         onPrepared: suspend (File) -> Unit = {}
     ) {
         val tasks = items.map { item ->
@@ -477,7 +523,8 @@ class HttpReadAloudService : BaseReadAloudService(),
                         primaryRoute = route,
                         router = router,
                         cacheChapter = cacheChapter,
-                        synthesisText = synthesisText
+                        synthesisText = synthesisText,
+                        routeWarningTracker = routeWarningTracker
                     )
                 }
             )
@@ -491,10 +538,15 @@ class HttpReadAloudService : BaseReadAloudService(),
         primaryRoute: ReadAloudTtsRouter.Route?,
         router: ReadAloudTtsRouter?,
         cacheChapter: TextChapter?,
-        synthesisText: String
+        synthesisText: String,
+        routeWarningTracker: RouteWarningTracker
     ): File {
+        if (primaryRoute?.bindingUnavailable == true) {
+            notifyUnavailableBinding(primaryRoute, item, routeWarningTracker)
+        }
         val routes = routeCandidates(engineV2, item, primaryRoute, router)
         var lastError: Throwable? = null
+        var roleRouteFailure: Pair<ReadAloudTtsRouter.Route, Throwable>? = null
         routes.forEachIndexed { index, route ->
             val routedEngine = route?.engine ?: engineV2
             val synthesisContext = item.synthesisContext?.forEngineCapabilities(routedEngine)
@@ -505,7 +557,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                 synthesisContext = synthesisContext
             )
             try {
-                return prepareSpeakFile(
+                val file = prepareSpeakFile(
                     engineV2 = engineV2,
                     item = item,
                     route = route,
@@ -513,11 +565,29 @@ class HttpReadAloudService : BaseReadAloudService(),
                     synthesisContext = synthesisContext,
                     synthesisText = synthesisText
                 )
+                if (index > 0 && route != null) {
+                    roleRouteFailure?.let { (failedRoute, failure) ->
+                        notifyRoleRouteFallback(
+                            failedRoute,
+                            route,
+                            failure,
+                            routeWarningTracker
+                        )
+                    }
+                } else if (route?.warnOnFailure == true &&
+                    playlistProductionState.isCurrent(routeWarningTracker.productionToken)
+                ) {
+                    routeWarningTracker.roleEngineSucceeded.set(true)
+                }
+                return file
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 lastError = error
                 val fallback = routes.getOrNull(index + 1)
                 if (fallback != null) {
+                    if (index == 0 && route?.warnOnFailure == true) {
+                        roleRouteFailure = route to error
+                    }
                     AppLog.put(
                         "TTS片段合成失败，改用${fallback.kind.displayName()}继续朗读" +
                             "\n片段：${item.text.take(80)}\n${error.localizedMessage}",
@@ -529,6 +599,59 @@ class HttpReadAloudService : BaseReadAloudService(),
         throw lastError ?: NoStackTraceException("TTS片段无可用合成路径")
     }
 
+    private fun notifyRoleRouteFallback(
+        failedRoute: ReadAloudTtsRouter.Route,
+        fallbackRoute: ReadAloudTtsRouter.Route,
+        error: Throwable,
+        routeWarningTracker: RouteWarningTracker
+    ) {
+        if (!playlistProductionState.isCurrent(routeWarningTracker.productionToken)) return
+        val reason = error.localizedMessage
+            ?.lineSequence()
+            ?.firstOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: "未知错误"
+        val noticeKey = "${failedRoute.engine.id}:$reason"
+        if (!routeWarningTracker.failureKeys.add(noticeKey)) return
+        updateTtsRouteWarning(
+            TtsRouteWarning(
+                bookUrl = ReadBook.book?.bookUrl,
+                engineId = failedRoute.engine.id,
+                engineName = failedRoute.engine.name,
+                reason = reason,
+                fallbackName = fallbackRoute.kind.displayName()
+            )
+        )
+        AppLog.put(
+            "角色引擎“${failedRoute.engine.name}”不可用，已临时改用${fallbackRoute.kind.displayName()}" +
+                "\n$reason",
+            error
+        )
+    }
+
+    private fun notifyUnavailableBinding(
+        route: ReadAloudTtsRouter.Route,
+        item: SpeakItem,
+        routeWarningTracker: RouteWarningTracker
+    ) {
+        if (!playlistProductionState.isCurrent(routeWarningTracker.productionToken)) return
+        val roleName = item.segment?.speakerName?.takeIf { it.isNotBlank() } ?: "当前角色"
+        val reason = "“$roleName”的绑定发音人已不可用"
+        val noticeKey = "binding:${route.engine.id}:$roleName"
+        if (!routeWarningTracker.failureKeys.add(noticeKey)) return
+        updateTtsRouteWarning(
+            TtsRouteWarning(
+                bookUrl = ReadBook.book?.bookUrl,
+                engineId = route.engine.id,
+                engineName = route.engine.name,
+                reason = reason,
+                fallbackName = route.kind.displayName()
+            )
+        )
+        AppLog.put("$reason，已临时改用${route.kind.displayName()}")
+    }
+
     private fun findCachedSpeakPrefix(
         engineV2: TtsEngineSetting?,
         items: List<SpeakItem>,
@@ -538,20 +661,17 @@ class HttpReadAloudService : BaseReadAloudService(),
         for (item in items) {
             val primaryRoute = routeFor(router, engineV2, item.segment, item.scene)
             val synthesisText = item.synthesisText()
-            val cachedFile = routeCandidates(engineV2, item, primaryRoute, router)
-                .firstNotNullOfOrNull { route ->
-                    val routedEngine = route?.engine ?: engineV2
-                    val synthesisContext = item.synthesisContext
-                        ?.forEngineCapabilities(routedEngine)
-                    val fileName = md5SpeakFileName(
-                        content = synthesisText,
-                        route = route,
-                        synthesisContext = synthesisContext
-                    )
-                    getSpeakFileAsMd5(fileName).takeIf { file ->
-                        file.isFile && file.length() > 0L
-                    }
-                }
+            val routedEngine = primaryRoute?.engine ?: engineV2
+            val synthesisContext = item.synthesisContext
+                ?.forEngineCapabilities(routedEngine)
+            val fileName = md5SpeakFileName(
+                content = synthesisText,
+                route = primaryRoute,
+                synthesisContext = synthesisContext
+            )
+            val cachedFile = getSpeakFileAsMd5(fileName).takeIf { file ->
+                file.isFile && file.length() > 0L
+            }
             if (cachedFile == null) break
             cachedItems += CachedSpeakItem(item, cachedFile)
         }
@@ -1087,6 +1207,26 @@ class HttpReadAloudService : BaseReadAloudService(),
         downloadAndPlayAudios()
     }
 
+    override fun prepareTtsCasting() {
+        nextChapterPlaybackPlan = null
+        playIndexJob?.cancel()
+        downloadTask?.cancel()
+        backgroundStoryboardPreloadJob?.cancel()
+        nextStoryboardPreloadJob?.cancel()
+        nextAudioPreloadJob?.cancel()
+        // 新代次在分配完成前保持 producing，吞掉旧队列可能迟到的 ENDED。
+        playlistProductionState.begin()
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        ttsRouter = null
+        speakItems = emptyList()
+        speakItemIndex = 0
+        playlistChapterIndex = -1
+        pendingPlaylistSeekIndex = -1
+        updatePreparationStage(BaseReadAloudService.PREPARATION_CASTING)
+        postEvent(EventBus.ALOUD_STATE, Status.LOADING)
+    }
+
     override fun onPlaybackStateChanged(playbackState: Int) {
         super.onPlaybackStateChanged(playbackState)
         if (!ownsPlaybackState()) return
@@ -1206,6 +1346,12 @@ class HttpReadAloudService : BaseReadAloudService(),
     private data class CachedSpeakItem(
         val item: SpeakItem,
         val file: File
+    )
+
+    private data class RouteWarningTracker(
+        val productionToken: Long,
+        val failureKeys: MutableSet<String> = ConcurrentHashMap.newKeySet(),
+        val roleEngineSucceeded: AtomicBoolean = AtomicBoolean()
     )
 
     private data class NextChapterPlaybackPlan(

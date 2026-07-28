@@ -369,6 +369,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         if (buffer.chapterIndex != ReadBook.durChapterIndex || !ensureParagraphCache()) return
         val bufferedIndex = currentParagraphIndex(buffer.chapterPosition)
         binding.progressChapter.secondaryProgress = maxOf(
+            binding.progressChapter.secondaryProgress,
             binding.progressChapter.progress,
             bufferedIndex
         )

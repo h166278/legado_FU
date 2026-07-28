@@ -163,22 +163,36 @@ object BookTtsCastingCoordinator {
     }
 
     suspend fun assignUnboundRoles(workKey: String): Int {
+        val snapshot = prepareMutex(workKey).withLock { currentCastingSnapshot(workKey) }
+            ?: return 0
+        return assignTargets(snapshot.engine, workKey, snapshot.targets, replaceAuto = false)
+    }
+
+    /**
+     * 缓存分镜开始合成前的唯一选角关口。这里只补真正缺失或已经失效的绑定，
+     * 不把临时音色的证据复评从后台重新搬回播放前台。
+     */
+    suspend fun assignMissingRolesForPlayback(
+        workKey: String,
+        onAssignmentRequired: () -> Unit = {}
+    ): Int {
         val snapshot = prepareMutex(workKey).withLock {
-            val engine = currentMultiRoleEngine() ?: return@withLock null
-            val dao = appDb.bookCharacterDao
-            val characters = dao.getCharacters(workKey).filter { it.enabled && it.name.isNotBlank() }
-            val castRoles = dao.getTtsCastRoles(workKey)
-                .filter { it.linkedCharacterId == null && it.isRoutableRole() }
-            val targets = buildList {
-                characters.forEach { character ->
-                    add(character.toCastingTarget())
-                }
-                castRoles.forEach { role ->
-                    role.toCastingTarget()?.let(::add)
-                }
+            val current = currentCastingSnapshot(workKey) ?: return@withLock null
+            val usableVoiceIds = current.engine.enabledVoices()
+                .mapTo(mutableSetOf()) { it.id }
+            if (usableVoiceIds.isEmpty()) return@withLock null
+            val bindings = appDb.bookCharacterDao.getTtsBindings(workKey)
+                .filter { it.engineId == current.engine.id }
+                .associateBy { it.targetType to it.targetId }
+            val missingTargets = current.targets.filter { target ->
+                BookTtsBindingPolicy.needsPlaybackAssignment(
+                    binding = bindings[target.targetType to target.targetId],
+                    usableVoiceIds = usableVoiceIds
+                )
             }
-            CastingSnapshot(engine, targets)
+            current.copy(targets = missingTargets).takeIf { missingTargets.isNotEmpty() }
         } ?: return 0
+        onAssignmentRequired()
         return assignTargets(snapshot.engine, workKey, snapshot.targets, replaceAuto = false)
     }
 
@@ -1356,6 +1370,19 @@ object BookTtsCastingCoordinator {
     private fun currentMultiRoleEngine(): TtsEngineSetting? {
         return TtsEngineStore.engine(io.legado.app.help.config.AppConfig.multiRoleTtsEngineId)
             ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
+    }
+
+    private fun currentCastingSnapshot(workKey: String): CastingSnapshot? {
+        val engine = currentMultiRoleEngine() ?: return null
+        val dao = appDb.bookCharacterDao
+        val characters = dao.getCharacters(workKey).filter { it.enabled && it.name.isNotBlank() }
+        val castRoles = dao.getTtsCastRoles(workKey)
+            .filter { it.linkedCharacterId == null && it.isRoutableRole() }
+        val targets = buildList {
+            characters.forEach { character -> add(character.toCastingTarget()) }
+            castRoles.forEach { role -> role.toCastingTarget()?.let(::add) }
+        }
+        return CastingSnapshot(engine, targets)
     }
 
     private suspend fun assignTargets(

@@ -100,6 +100,10 @@ abstract class BaseReadAloudService : BaseService(),
         var preparationStage: Int = PREPARATION_NONE
             private set
 
+        @Volatile
+        var ttsRouteWarning: TtsRouteWarning? = null
+            private set
+
         fun isPlay(): Boolean {
             return isRun && (actualPlaybackConfirmed || !pause)
         }
@@ -108,6 +112,7 @@ abstract class BaseReadAloudService : BaseService(),
 
         fun preparationMessage(): String = when (preparationStage) {
             PREPARATION_STORYBOARD -> "正在生成分镜…"
+            PREPARATION_CASTING -> "正在分配发音人…"
             PREPARATION_AUDIO -> "正在准备朗读…"
             else -> ""
         }
@@ -115,6 +120,7 @@ abstract class BaseReadAloudService : BaseService(),
         const val PREPARATION_NONE = 0
         const val PREPARATION_STORYBOARD = 1
         const val PREPARATION_AUDIO = 2
+        const val PREPARATION_CASTING = 3
 
         private const val TAG = "BaseReadAloudService"
 
@@ -175,6 +181,7 @@ abstract class BaseReadAloudService : BaseService(),
         playbackStateOwner = this
         actualPlaybackConfirmed = false
         preparationStage = PREPARATION_NONE
+        ttsRouteWarning = null
         isRun = true
         pause = false
         observeLiveBus()
@@ -229,9 +236,11 @@ abstract class BaseReadAloudService : BaseService(),
             pause = true
             actualPlaybackConfirmed = false
             preparationStage = PREPARATION_NONE
+            ttsRouteWarning = null
             playbackStateOwner = null
             activeBookUrl = null
             abandonFocus()
+            postEvent(EventBus.TTS_ROUTE_WARNING, true)
             postEvent(EventBus.ALOUD_STATE, Status.STOP)
             notificationManager.cancel(NotificationId.ReadAloudService)
             upMediaSessionPlaybackState(PlaybackStateCompat.STATE_STOPPED)
@@ -257,6 +266,7 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.pause -> pauseReadAloud()
             IntentAction.resume -> resumeReadAloud()
             IntentAction.upTtsSpeechRate -> upSpeechRate(true)
+            IntentAction.prepareTtsCasting -> prepareTtsCasting()
             IntentAction.refreshTtsRoute -> refreshTtsRoute()
             IntentAction.prevParagraph -> prevP()
             IntentAction.nextParagraph -> nextP()
@@ -518,11 +528,26 @@ abstract class BaseReadAloudService : BaseService(),
         preparationStage = stage
     }
 
+    protected fun updateTtsRouteWarning(warning: TtsRouteWarning?) {
+        if (playbackStateOwner !== this) return
+        ttsRouteWarning = warning
+        postEvent(EventBus.TTS_ROUTE_WARNING, true)
+    }
+
+    protected fun clearTtsRouteWarning(bookUrl: String?) {
+        val warning = ttsRouteWarning ?: return
+        if (bookUrl == null || warning.bookUrl == bookUrl) {
+            updateTtsRouteWarning(null)
+        }
+    }
+
     protected fun ownsPlaybackState(): Boolean = playbackStateOwner === this
 
     abstract fun upSpeechRate(reset: Boolean = false)
 
     open fun refreshTtsRoute() = Unit
+
+    open fun prepareTtsCasting() = Unit
 
     fun upTtsProgress(progress: Int) {
         postEvent(EventBus.TTS_PROGRESS, progress)
@@ -537,6 +562,14 @@ abstract class BaseReadAloudService : BaseService(),
             )
         )
     }
+
+    data class TtsRouteWarning(
+        val bookUrl: String?,
+        val engineId: String,
+        val engineName: String,
+        val reason: String,
+        val fallbackName: String
+    )
 
     private fun prevP() {
         if (nowSpeak > 0) {

@@ -8,6 +8,7 @@ object EventBus {
     const val ALOUD_STATE = "aloud_state"
     const val TTS_PROGRESS = "ttsStart"
     const val TTS_BUFFER_PROGRESS = "ttsBufferProgress"
+    const val TTS_ROUTE_WARNING = "ttsRouteWarning"
     const val AUDIO_DS = "audioDs"
     const val READ_ALOUD_DS = "readAloudDs"
     const val BATTERY_CHANGED = "batteryChanged"

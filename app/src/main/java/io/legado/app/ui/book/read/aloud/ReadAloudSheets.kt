@@ -343,6 +343,9 @@ class ReadAloudModeSheet(
     }
 
     private fun assignUnboundVoices(workKey: String) {
+        if (BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
+            ReadAloud.prepareTtsCasting(activity)
+        }
         activity.lifecycleScope.launch(Dispatchers.IO) {
             runCatching { BookTtsCastingCoordinator.assignUnboundRoles(workKey) }
                 .onSuccess { count ->
@@ -354,7 +357,7 @@ class ReadAloudModeSheet(
                                 activity.getString(R.string.character_auto_assign_no_change)
                             }
                         )
-                        if (count > 0 && BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
+                        if (BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
                             ReadAloud.refreshTtsRoute(activity)
                         }
                     }
@@ -362,6 +365,9 @@ class ReadAloudModeSheet(
                 .onFailure {
                     withContext(Dispatchers.Main) {
                         activity.toastOnUi(R.string.character_auto_assign_failed)
+                        if (BaseReadAloudService.isRun && AppConfig.readAloudMultiRole) {
+                            ReadAloud.refreshTtsRoute(activity)
+                        }
                     }
                 }
         }

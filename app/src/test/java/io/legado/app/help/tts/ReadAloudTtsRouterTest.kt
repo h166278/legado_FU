@@ -50,6 +50,86 @@ class ReadAloudTtsRouterTest {
     }
 
     @Test
+    fun globalDefaults_withoutGenderVoices_usesEngineDefaultInsteadOfFirstVoice() {
+        val defaults = ReadAloudTtsRouter.resolveGlobalBindings(
+            multiRoleEngineId = dialogueEngine.id,
+            narratorEngineId = narratorEngine.id,
+            narratorVoiceId = "narrator_voice",
+            dialogueMaleVoiceId = null,
+            dialogueFemaleVoiceId = null,
+            engineResolver = ::resolveEngine
+        )
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = emptyMap(),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = emptyMap(),
+            characterGenderIndex = emptyMap(),
+            globalBindings = defaults
+        )!!
+
+        assertRoute(router, narration(), narratorEngine, "narrator_voice")
+        val route = router.route(
+            dialogue(StoryboardSegment.SpeakerGender.UNKNOWN),
+            narratorEngine
+        )
+        assertEquals(dialogueEngine.id, route.engine.id)
+        assertNull(route.voiceId)
+        assertEquals(ReadAloudTtsRouter.RouteKind.DIALOGUE_FALLBACK, route.kind)
+        assertTrue(route.warnOnFailure)
+
+        val fallback = router.fallbackRoutes(
+            dialogue(StoryboardSegment.SpeakerGender.UNKNOWN),
+            narratorEngine,
+            route
+        ).first()
+        assertEquals(narratorEngine.id, fallback.engine.id)
+        assertEquals(ReadAloudTtsRouter.RouteKind.NARRATOR, fallback.kind)
+        assertFalse(fallback.warnOnFailure)
+    }
+
+    @Test
+    fun globalDefaults_withoutGenderVoices_respectsExplicitActiveVoice() {
+        val selectedEngine = engine(
+            id = "selected-dialogue",
+            voices = listOf(voice("voice-a"), voice("voice-b")),
+            activeVoiceId = "voice-b"
+        )
+        val defaults = ReadAloudTtsRouter.resolveGlobalBindings(
+            multiRoleEngineId = selectedEngine.id,
+            narratorEngineId = narratorEngine.id,
+            narratorVoiceId = "narrator_voice",
+            dialogueMaleVoiceId = null,
+            dialogueFemaleVoiceId = null,
+            engineResolver = { id ->
+                when (id) {
+                    selectedEngine.id -> selectedEngine
+                    narratorEngine.id -> narratorEngine
+                    else -> null
+                }
+            }
+        )
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = null,
+            characterBindings = emptyMap(),
+            dialogueMaleBinding = null,
+            dialogueFemaleBinding = null,
+            characterNameIndex = emptyMap(),
+            characterGenderIndex = emptyMap(),
+            globalBindings = defaults
+        )!!
+
+        val route = router.route(
+            dialogue(StoryboardSegment.SpeakerGender.UNKNOWN),
+            narratorEngine
+        )
+
+        assertEquals(selectedEngine.id, route.engine.id)
+        assertEquals("voice-b", route.voiceId)
+    }
+
+    @Test
     fun unknownGenderDialogue_usesDialogueEngineInsteadOfNarrator() {
         val router = ReadAloudTtsRouter.createResolved(
             narratorBinding = ReadAloudTtsRouter.RouteBinding(narratorEngine, "narrator_voice"),
@@ -275,7 +355,7 @@ class ReadAloudTtsRouterTest {
     }
 
     @Test
-    fun failedCharacterRoute_fallsBackToDifferentNarratorEngineBeforeSameEngineVoice() {
+    fun failedCharacterRoute_usesGenderFallbackBeforeNarrator() {
         val router = ReadAloudTtsRouter.createResolved(
             narratorBinding = ReadAloudTtsRouter.RouteBinding(narratorEngine, "narrator_voice"),
             characterBindings = mapOf(
@@ -291,13 +371,18 @@ class ReadAloudTtsRouterTest {
 
         val fallbacks = router.fallbackRoutes(segment, dialogueEngine, primary)
 
-        assertEquals(narratorEngine.id, fallbacks.first().engine.id)
-        assertEquals("narrator_voice", fallbacks.first().voiceId)
+        assertEquals(dialogueEngine.id, fallbacks.first().engine.id)
+        assertEquals("male_voice", fallbacks.first().voiceId)
+        assertEquals(ReadAloudTtsRouter.RouteKind.DIALOGUE_FALLBACK, fallbacks.first().kind)
+        assertEquals(narratorEngine.id, fallbacks[1].engine.id)
+        assertEquals("narrator_voice", fallbacks[1].voiceId)
         assertTrue(fallbacks.all { it.fallbackUsed })
+        assertTrue(primary.isAssignedRole)
+        assertFalse(fallbacks.first().isAssignedRole)
     }
 
     @Test
-    fun invalidOrSystemGlobalDefaults_areIgnored() {
+    fun invalidNarratorDefault_isIgnoredButValidMultiRoleDefaultRemains() {
         val systemEngine = engine(
             id = "system",
             type = TtsEngineType.SYSTEM,
@@ -321,16 +406,20 @@ class ReadAloudTtsRouterTest {
         assertNull(defaults.narrator)
         assertNull(defaults.dialogueMale)
         assertNull(defaults.dialogueFemale)
-        assertNull(
-            ReadAloudTtsRouter.createResolved(
-                narratorBinding = defaults.narrator,
-                characterBindings = emptyMap(),
-                dialogueMaleBinding = defaults.dialogueMale,
-                dialogueFemaleBinding = defaults.dialogueFemale,
-                characterNameIndex = emptyMap(),
-                characterGenderIndex = emptyMap(),
-                globalBindings = defaults
-            )
+        assertNotNull(defaults.dialogueDefault)
+        val router = ReadAloudTtsRouter.createResolved(
+            narratorBinding = defaults.narrator,
+            characterBindings = emptyMap(),
+            dialogueMaleBinding = defaults.dialogueMale,
+            dialogueFemaleBinding = defaults.dialogueFemale,
+            characterNameIndex = emptyMap(),
+            characterGenderIndex = emptyMap(),
+            globalBindings = defaults
+        )
+        assertNotNull(router)
+        assertEquals(
+            dialogueEngine.id,
+            router!!.route(dialogue(StoryboardSegment.SpeakerGender.UNKNOWN), narratorEngine).engine.id
         )
     }
 
@@ -402,12 +491,14 @@ class ReadAloudTtsRouterTest {
     private fun engine(
         id: String,
         type: TtsEngineType = TtsEngineType.SCRIPT,
-        voices: List<TtsVoice>
+        voices: List<TtsVoice>,
+        activeVoiceId: String? = null
     ) = TtsEngineSetting(
         id = id,
         name = id,
         type = type,
-        voices = voices
+        voices = voices,
+        activeVoiceId = activeVoiceId
     )
 
     private fun voice(id: String) = TtsVoice(id = id, name = id)

@@ -107,6 +107,7 @@
     <string name="character_tts_follow_global">Follows global · %1$s</string>
     <string name="character_tts_emotion_runtime">Emotion style: scheduled while generating speech</string>
     <string name="character_tts_binding_saved">Voice binding saved.</string>
+    <string name="character_tts_route_fallback">Character voice engine unavailable, using the default voice fallback</string>
     <string name="character_tts_binding_cleared">Voice binding cleared.</string>
     <string name="character_page_formal">Formal roles</string>
     <string name="character_page_temporary">Temporary roles</string>

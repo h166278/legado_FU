@@ -2295,7 +2295,7 @@ object AiTtsStoryboardHelper {
                     it.identityKey == request.identityCacheKey &&
                     it.capabilities == request.storyboardCapabilities
             }
-            ?: return null
+            ?: return composeLayeredCache(request, identity, null)
         return composeLayeredCache(request, identity, expressive)
     }
 

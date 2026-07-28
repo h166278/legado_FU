@@ -7,6 +7,7 @@ data class ReadAloudBufferProgress(
 
 internal data class ReadAloudPreparedItemRange(
     val paragraphIndex: Int,
+    val start: Int,
     val end: Int
 )
 
@@ -23,6 +24,13 @@ internal fun preparedReadAloudItemIndex(
     targetParagraphOffset: Int,
     mediaItemCount: Int
 ): Int? {
+    val firstRange = ranges.firstOrNull() ?: return null
+    if (targetParagraphIndex < firstRange.paragraphIndex ||
+        (targetParagraphIndex == firstRange.paragraphIndex &&
+                targetParagraphOffset < firstRange.start)
+    ) {
+        return null
+    }
     val index = ranges.indexOfFirst { range ->
         range.paragraphIndex > targetParagraphIndex ||
                 (range.paragraphIndex == targetParagraphIndex &&

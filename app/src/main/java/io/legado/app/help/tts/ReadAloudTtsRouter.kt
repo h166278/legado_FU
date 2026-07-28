@@ -19,6 +19,7 @@ class ReadAloudTtsRouter private constructor(
     private val castRoleBindings: Map<Long, RouteBinding>,
     private val dialogueMaleBinding: RouteBinding?,
     private val dialogueFemaleBinding: RouteBinding?,
+    private val dialogueDefaultBinding: RouteBinding?,
     private val characterNameIndex: Map<String, Long>,
     private val characterGenderIndex: Map<Long, String>,
     private val castRoleNameIndex: Map<String, Long>,
@@ -45,7 +46,9 @@ class ReadAloudTtsRouter private constructor(
         val dialogueFallbackBinding = fallbackGender?.let(::genderBinding)
         val isSpokenRole = segment?.type == StoryboardSegmentType.DIALOGUE ||
             segment?.type == StoryboardSegmentType.THOUGHT
+        val defaultDialogueBinding = dialogueDefaultBinding.takeIf { isSpokenRole }
         val binding = characterBinding ?: castRoleBinding ?: dialogueFallbackBinding ?:
+            defaultDialogueBinding ?:
             narratorBinding.takeUnless { isSpokenRole }
         val engine = binding?.engine?.takeIf { it.type == TtsEngineType.SCRIPT && it.enabled }
             ?: fallbackEngine
@@ -67,7 +70,7 @@ class ReadAloudTtsRouter private constructor(
         val voiceId = sceneVoiceId ?: binding?.voiceId
             ?.takeIf { binding.engine.id == engine.id }
             ?.takeIf { voiceId -> engine.enabledVoices().any { it.id == voiceId } }
-            ?: engine.activeVoiceId
+            ?: engine.activeVoice()?.id
         return Route(
             engine = engine,
             voiceId = voiceId,
@@ -83,7 +86,9 @@ class ReadAloudTtsRouter private constructor(
             fallbackUsed = isSpokenRole && characterBinding == null && castRoleBinding == null,
             bindingUnavailable = characterId in unavailableCharacterBindings || castRoleId in unavailableCastRoleBindings,
             bindingMode = characterBinding?.bindingMode ?: castRoleBinding?.bindingMode,
-            sceneOverrideUsed = sceneVoiceId != null
+            sceneOverrideUsed = sceneVoiceId != null,
+            warnOnFailure = isSpokenRole && binding != null &&
+                binding.engine.id == dialogueDefaultBinding?.engine?.id
         )
     }
 
@@ -113,18 +118,18 @@ class ReadAloudTtsRouter private constructor(
             fallbackGender?.let(::genderBinding)?.let { binding ->
                 add(binding.toRoute(RouteKind.DIALOGUE_FALLBACK, fallbackUsed = true))
             }
+            narratorBinding?.let { binding ->
+                add(binding.toRoute(RouteKind.NARRATOR, fallbackUsed = true))
+            }
             add(
                 Route(
                     engine = fallbackEngine,
-                    voiceId = fallbackEngine.activeVoiceId,
+                    voiceId = fallbackEngine.activeVoice()?.id,
                     styleId = null,
                     kind = if (isSpokenRole) RouteKind.DIALOGUE_FALLBACK else RouteKind.ENGINE_DEFAULT,
                     fallbackUsed = true
                 )
             )
-            narratorBinding?.let { binding ->
-                add(binding.toRoute(RouteKind.NARRATOR, fallbackUsed = true))
-            }
         }
         return candidates
             .distinctBy { Triple(it.engine.id, it.voiceId, it.styleId) }
@@ -132,13 +137,12 @@ class ReadAloudTtsRouter private constructor(
                 failedRoute != null && route.engine.id == failedRoute.engine.id &&
                     route.voiceId == failedRoute.voiceId && route.styleId == failedRoute.styleId
             }
-            .sortedByDescending { route -> failedRoute == null || route.engine.id != failedRoute.engine.id }
     }
 
     private fun RouteBinding.toRoute(kind: RouteKind, fallbackUsed: Boolean): Route {
         return Route(
             engine = engine,
-            voiceId = voiceId ?: engine.activeVoiceId,
+            voiceId = voiceId ?: engine.activeVoice()?.id,
             styleId = null,
             kind = kind,
             fallbackUsed = fallbackUsed,
@@ -154,8 +158,12 @@ class ReadAloudTtsRouter private constructor(
         val fallbackUsed: Boolean = false,
         val bindingUnavailable: Boolean = false,
         val bindingMode: String? = null,
-        val sceneOverrideUsed: Boolean = false
-    )
+        val sceneOverrideUsed: Boolean = false,
+        val warnOnFailure: Boolean = false
+    ) {
+        val isAssignedRole: Boolean
+            get() = !fallbackUsed && (kind == RouteKind.CHARACTER || kind == RouteKind.CAST_ROLE)
+    }
 
     enum class RouteKind {
         CHARACTER,
@@ -214,7 +222,8 @@ class ReadAloudTtsRouter private constructor(
     internal data class GlobalBindings(
         val narrator: RouteBinding?,
         val dialogueMale: RouteBinding?,
-        val dialogueFemale: RouteBinding?
+        val dialogueFemale: RouteBinding?,
+        val dialogueDefault: RouteBinding? = null
     )
 
     companion object {
@@ -364,7 +373,8 @@ class ReadAloudTtsRouter private constructor(
             return GlobalBindings(
                 narrator = narrator,
                 dialogueMale = dialogueEngine?.toGlobalRouteBinding(dialogueMaleVoiceId),
-                dialogueFemale = dialogueEngine?.toGlobalRouteBinding(dialogueFemaleVoiceId)
+                dialogueFemale = dialogueEngine?.toGlobalRouteBinding(dialogueFemaleVoiceId),
+                dialogueDefault = dialogueEngine?.toDialogueDefaultRouteBinding()
             )
         }
 
@@ -382,6 +392,7 @@ class ReadAloudTtsRouter private constructor(
             castRoleBindings: Map<Long, RouteBinding> = emptyMap(),
             dialogueMaleBinding: RouteBinding?,
             dialogueFemaleBinding: RouteBinding?,
+            dialogueDefaultBinding: RouteBinding? = null,
             characterNameIndex: Map<String, Long>,
             characterGenderIndex: Map<Long, String>,
             castRoleNameIndex: Map<String, Long> = emptyMap(),
@@ -400,12 +411,14 @@ class ReadAloudTtsRouter private constructor(
             val effectiveNarratorBinding = narratorBinding ?: globalBindings.narrator
             val effectiveDialogueMaleBinding = dialogueMaleBinding ?: globalBindings.dialogueMale
             val effectiveDialogueFemaleBinding = dialogueFemaleBinding ?: globalBindings.dialogueFemale
+            val effectiveDialogueDefaultBinding = dialogueDefaultBinding ?: globalBindings.dialogueDefault
             if (
                 effectiveNarratorBinding == null &&
                 characterBindings.isEmpty() &&
                 castRoleBindings.isEmpty() &&
                 effectiveDialogueMaleBinding == null &&
                 effectiveDialogueFemaleBinding == null &&
+                effectiveDialogueDefaultBinding == null &&
                 characterNameIndex.isEmpty()
             ) {
                 return null
@@ -416,6 +429,7 @@ class ReadAloudTtsRouter private constructor(
                 castRoleBindings = castRoleBindings,
                 dialogueMaleBinding = effectiveDialogueMaleBinding,
                 dialogueFemaleBinding = effectiveDialogueFemaleBinding,
+                dialogueDefaultBinding = effectiveDialogueDefaultBinding,
                 characterNameIndex = characterNameIndex,
                 characterGenderIndex = characterGenderIndex,
                 castRoleNameIndex = castRoleNameIndex,
@@ -458,6 +472,10 @@ class ReadAloudTtsRouter private constructor(
                 ?.takeIf { id -> enabledVoices().any { it.id == id } }
                 ?: return null
             return RouteBinding(this, safeVoiceId)
+        }
+
+        private fun TtsEngineSetting.toDialogueDefaultRouteBinding(): RouteBinding {
+            return RouteBinding(this, activeVoice()?.id)
         }
 
     }

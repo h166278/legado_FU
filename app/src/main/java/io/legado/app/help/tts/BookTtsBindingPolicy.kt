@@ -54,6 +54,22 @@ internal object BookTtsBindingPolicy {
         }
     }
 
+    /**
+     * 播放前只等待从未完成选音、或原音色已经失效的自动绑定。
+     * 已经评估但证据不足的空绑定也算“分配完成”，交给引擎默认音色继续播放；
+     * 后续证据复评仍走后台富化，不能重新阻塞缓存章节首声。
+     */
+    fun needsPlaybackAssignment(
+        binding: BookCharacterTtsBinding?,
+        usableVoiceIds: Set<String>
+    ): Boolean {
+        binding ?: return true
+        if (binding.bindingMode != BookCharacterTtsBinding.BindingMode.AUTO) return false
+        val voiceId = binding.voiceId?.takeIf { it.isNotBlank() }
+        if (voiceId != null) return voiceId !in usableVoiceIds
+        return binding.autoEvidenceSignature.isBlank()
+    }
+
     fun resolve(
         current: BookCharacterTtsBinding?,
         newBinding: () -> BookCharacterTtsBinding,

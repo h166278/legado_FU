@@ -16,7 +16,13 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 @SuppressLint("UnsafeOptInUsageError")
 object TtsPlayerFactory {
 
-    fun create(context: Context): ExoPlayer {
+    fun create(
+        context: Context,
+        allowFormatChanges: Boolean = false
+    ): ExoPlayer {
+        if (allowFormatChanges) {
+            return ExoPlayer.Builder(context).build()
+        }
         val renderersFactory = object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(
                 context: Context,

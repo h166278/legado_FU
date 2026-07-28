@@ -9,6 +9,47 @@ import org.junit.Test
 
 class BookTtsBindingPolicyTest {
 
+    @Test
+    fun playbackAssignment_onlyWaitsForMissingOrInvalidAutoBinding() {
+        val voices = setOf("voice-a")
+        assertTrue(BookTtsBindingPolicy.needsPlaybackAssignment(null, voices))
+        assertTrue(
+            BookTtsBindingPolicy.needsPlaybackAssignment(
+                binding(voiceId = null, confidence = 0f, signature = ""),
+                voices
+            )
+        )
+        assertFalse(
+            BookTtsBindingPolicy.needsPlaybackAssignment(
+                binding(voiceId = null, confidence = 0.4f, signature = "checked"),
+                voices
+            )
+        )
+        assertFalse(
+            BookTtsBindingPolicy.needsPlaybackAssignment(
+                binding(voiceId = "voice-a", confidence = 0.8f, signature = "checked"),
+                voices
+            )
+        )
+        assertTrue(
+            BookTtsBindingPolicy.needsPlaybackAssignment(
+                binding(voiceId = "voice-b", confidence = 0.8f, signature = "checked"),
+                voices
+            )
+        )
+        assertFalse(
+            BookTtsBindingPolicy.needsPlaybackAssignment(
+                binding(
+                    voiceId = "voice-b",
+                    confidence = 1f,
+                    signature = "manual",
+                    mode = BookCharacterTtsBinding.BindingMode.MANUAL
+                ),
+                voices
+            )
+        )
+    }
+
     private val voices = setOf("voice_a", "voice_b")
 
     @Test

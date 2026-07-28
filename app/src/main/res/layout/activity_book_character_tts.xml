@@ -17,6 +17,33 @@
             android:layout_height="wrap_content"
             app:title="@string/book_characters" />
 
+        <LinearLayout
+            android:id="@+id/layout_route_warning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/ng_page_padding"
+            android:layout_marginTop="@dimen/ng_space_s"
+            android:layout_marginEnd="@dimen/ng_page_padding"
+            android:background="@drawable/ng_bg_tag_warning"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/ng_space_l"
+            android:paddingTop="@dimen/ng_space_m"
+            android:paddingEnd="@dimen/ng_space_l"
+            android:paddingBottom="@dimen/ng_space_m"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tv_route_warning"
+                style="@style/Ng.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:textColor="@color/ng_warning"
+                android:textSize="15sp"
+                tools:text="角色引擎不可用，已临时使用默认声音兜底" />
+
+        </LinearLayout>
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_view"
             android:layout_width="match_parent"

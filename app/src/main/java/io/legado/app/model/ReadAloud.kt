@@ -167,6 +167,14 @@ object ReadAloud {
         }
     }
 
+    fun prepareTtsCasting(context: Context) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, aloudClass)
+            intent.action = IntentAction.prepareTtsCasting
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
     fun setTimer(context: Context, minute: Int) {
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)

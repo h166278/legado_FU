@@ -104,6 +104,7 @@
     <string name="character_tts_follow_global">跟随全局 · %1$s</string>
     <string name="character_tts_emotion_runtime">情绪风格：生成语音时按情景调度</string>
     <string name="character_tts_binding_saved">已保存角色发音人绑定。</string>
+    <string name="character_tts_route_fallback">角色引擎不可用，已临时使用默认声音兜底</string>
     <string name="character_tts_binding_cleared">已清除角色音色绑定。</string>
     <string name="character_page_formal">正式角色</string>
     <string name="character_page_temporary">临时角色</string>
