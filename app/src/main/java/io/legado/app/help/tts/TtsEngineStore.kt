@@ -133,6 +133,7 @@ object TtsEngineStore {
     const val NEXT_EDGE_PROXY_ID = "next_edge_proxy"
     const val MIMO_V25_TTS_ID = "mimo_v25_tts"
     const val STEPAUDIO_25_TTS_ID = "stepfun_stepaudio_2_5_tts_v2_manual"
+    const val MOSSLAND_TTS_ID = "mossland_moss_tts"
     const val OPTIONS_EXAMPLE_ID = "script_options_example"
     const val STATIC_VOICES_EXAMPLE_ID = "script_static_voices_example"
     const val CUSTOM_HTTP_ID = "custom_http_forwarder"
@@ -151,6 +152,7 @@ object TtsEngineStore {
         "next_edge_proxy.js",
         "mimo_v25_tts.js",
         "stepaudio_25_tts.js",
+        "mossland_tts.js",
         "script_options_example.js",
         "static_voices_example.js"
     )
@@ -167,9 +169,10 @@ object TtsEngineStore {
         val deletedIds = deletedEngineIds()
         val builtInEngines = builtInEngines().filterNot { it.id in deletedIds }
         val builtInIds = builtInEngines.mapTo(hashSetOf()) { it.id }
+        val upgradedDefaultEngines = linkedMapOf<String, TtsEngineSetting>()
         val merged = builtInEngines.map { builtIn ->
             saved[builtIn.id]?.let { savedEngine ->
-                savedEngine.copy(
+                val mergedEngine = savedEngine.copy(
                     type = builtIn.type,
                     builtIn = builtIn.builtIn,
                     enginePackage = builtIn.enginePackage,
@@ -189,7 +192,21 @@ object TtsEngineStore {
                         savedEngine.defaultPitch
                     }
                 ).withUpdatedDefaultScript(builtIn)
+                if (mergedEngine.script != savedEngine.script) {
+                    upgradedDefaultEngines[mergedEngine.id] = mergedEngine
+                }
+                mergedEngine
             } ?: builtIn
+        }
+        if (upgradedDefaultEngines.isNotEmpty()) {
+            upgradedDefaultEngines.keys.forEach { engineId ->
+                appDb.ttsVoiceDao.deleteByEngine(engineId)
+            }
+            saveEngines(
+                savedEngines.map { savedEngine ->
+                    upgradedDefaultEngines[savedEngine.id] ?: savedEngine
+                }
+            )
         }
         val custom = saved.values
             .filterNot { savedEngine ->
@@ -606,10 +623,18 @@ object TtsEngineStore {
             builtIn = builtIn,
             isDefaultScript = id in defaultIds
         )
+        val replaceMosslandVoiceCatalog = replaceScript &&
+                id == MOSSLAND_TTS_ID &&
+                builtIn.script.contains("// @version 1.3.0") &&
+                builtIn.script.contains("\"profile_source\": \"vv_clone_catalog\"")
+        val savedScriptName = parseScriptMetadata(script)["name"]
         return copy(
             name = if (
-                id == STEPAUDIO_25_TTS_ID &&
-                name == "阶跃星辰 StepAudio 2.5 TTS（V2）"
+                (replaceScript && name == savedScriptName) ||
+                (
+                    id == STEPAUDIO_25_TTS_ID &&
+                        name == "阶跃星辰 StepAudio 2.5 TTS（V2）"
+                )
             ) {
                 builtIn.name
             } else {
@@ -634,7 +659,9 @@ object TtsEngineStore {
             defaultSpeed = builtIn.defaultSpeed,
             defaultVolume = builtIn.defaultVolume,
             defaultPitch = builtIn.defaultPitch,
-            sampleText = if (replaceScript) builtIn.sampleText else sampleText
+            sampleText = if (replaceScript) builtIn.sampleText else sampleText,
+            activeVoiceId = if (replaceMosslandVoiceCatalog) null else activeVoiceId,
+            disabledVoiceIds = if (replaceMosslandVoiceCatalog) emptyList() else disabledVoiceIds
         )
     }
 
@@ -685,6 +712,22 @@ object TtsEngineStore {
                 script.contains("// @version 1.0.0") &&
                 builtIn.script.contains("// @version 1.0.1") &&
                 builtIn.script.contains("// @capabilities style_tags,emotion,emotion_intensity")
+        val shouldUpdateMosslandClonedCatalog = id == MOSSLAND_TTS_ID &&
+                builtIn.script.contains("// @name Mossland") &&
+                builtIn.script.contains("// @version 1.3.0") &&
+                builtIn.script.contains("\"profile_source\": \"vv_clone_catalog\"") &&
+                (
+                        (
+                                script.contains("// @name MOSS-TTS") &&
+                                        script.contains("// @version 1.1.0") &&
+                                        script.contains("影视分类中的通用声线")
+                                ) ||
+                                (
+                                        script.contains("// @name mossland") &&
+                                                script.contains("// @version 1.2.0") &&
+                                                script.contains("\"profile_source\": \"provider_catalog\"")
+                                        )
+                        )
         val shouldUpdateStepAudioPlanEndpoint = id == STEPAUDIO_25_TTS_ID &&
                 script.contains("https://api.stepfun.com/v1/audio/speech") &&
                 builtIn.script.contains("https://api.stepfun.com/step_plan/v1/audio/speech")
@@ -724,6 +767,7 @@ object TtsEngineStore {
                 shouldUpdateStaticPreviewText ||
                 shouldUpdateNextEdgeProxy ||
                 shouldUpdateMimoExpressiveFields ||
+                shouldUpdateMosslandClonedCatalog ||
                 shouldUpdateStepAudioPlanEndpoint ||
                 shouldUpdateStepAudioSampleRate ||
                 shouldRemoveStepAudioStreamFormat ||

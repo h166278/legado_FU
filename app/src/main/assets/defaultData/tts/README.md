@@ -24,6 +24,8 @@ App 主动调用的协议函数只有：
 
 `voices(options, ctx)` 必须返回标准发音人数组。App 不解析服务商私有响应格式；如果远端接口返回 `catalog`、map、嵌套对象或其它结构，脚本需要先在 `voices()` 内转换成标准数组再返回。发音人必填字段是 `id/name`，可选字段是 `language/gender/style/tags/sample_text/extra`，其中 `extra` 会原样传回 `synthesize()`。
 
+Mossland 的内置发音人目录由 `scripts/generate_mossland_tts_catalog.py` 从已公开的 VV 全量复刻音色生成，并与 VV 画像目录按名称合并。生成时校验 238 个名称和音色 ID 均唯一；运行时不再请求发音人接口，也不保留旧的服务商有声书目录。
+
 如果发音人支持风格，建议在 `extra.styles` 中放置数组：
 
 ```json
@@ -42,6 +44,7 @@ App 主动调用的协议函数只有：
 - `style_tags`：读取 `ctx.synthesis.expressive.style_concepts`。
 - `emotion`：读取 `ctx.synthesis.expressive.emotion`。
 - `emotion_intensity`：读取 `ctx.synthesis.expressive.intensity`，并隐含 `emotion`。
+- `casting_metadata`：发音人目录包含可供自动选角使用的服务商画像。只允许写入服务商明确提供或人工确认的信息；缺失字段保持为空，不做年龄或性别推断。
 
 这些字段是供应商无关的中间语义，脚本负责映射成服务商的 style ID、标签或自然语言指导。用户手动选择的音色风格应优先于自动映射；不支持的字段不要声明，也不要直接透传给上游。
 

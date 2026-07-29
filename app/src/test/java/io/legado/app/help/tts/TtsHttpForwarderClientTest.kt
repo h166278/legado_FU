@@ -463,6 +463,65 @@ class TtsHttpForwarderClientTest {
     }
 
     @Test
+    fun mosslandBuiltInEngine_usesFullVvCloneCatalogWithoutRuntimeVoiceRequest() {
+        val engine = scriptEngineFromAssetFile("mossland_tts.js")
+
+        assertEquals(TtsEngineStore.MOSSLAND_TTS_ID, engine.id)
+        assertEquals("Mossland", engine.name)
+        assertTrue(engine.supportsVoiceFetch())
+        assertTrue(engine.supportsCapability(TtsEngineCapability.CASTING_METADATA))
+        assertFalse(engine.supportsCapability(TtsEngineCapability.SCENE_CONTEXT))
+        assertTrue(engine.script.contains("// @version 1.3.0"))
+        assertTrue(engine.script.contains("var MOSS_VOICES = ["))
+        assertEquals(238, Regex("\"provider_speaker\":").findAll(engine.script).count())
+        assertTrue(engine.script.contains("\"name\": \"清爽男大\""))
+        assertTrue(engine.script.contains("\"name\": \"落寞老妇\""))
+        assertTrue(engine.script.contains("\"id\": \"8af9d875-5faa-4c5d-8fb4-ac174a13d30c\""))
+        assertTrue(engine.script.contains("\"catalog_category\": \"有声书\""))
+        assertFalse(engine.script.contains("\"catalog_category\": \"影视配音\""))
+        assertTrue(engine.script.contains("\"profile_source\": \"vv_clone_catalog\""))
+        assertTrue(engine.script.contains("\"age_min\":"))
+        assertTrue(engine.script.contains("\"vv_style\":"))
+        assertTrue(engine.script.contains("\"vv_tags\":"))
+        assertTrue(engine.script.contains("\"persona\":"))
+        assertFalse(engine.script.contains("/v1/audio/voices"))
+        assertFalse(engine.script.contains("java.ajax"))
+        assertFalse(engine.script.contains("manualVoiceId"))
+        assertFalse(engine.script.contains("\"name\": \"低磁男攻音\""))
+        assertFalse(engine.script.contains("\"name\": \"治愈放松女声\""))
+        assertFalse(engine.script.contains("\"profile_source\": \"provider_catalog\""))
+        assertTrue(engine.script.contains("delivery_method: \"audio\""))
+    }
+
+    @Test
+    fun mosslandBuiltInUpgrade_replacesOldCatalogAndPreservesUserSettings() {
+        val builtIn = scriptEngineFromAssetFile("mossland_tts.js")
+        val oldScript = builtIn.script
+            .replace("// @name Mossland", "// @name mossland")
+            .replace("// @version 1.3.0", "// @version 1.2.0")
+            .replace(
+                "\"profile_source\": \"vv_clone_catalog\"",
+                "\"profile_source\": \"provider_catalog\""
+            )
+        val saved = TtsEngineStore.scriptEngineFromScript(oldScript)!!.copy(
+            enabled = true,
+            optionValues = mapOf("apiKey" to "saved-key", "outputFormat" to "wav"),
+            activeVoiceId = "old-film-voice",
+            disabledVoiceIds = listOf("disabled-voice")
+        )
+
+        val updated = TtsEngineStore.updateDefaultScriptForTest(saved, builtIn)
+
+        assertEquals("Mossland", updated.name)
+        assertEquals(builtIn.script, updated.script)
+        assertEquals(builtIn.capabilities, updated.capabilities)
+        assertEquals(saved.enabled, updated.enabled)
+        assertEquals(saved.optionValues, updated.optionValues)
+        assertEquals(null, updated.activeVoiceId)
+        assertTrue(updated.disabledVoiceIds.isEmpty())
+    }
+
+    @Test
     fun scriptMetadata_parsesHeaderComments() {
         val metadata = TtsEngineStore.parseScriptMetadata(
             """
