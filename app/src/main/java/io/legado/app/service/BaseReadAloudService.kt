@@ -550,6 +550,9 @@ abstract class BaseReadAloudService : BaseService(),
     open fun prepareTtsCasting() = Unit
 
     fun upTtsProgress(progress: Int) {
+        // 先同步共享位置，确保新打开的阅读页和播放器原文页首帧就使用真实播放段落。
+        // 这也覆盖跳过章名时服务在界面收到下一次事件前已经推进到正文的场景。
+        ReadBook.durChapterPos = progress
         postEvent(EventBus.TTS_PROGRESS, progress)
     }
 
