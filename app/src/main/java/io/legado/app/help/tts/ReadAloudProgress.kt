@@ -11,6 +11,11 @@ internal data class ReadAloudPreparedItemRange(
     val end: Int
 )
 
+internal data class ReadAloudPreparedPlaybackTarget(
+    val itemIndex: Int,
+    val itemOffset: Int
+)
+
 internal fun preparedReadAloudChapterPosition(
     paragraphStarts: List<Int>,
     paragraphIndex: Int,
@@ -18,12 +23,12 @@ internal fun preparedReadAloudChapterPosition(
 ): Int? = paragraphStarts.getOrNull(paragraphIndex)
     ?.plus(preparedEnd.coerceAtLeast(0))
 
-internal fun preparedReadAloudItemIndex(
+internal fun preparedReadAloudPlaybackTarget(
     ranges: List<ReadAloudPreparedItemRange>,
     targetParagraphIndex: Int,
     targetParagraphOffset: Int,
     mediaItemCount: Int
-): Int? {
+): ReadAloudPreparedPlaybackTarget? {
     val firstRange = ranges.firstOrNull() ?: return null
     if (targetParagraphIndex < firstRange.paragraphIndex ||
         (targetParagraphIndex == firstRange.paragraphIndex &&
@@ -36,5 +41,24 @@ internal fun preparedReadAloudItemIndex(
                 (range.paragraphIndex == targetParagraphIndex &&
                         range.end > targetParagraphOffset)
     }
-    return index.takeIf { it in 0 until mediaItemCount }
+    if (index !in 0 until mediaItemCount) return null
+    val range = ranges[index]
+    val itemOffset = if (range.paragraphIndex == targetParagraphIndex) {
+        (targetParagraphOffset - range.start).coerceIn(0, range.end - range.start)
+    } else {
+        0
+    }
+    return ReadAloudPreparedPlaybackTarget(index, itemOffset)
+}
+
+internal fun readAloudSeekPositionMs(
+    durationMs: Long,
+    itemLength: Int,
+    itemOffset: Int
+): Long {
+    if (durationMs <= 0L || itemLength <= 0) return 0L
+    val safeOffset = itemOffset.coerceIn(0, itemLength)
+    return (durationMs.toDouble() * safeOffset / itemLength)
+        .toLong()
+        .coerceIn(0L, durationMs)
 }

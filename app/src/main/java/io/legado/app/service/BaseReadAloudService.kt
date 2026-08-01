@@ -280,6 +280,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
+        onNewReadAloudRequest()
         execute(executeContext = IO) {
             this@BaseReadAloudService.pageIndex = pageIndex
             textChapter = ReadBook.curTextChapter
@@ -470,6 +471,11 @@ abstract class BaseReadAloudService : BaseService(),
     abstract fun playStop()
 
     protected open fun tryReusePreparedPlayback(play: Boolean): Boolean = false
+
+    /**
+     * 新位置请求进入服务时立即终止旧位置生产者，避免异步初始化期间继续回写旧进度。
+     */
+    protected open fun onNewReadAloudRequest() = Unit
 
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {

@@ -93,6 +93,7 @@ import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.aloud.ReadAloudLauncher
+import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_ACCENT_COLOR
@@ -2708,6 +2709,7 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 内容加载完成
      */
     override fun contentLoadFinish() {
+        ReadAloudMiniPlayer.preloadCover(this)
         val startReadAloud = intent.getBooleanExtra("readAloud", false)
         if (startReadAloud) {
             intent.removeExtra("readAloud")
@@ -2768,8 +2770,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     /**
      * 页面改变
      */
-    override fun pageChanged() {
-        pageChanged = true
+    override fun pageChanged(manual: Boolean) {
+        if (manual) {
+            pageChanged = true
+        }
         binding.readView.onPageChange()
         handler.post {
             upSeekBarProgress()
@@ -3123,38 +3127,18 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 朗读按钮
      */
     override fun onClickReadAloud() {
-        autoPageStop()
-        ReadAloudLauncher.openPlayer(this)
-        if (!BaseReadAloudService.isRun) {
-            binding.root.post {
-                startReadAloudFromCurrentPosition()
-            }
-        }
-    }
-
-    private fun startReadAloudFromCurrentPosition() {
         if (BaseReadAloudService.isRun) {
+            ReadAloudMiniPlayer.attach(this)
+            toggleReadAloud()
             return
         }
-        ReadAloud.upReadAloudClass()
-        val scrollPageAnim = ReadBook.pageAnim() == 3
-        if (scrollPageAnim) {
-            val pos = binding.readView.getReadAloudPos()
-            if (pos != null) {
-                val (index, line) = pos
-                if (ReadBook.durChapterIndex != index) {
-                    ReadBook.openChapter(index, line.chapterPosition, false) {
-                        ReadBook.readAloud(startPos = line.pagePosition)
-                    }
-                } else {
-                    ReadBook.durChapterPos = line.chapterPosition
-                    ReadBook.readAloud(startPos = line.pagePosition)
+        ReadAloudMiniPlayer.showStarting(this)
+        binding.root.postOnAnimation {
+            binding.root.postOnAnimation {
+                if (!isFinishing && !isDestroyed) {
+                    toggleReadAloud()
                 }
-            } else {
-                ReadBook.readAloud()
             }
-        } else {
-            ReadBook.readAloud()
         }
     }
 
@@ -3185,29 +3169,32 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             !BaseReadAloudService.isPlay() -> {
-                val scrollPageAnim = ReadBook.pageAnim() == 3
-                if (scrollPageAnim && pageChanged) {
+                if (pageChanged) {
                     pageChanged = false
-                    val pos = binding.readView.getReadAloudPos()
-                    if (pos != null) {
-                        val (index, line) = pos
-                        if (ReadBook.durChapterIndex != index) {
-                            ReadBook.openChapter(index, line.chapterPosition, false) {
-                                ReadBook.readAloud(startPos = line.pagePosition)
-                            }
-                        } else {
-                            ReadBook.durChapterPos = line.chapterPosition
-                            ReadBook.readAloud(startPos = line.pagePosition)
-                        }
-                    } else {
-                        ReadBook.readAloud()
-                    }
+                    startReadAloudFromVisiblePosition()
                 } else {
                     ReadAloud.resume(this)
                 }
             }
 
             else -> ReadAloud.pause(this)
+        }
+    }
+
+    private fun startReadAloudFromVisiblePosition() {
+        val pos = binding.readView.getReadAloudPos()
+        if (pos == null) {
+            ReadBook.readAloud()
+            return
+        }
+        val (index, line) = pos
+        if (ReadBook.durChapterIndex != index) {
+            ReadBook.openChapter(index, line.chapterPosition, false) {
+                ReadBook.readAloud(startPos = line.pagePosition)
+            }
+        } else {
+            ReadBook.durChapterPos = line.chapterPosition
+            ReadBook.readAloud(startPos = line.pagePosition)
         }
     }
 
@@ -3510,17 +3497,26 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
         }
         observeEvent<Int>(EventBus.ALOUD_STATE) {
+            val keepManualPosition = pageChanged
             if (it == Status.STOP || it == Status.PAUSE) {
-                ReadBook.curTextChapter?.let { textChapter ->
-                    val page = textChapter.getPageByReadPos(ReadBook.durChapterPos)
-                    if (page != null) {
-                        page.removePageAloudSpan()
-                        readView.upContent(resetPageOffset = false)
+                if (!keepManualPosition) {
+                    ReadBook.curTextChapter?.let { textChapter ->
+                        val page = textChapter.getPageByReadPos(ReadBook.durChapterPos)
+                        if (page != null) {
+                            page.removePageAloudSpan()
+                            readView.upContent(resetPageOffset = false)
+                        }
                     }
                 }
             }
+            if (it == Status.PLAY || it == Status.STOP) {
+                pageChanged = false
+            }
         }
         observeEventSticky<Int>(EventBus.TTS_PROGRESS) { chapterStart ->
+            if (pageChanged) {
+                return@observeEventSticky
+            }
             lifecycleScope.launch(IO) {
                 if (BaseReadAloudService.isPlay()) {
                     ReadBook.curTextChapter?.let { textChapter ->

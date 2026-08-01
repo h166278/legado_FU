@@ -24,6 +24,7 @@
     <item name="read_aloud_mini_player" type="id" />
     <item name="iv_read_aloud_mini_cover" type="id" />
     <item name="btn_read_aloud_mini_play" type="id" />
+    <item name="tv_read_aloud_mini_status" type="id" />
     <item name="btn_read_aloud_mini_close" type="id" />
 
 </resources>

@@ -512,14 +512,15 @@ object ReadBook : CoroutineScope by MainScope() {
      * 当前页面变化
      */
     private fun curPageChanged(pageChanged: Boolean = false) {
-        callBack?.pageChanged()
+        callBack?.pageChanged(pageChanged)
         curTextChapter?.let {
             if (BaseReadAloudService.isRun && it.isCompleted) {
                 val scrollPageAnim = pageAnim() == 3
                 if (scrollPageAnim && pageChanged) {
                     ReadAloud.pause(appCtx)
                 } else {
-                    readAloud(BaseReadAloudService.isPlay())
+                    val continuePlaying = BaseReadAloudService.isPlay()
+                    readAloud(continuePlaying)
                 }
             }
         }
@@ -1089,7 +1090,7 @@ object ReadBook : CoroutineScope by MainScope() {
             success: (() -> Unit)? = null
         )
 
-        fun pageChanged()
+        fun pageChanged(manual: Boolean)
 
         fun contentLoadFinish()
 

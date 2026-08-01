@@ -31,8 +31,10 @@ import io.legado.app.help.tts.BookTtsCastingCoordinator
 import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.ReadAloudAudioTask
 import io.legado.app.help.tts.ReadAloudPreparedItemRange
+import io.legado.app.help.tts.ReadAloudPreparedPlaybackTarget
 import io.legado.app.help.tts.preparedReadAloudChapterPosition
-import io.legado.app.help.tts.preparedReadAloudItemIndex
+import io.legado.app.help.tts.preparedReadAloudPlaybackTarget
+import io.legado.app.help.tts.readAloudSeekPositionMs
 import io.legado.app.help.tts.ReadAloudPlaylistProductionState
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsPlayerFactory
@@ -112,7 +114,10 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var speakItems: List<SpeakItem> = emptyList()
     private var speakItemIndex = 0
     private var playlistChapterIndex = -1
-    private var pendingPlaylistSeekIndex = -1
+    private var pendingPlaylistSeek: PendingPlaylistSeek? = null
+    private var preparedSeekInProgress = false
+    private var progressGeneration = 0L
+    private val seekWindow = Timeline.Window()
     @Volatile
     private var nextChapterPlaybackPlan: NextChapterPlaybackPlan? = null
     private val playlistProductionState = ReadAloudPlaylistProductionState()
@@ -168,14 +173,20 @@ class HttpReadAloudService : BaseReadAloudService(),
         speakItems = emptyList()
         speakItemIndex = 0
         playlistChapterIndex = -1
-        pendingPlaylistSeekIndex = -1
+        pendingPlaylistSeek = null
+        preparedSeekInProgress = false
+    }
+
+    override fun onNewReadAloudRequest() {
+        progressGeneration++
+        playIndexJob?.cancel()
     }
 
     override fun tryReusePreparedPlayback(play: Boolean): Boolean {
         if (playlistChapterIndex != ReadBook.durChapterIndex || speakItems.isEmpty()) {
             return false
         }
-        val targetItemIndex = preparedReadAloudItemIndex(
+        val target = preparedReadAloudPlaybackTarget(
             ranges = speakItems.map { item ->
                 ReadAloudPreparedItemRange(item.paragraphIndex, item.start, item.end)
             },
@@ -186,21 +197,88 @@ class HttpReadAloudService : BaseReadAloudService(),
 
         pageChanged = false
         playIndexJob?.cancel()
-        speakItemIndex = targetItemIndex
-        pendingPlaylistSeekIndex = targetItemIndex
-            .takeIf { it != exoPlayer.currentMediaItemIndex }
-            ?: -1
-        exoPlayer.seekTo(targetItemIndex, 0L)
+        speakItemIndex = target.itemIndex
+        seekToPreparedPlayback(target)
         updatePreparationStage(BaseReadAloudService.PREPARATION_NONE)
         if (play) {
+            if (pause) {
+                super.resumeReadAloud()
+            } else {
+                postEvent(EventBus.ALOUD_STATE, Status.PLAY)
+            }
             exoPlayer.play()
-            if (pendingPlaylistSeekIndex < 0) {
+            if (pendingPlaylistSeek == null) {
                 upPlayPos()
             }
         } else {
             exoPlayer.pause()
+            postEvent(EventBus.ALOUD_STATE, Status.PAUSE)
         }
         return true
+    }
+
+    private fun seekToPreparedPlayback(target: ReadAloudPreparedPlaybackTarget) {
+        val durationMs = preparedItemDurationMs(target.itemIndex)
+        val item = speakItems[target.itemIndex]
+        val positionMs = readAloudSeekPositionMs(
+            durationMs = durationMs,
+            itemLength = item.text.length,
+            itemOffset = target.itemOffset
+        )
+        val changesMediaItem = target.itemIndex != exoPlayer.currentMediaItemIndex
+        val durationKnown = durationMs > 0L
+        pendingPlaylistSeek = if (changesMediaItem || !durationKnown) {
+            PendingPlaylistSeek(target, durationKnown)
+        } else {
+            null
+        }
+        preparedSeekInProgress = true
+        exoPlayer.seekTo(target.itemIndex, positionMs)
+        updatePreparedSeekProgress(target)
+        if (pendingPlaylistSeek == null && exoPlayer.playbackState == Player.STATE_READY) {
+            preparedSeekInProgress = false
+        }
+    }
+
+    private fun preparedItemDurationMs(itemIndex: Int): Long {
+        if (itemIndex == exoPlayer.currentMediaItemIndex && exoPlayer.duration > 0L) {
+            return exoPlayer.duration
+        }
+        val timeline = exoPlayer.currentTimeline
+        if (timeline.isEmpty || itemIndex !in 0 until timeline.windowCount) return 0L
+        return runCatching { timeline.getWindow(itemIndex, seekWindow).durationMs }
+            .getOrDefault(0L)
+            .coerceAtLeast(0L)
+    }
+
+    private fun applyPendingPlaylistSeek(): Boolean {
+        val pending = pendingPlaylistSeek ?: return false
+        if (exoPlayer.currentMediaItemIndex != pending.target.itemIndex) return false
+        if (!pending.positionApplied) {
+            val durationMs = exoPlayer.duration.takeIf { it > 0L } ?: return false
+            val item = speakItems.getOrNull(pending.target.itemIndex) ?: return false
+            exoPlayer.seekTo(
+                readAloudSeekPositionMs(
+                    durationMs = durationMs,
+                    itemLength = item.text.length,
+                    itemOffset = pending.target.itemOffset
+                )
+            )
+        }
+        speakItemIndex = pending.target.itemIndex
+        pendingPlaylistSeek = null
+        updatePreparedSeekProgress(pending.target)
+        return true
+    }
+
+    private fun updatePreparedSeekProgress(target: ReadAloudPreparedPlaybackTarget) {
+        val item = speakItems.getOrNull(target.itemIndex) ?: return
+        val progress = if (item.paragraphIndex == nowSpeak) {
+            currentParagraphBaseNumber() + item.start + target.itemOffset + 1
+        } else {
+            readAloudNumber + 1
+        }
+        upTtsProgress(progress)
     }
 
     private fun updateNextPos() {
@@ -250,6 +328,8 @@ class HttpReadAloudService : BaseReadAloudService(),
                     nowSpeak == 0 && paragraphStartPos == 0
         }
         nextChapterPlaybackPlan = null
+        pendingPlaylistSeek = null
+        preparedSeekInProgress = false
         if (!pause) {
             updatePreparationStage(
                 if (AppConfig.readAloudMultiRole) {
@@ -1156,24 +1236,30 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun upPlayPos() {
         playIndexJob?.cancel()
         val textChapter = textChapter ?: return
+        val activeGeneration = progressGeneration
         playIndexJob = lifecycleScope.launch {
+            if (activeGeneration != progressGeneration) return@launch
             val activeItem = speakItems.getOrNull(speakItemIndex)
             val progressBase = activeItem
                 ?.takeIf { it.paragraphIndex == nowSpeak }
                 ?.let { currentParagraphBaseNumber() + it.start }
                 ?: readAloudNumber
-            upTtsProgress(progressBase + 1)
-            if (exoPlayer.duration <= 0) {
-                return@launch
-            }
             val speakTextLength = activeItem?.text?.length ?: contentList[nowSpeak].length
             if (speakTextLength <= 0) {
                 return@launch
             }
+            val durationMs = exoPlayer.duration
+            val start = if (durationMs > 0L) {
+                speakTextLength * exoPlayer.currentPosition / durationMs
+            } else {
+                0L
+            }
+            upTtsProgress(progressBase + start.toInt() + 1)
+            if (durationMs <= 0L) return@launch
             val playbackRate = exoPlayer.playbackParameters.speed.coerceAtLeast(0.1f)
-            val sleep = maxOf(1L, (exoPlayer.duration / speakTextLength / playbackRate).toLong())
-            val start = speakTextLength * exoPlayer.currentPosition / exoPlayer.duration
+            val sleep = maxOf(1L, (durationMs / speakTextLength / playbackRate).toLong())
             for (i in start..speakTextLength.toLong()) {
+                if (activeGeneration != progressGeneration) return@launch
                 if (pageIndex + 1 < textChapter.pageSize
                     && progressBase + i > textChapter.getReadLength(pageIndex + 1)
                 ) {
@@ -1222,7 +1308,8 @@ class HttpReadAloudService : BaseReadAloudService(),
         speakItems = emptyList()
         speakItemIndex = 0
         playlistChapterIndex = -1
-        pendingPlaylistSeekIndex = -1
+        pendingPlaylistSeek = null
+        preparedSeekInProgress = false
         updatePreparationStage(BaseReadAloudService.PREPARATION_CASTING)
         postEvent(EventBus.ALOUD_STATE, Status.LOADING)
     }
@@ -1236,13 +1323,15 @@ class HttpReadAloudService : BaseReadAloudService(),
             }
 
             Player.STATE_BUFFERING -> {
-                if (!pause) {
+                if (!pause && !preparedSeekInProgress) {
                     postEvent(EventBus.ALOUD_STATE, Status.LOADING)
                 }
             }
 
             Player.STATE_READY -> {
                 // 准备好
+                applyPendingPlaylistSeek()
+                preparedSeekInProgress = false
                 updatePreparationStage(BaseReadAloudService.PREPARATION_NONE)
                 if (pause) return
                 exoPlayer.play()
@@ -1285,12 +1374,15 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         if (!ownsPlaybackState()) return
-        if (pendingPlaylistSeekIndex >= 0 &&
-            exoPlayer.currentMediaItemIndex == pendingPlaylistSeekIndex
+        val pendingSeek = pendingPlaylistSeek
+        if (pendingSeek != null &&
+            exoPlayer.currentMediaItemIndex == pendingSeek.target.itemIndex
         ) {
-            speakItemIndex = pendingPlaylistSeekIndex
-            pendingPlaylistSeekIndex = -1
-            if (!pause) upPlayPos()
+            applyPendingPlaylistSeek()
+            if (pendingPlaylistSeek == null && exoPlayer.playbackState == Player.STATE_READY) {
+                preparedSeekInProgress = false
+                if (!pause) upPlayPos()
+            }
             return
         }
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
@@ -1346,6 +1438,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     private data class CachedSpeakItem(
         val item: SpeakItem,
         val file: File
+    )
+
+    private data class PendingPlaylistSeek(
+        val target: ReadAloudPreparedPlaybackTarget,
+        val positionApplied: Boolean
     )
 
     private data class RouteWarningTracker(

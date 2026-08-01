@@ -30,7 +30,7 @@ class ReadAloudProgressTest {
     }
 
     @Test
-    fun preparedItemIndex_selectsBufferedItemWithoutRebuildingPlaylist() {
+    fun preparedTarget_selectsBufferedItemWithoutRebuildingPlaylist() {
         val ranges = listOf(
             ReadAloudPreparedItemRange(paragraphIndex = 2, start = 0, end = 12),
             ReadAloudPreparedItemRange(paragraphIndex = 2, start = 12, end = 30),
@@ -38,8 +38,8 @@ class ReadAloudProgressTest {
         )
 
         assertEquals(
-            1,
-            preparedReadAloudItemIndex(
+            ReadAloudPreparedPlaybackTarget(itemIndex = 1, itemOffset = 0),
+            preparedReadAloudPlaybackTarget(
                 ranges = ranges,
                 targetParagraphIndex = 2,
                 targetParagraphOffset = 12,
@@ -49,14 +49,14 @@ class ReadAloudProgressTest {
     }
 
     @Test
-    fun preparedItemIndex_rejectsItemNotYetInPlayerQueue() {
+    fun preparedTarget_rejectsItemNotYetInPlayerQueue() {
         val ranges = listOf(
             ReadAloudPreparedItemRange(paragraphIndex = 0, start = 0, end = 10),
             ReadAloudPreparedItemRange(paragraphIndex = 1, start = 0, end = 20)
         )
 
         assertNull(
-            preparedReadAloudItemIndex(
+            preparedReadAloudPlaybackTarget(
                 ranges = ranges,
                 targetParagraphIndex = 1,
                 targetParagraphOffset = 0,
@@ -66,14 +66,32 @@ class ReadAloudProgressTest {
     }
 
     @Test
-    fun preparedItemIndex_rejectsTargetBeforePreparedQueue() {
+    fun preparedTarget_keepsOffsetInsidePreparedItem() {
+        val ranges = listOf(
+            ReadAloudPreparedItemRange(paragraphIndex = 2, start = 0, end = 30),
+            ReadAloudPreparedItemRange(paragraphIndex = 3, start = 0, end = 18)
+        )
+
+        assertEquals(
+            ReadAloudPreparedPlaybackTarget(itemIndex = 0, itemOffset = 12),
+            preparedReadAloudPlaybackTarget(
+                ranges = ranges,
+                targetParagraphIndex = 2,
+                targetParagraphOffset = 12,
+                mediaItemCount = 2
+            )
+        )
+    }
+
+    @Test
+    fun preparedTarget_rejectsTargetBeforePreparedQueue() {
         val ranges = listOf(
             ReadAloudPreparedItemRange(paragraphIndex = 55, start = 0, end = 30),
             ReadAloudPreparedItemRange(paragraphIndex = 56, start = 0, end = 22)
         )
 
         assertNull(
-            preparedReadAloudItemIndex(
+            preparedReadAloudPlaybackTarget(
                 ranges = ranges,
                 targetParagraphIndex = 21,
                 targetParagraphOffset = 0,
@@ -83,18 +101,48 @@ class ReadAloudProgressTest {
     }
 
     @Test
-    fun preparedItemIndex_rejectsTargetBeforeFirstSegmentInSameParagraph() {
+    fun preparedTarget_rejectsTargetBeforeFirstSegmentInSameParagraph() {
         val ranges = listOf(
             ReadAloudPreparedItemRange(paragraphIndex = 8, start = 15, end = 30),
             ReadAloudPreparedItemRange(paragraphIndex = 8, start = 30, end = 45)
         )
 
         assertNull(
-            preparedReadAloudItemIndex(
+            preparedReadAloudPlaybackTarget(
                 ranges = ranges,
                 targetParagraphIndex = 8,
                 targetParagraphOffset = 5,
                 mediaItemCount = 2
+            )
+        )
+    }
+
+    @Test
+    fun preparedTarget_skipsGapToNextPreparedItem() {
+        val ranges = listOf(
+            ReadAloudPreparedItemRange(paragraphIndex = 2, start = 0, end = 10),
+            ReadAloudPreparedItemRange(paragraphIndex = 2, start = 15, end = 30)
+        )
+
+        assertEquals(
+            ReadAloudPreparedPlaybackTarget(itemIndex = 1, itemOffset = 0),
+            preparedReadAloudPlaybackTarget(
+                ranges = ranges,
+                targetParagraphIndex = 2,
+                targetParagraphOffset = 12,
+                mediaItemCount = 2
+            )
+        )
+    }
+
+    @Test
+    fun seekPosition_usesSameLinearCharacterRatioAsPlaybackProgress() {
+        assertEquals(
+            4_000L,
+            readAloudSeekPositionMs(
+                durationMs = 10_000L,
+                itemLength = 30,
+                itemOffset = 12
             )
         )
     }

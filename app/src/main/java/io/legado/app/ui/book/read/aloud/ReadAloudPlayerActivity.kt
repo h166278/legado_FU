@@ -92,7 +92,6 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     private var pendingSeekParagraphIndex = -1
     private var switchingChapter = false
     private var switchingVoice = false
-    private var switchingParagraph = false
     private var playButtonLoading = false
     private var playerPage = PlayerPage.PLAYER
     private var storyboardLoadedChapterIndex = -1
@@ -432,17 +431,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
         refreshProgress(targetPos)
         if (!wasRun) return
 
-        switchingParagraph = true
-        if (wasPlaying) {
-            setPlayButtonLoading(true)
-        }
         ReadAloud.play(this, play = wasPlaying, pageIndex = targetPage, startPos = pageStartPos)
-        binding.root.postDelayed({
-            switchingParagraph = false
-            if (!wasPlaying) {
-                setPlayButtonLoading(false)
-            }
-        }, 1200L)
     }
 
     private fun togglePlay() {
@@ -1040,7 +1029,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
                 Status.PLAY -> setPlayButtonLoading(BaseReadAloudService.isPreparing())
             }
             refreshStaticState()
-            if (it == Status.STOP && !switchingChapter && !switchingVoice && !switchingParagraph) {
+            if (it == Status.STOP && !switchingChapter && !switchingVoice) {
                 finish()
             }
         }
