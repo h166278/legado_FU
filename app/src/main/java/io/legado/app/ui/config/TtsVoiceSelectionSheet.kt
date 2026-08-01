@@ -32,22 +32,18 @@ import io.legado.app.help.tts.TtsVoice
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.widget.dialog.NgLongListBottomSheet
 import io.legado.app.utils.dpToPx
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class TtsVoiceOption(
     val engine: TtsEngineSetting,
     val voice: TtsVoice,
     val systemDefault: Boolean
 ) {
-    fun matches(query: String): Boolean {
-        return listOf(
-            engine.name,
-            voice.name,
-            voice.id,
-            voice.language.orEmpty(),
-            voice.gender.orEmpty(),
-            voice.style.orEmpty(),
-            voice.tags.joinToString(" ")
-        ).any { it.contains(query, ignoreCase = true) }
+    fun matchesName(query: String): Boolean {
+        return TtsVoiceFilterSupport.matchesName(voice, query)
     }
 
     fun previewKey(): String {
@@ -57,7 +53,7 @@ data class TtsVoiceOption(
 
 class TtsVoiceSelectionSheet(
     private val context: Context,
-    lifecycleScope: LifecycleCoroutineScope,
+    private val lifecycleScope: LifecycleCoroutineScope,
     private val title: CharSequence? = null,
     private val searchHint: CharSequence,
     private val emptyText: CharSequence,
@@ -77,6 +73,9 @@ class TtsVoiceSelectionSheet(
     private var availableGenderFilters = emptyList<String>()
     private val selectedLanguageFilters = linkedSetOf<String>()
     private val selectedGenderFilters = linkedSetOf<String>()
+    private var voiceGroups = emptyList<TtsVoiceGroup>()
+    private var loadJob: Job? = null
+    private var isLoading = true
     private val adapter = TtsVoiceSelectionAdapter(
         context = context,
         onSelect = { option ->
@@ -93,13 +92,6 @@ class TtsVoiceSelectionSheet(
     )
 
     fun show() {
-        val availableVoices = engines().flatMap { engine ->
-            voiceChoices(engine).map { it.voice }
-        }
-        availableLanguageFilters = TtsVoiceFilterSupport.availableLanguageLabels(availableVoices)
-        availableGenderFilters = listOf("男", "女").filter { label ->
-            availableVoices.any { TtsVoiceFilterSupport.genderLabel(it.gender) == label }
-        }
         sheet = NgLongListBottomSheet(
             context = context,
             searchHint = searchHint,
@@ -122,7 +114,7 @@ class TtsVoiceSelectionSheet(
             setPadding(0, 0, 0, 6.dpToPx())
         }
         textEmpty = TextView(context).apply {
-            text = emptyText
+            text = context.getString(R.string.loading)
             setTextColor(ContextCompat.getColor(context, R.color.ng_on_surface_variant))
             textSize = 15f
             gravity = Gravity.CENTER
@@ -145,8 +137,13 @@ class TtsVoiceSelectionSheet(
             )
         }
         sheet.setContent(content, ::renderVoiceOptions)
-        sheet.dialog.setOnDismissListener { previewController.release() }
+        sheet.dialog.setOnDismissListener {
+            loadJob?.cancel()
+            loadJob = null
+            previewController.release()
+        }
         sheet.show()
+        loadVoiceSnapshot()
     }
 
     fun dismiss() {
@@ -154,28 +151,64 @@ class TtsVoiceSelectionSheet(
     }
 
     private fun renderVoiceOptions(query: String) {
+        if (isLoading) {
+            adapter.submitItems(emptyList())
+            recyclerVoices.isVisible = false
+            textEmpty.text = context.getString(R.string.loading)
+            textEmpty.isVisible = true
+            return
+        }
         val items = buildVoiceItems(query)
         adapter.submitItems(items)
         val hasChoice = items.any { it is TtsVoiceSelectionItem.Choice }
         recyclerVoices.isVisible = hasChoice
+        textEmpty.text = emptyText
         textEmpty.isVisible = !hasChoice
     }
 
     private fun buildVoiceItems(query: String): List<TtsVoiceSelectionItem> {
         val normalizedQuery = query.trim()
         return buildList {
-            engines().forEach { engine ->
-                val choices = voiceChoices(engine).filter { choice ->
-                    (normalizedQuery.isBlank() || choice.matches(normalizedQuery)) &&
+            voiceGroups.forEach { group ->
+                val choices = group.choices.filter { choice ->
+                    (normalizedQuery.isBlank() || choice.matchesName(normalizedQuery)) &&
                         matchesVoiceFilters(choice.voice)
                 }
                 if (choices.isNotEmpty()) {
-                    add(TtsVoiceSelectionItem.Header(engine.name))
+                    add(TtsVoiceSelectionItem.Header(group.engine.name))
                     choices.forEach { choice ->
                         add(TtsVoiceSelectionItem.Choice(choice, isSelected(choice)))
                     }
                 }
             }
+        }
+    }
+
+    private fun loadVoiceSnapshot() {
+        loadJob?.cancel()
+        isLoading = true
+        sheet.refreshContent()
+        loadJob = lifecycleScope.launch {
+            val groups = withContext(Dispatchers.IO) {
+                engines().map { engine ->
+                    TtsVoiceGroup(engine, voiceChoices(engine))
+                }
+            }
+            voiceGroups = groups
+            val availableVoices = groups.flatMap { group ->
+                group.choices.map { it.voice }
+            }
+            availableLanguageFilters =
+                TtsVoiceFilterSupport.availableLanguageLabels(availableVoices)
+            availableGenderFilters = listOf("男", "女").filter { label ->
+                availableVoices.any {
+                    TtsVoiceFilterSupport.genderLabel(it.gender) == label
+                }
+            }
+            isLoading = false
+            filterBinding?.let(::bindVoiceFilters)
+            filterAction?.let(::updateFilterActionTint)
+            sheet.refreshContent()
         }
     }
 
@@ -204,20 +237,20 @@ class TtsVoiceSelectionSheet(
     private fun setupVoiceFilters() {
         val binding = LayoutTtsVoiceFiltersBinding.inflate(LayoutInflater.from(context))
         filterBinding = binding
-        (sheet.searchEdit.parent as? ViewGroup)?.removeView(sheet.searchEdit)
+        (sheet.searchBar.parent as? ViewGroup)?.removeView(sheet.searchBar)
         binding.layoutSearchContainer.addView(
-            sheet.searchEdit,
+            sheet.searchBar,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
-        sheet.searchEdit.setBackgroundResource(R.drawable.ng_bg_tts_filter_search)
+        sheet.searchBar.setBackgroundResource(R.drawable.ng_bg_tts_filter_search)
         val searchHint = sheet.searchEdit.hint
         sheet.searchEdit.setOnFocusChangeListener { _, hasFocus ->
             sheet.searchEdit.hint = if (hasFocus) null else searchHint
         }
-        sheet.searchEdit.isVisible = true
+        sheet.searchBar.isVisible = true
         sheet.searchEdit.doOnTextChanged { _, _, _, _ ->
             filterAction?.let(::updateFilterActionTint)
         }
@@ -301,7 +334,7 @@ class TtsVoiceSelectionSheet(
             )
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setBackgroundResource(
-                if (selected) R.drawable.ng_bg_tts_language_tag else R.drawable.ng_bg_tag_neutral
+                if (selected) R.drawable.ng_bg_tts_language_tag else R.drawable.ng_bg_filter_chip
             )
             setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
             minWidth = 28.dpToPx()
@@ -339,7 +372,7 @@ class TtsVoiceSelectionSheet(
                 )
             )
             setBackgroundResource(
-                if (selected) R.drawable.ng_bg_tts_language_tag else R.drawable.ng_bg_tag_neutral
+                if (selected) R.drawable.ng_bg_tts_language_tag else R.drawable.ng_bg_filter_chip
             )
             setPadding(5.dpToPx(), 3.dpToPx(), 5.dpToPx(), 3.dpToPx())
             setOnClickListener { onClick() }
@@ -362,6 +395,11 @@ class TtsVoiceSelectionSheet(
         if (!add(value)) remove(value)
     }
 }
+
+private data class TtsVoiceGroup(
+    val engine: TtsEngineSetting,
+    val choices: List<TtsVoiceOption>
+)
 
 private sealed class TtsVoiceSelectionItem {
     data class Header(val title: String) : TtsVoiceSelectionItem()

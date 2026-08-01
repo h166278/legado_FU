@@ -113,6 +113,18 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
             putBoolean("bookInfoDeleteAlert", value)
         }
 
+    var aiProviderListShowDisabled: Boolean
+        get() = getBoolean("aiProviderListShowDisabled")
+        set(value) {
+            putBoolean("aiProviderListShowDisabled", value)
+        }
+
+    var ttsEngineListShowDisabled: Boolean
+        get() = getBoolean("ttsEngineListShowDisabled")
+        set(value) {
+            putBoolean("ttsEngineListShowDisabled", value)
+        }
+
     var deleteBookOriginal: Boolean
         get() = getBoolean("deleteBookOriginal")
         set(value) {

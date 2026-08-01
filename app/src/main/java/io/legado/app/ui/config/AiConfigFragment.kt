@@ -8,7 +8,6 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
-import android.graphics.Rect
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
@@ -20,13 +19,13 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.MotionEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.RadioButton
 import android.widget.Switch
 import android.widget.TextView
@@ -37,8 +36,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.core.widget.doOnTextChanged
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -50,7 +52,6 @@ import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.databinding.DialogAiModelEditBinding
 import io.legado.app.databinding.FragmentAiConfigBinding
 import io.legado.app.databinding.ItemAiModelBinding
-import io.legado.app.databinding.ItemAiProviderBinding
 import io.legado.app.databinding.ItemAiSkillFileBinding
 import io.legado.app.data.appDb
 import io.legado.app.help.ai.AiConfig
@@ -70,17 +71,26 @@ import io.legado.app.help.ai.AiSkillExistsException
 import io.legado.app.help.ai.AiSkillRegistry
 import io.legado.app.help.ai.AiSkillScope
 import io.legado.app.help.ai.normalizeAiApiPath
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.databinding.ItemAiPromptBinding
+import io.legado.app.ui.design.components.NgManagementTrailing
+import io.legado.app.ui.design.components.NgStatusTagSpec
+import io.legado.app.ui.design.components.NgStatusTagStyle
+import io.legado.app.ui.design.components.NgStatusTagVariant
+import io.legado.app.ui.widget.NgActionPopup
+import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.ui.widget.TitleBar
+import io.legado.app.ui.design.components.view.NgFloatingTabItem
+import io.legado.app.ui.design.components.compose.NgListState
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.ui.widget.dialog.NgLongListBottomSheet
 import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.setEdgeEffectColor
@@ -112,6 +122,9 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         const val PAGE_ASSISTANT = "assistant"
         private const val ARG_INITIAL_PAGE = "initialPage"
         private const val ARG_RETURN_TO_MENU = "returnToMenu"
+        private const val MENU_ADD_PROVIDER_OPENAI = 0x4E470101
+        private const val MENU_ADD_PROVIDER_CLAUDE = 0x4E470102
+        private const val MENU_GROUP_PROVIDER_VISIBILITY = 0x4E470103
 
         fun newMenuPageInstance(initialPage: String): AiConfigFragment {
             return AiConfigFragment().apply {
@@ -168,11 +181,9 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     private val binding by viewBinding(FragmentAiConfigBinding::bind)
     private val waitDialog by lazy { WaitDialog(requireContext()) }
-    private val providerAdapter by lazy { AiProviderAdapter() }
     private val modelAdapter by lazy { AiModelAdapter() }
     private val promptAdapter by lazy { AiPromptAdapter() }
     private val skillFileAdapter by lazy { AiSkillFileAdapter() }
-    private lateinit var providerItemTouchHelper: ItemTouchHelper
     private var currentPage = Page.MAIN
     private var currentProviderId: String? = null
     private var currentModelId: String? = null
@@ -180,6 +191,9 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private var currentPrompt: AiPromptStore.Prompt? = null
     private val expandedSkillDirectories = linkedSetOf<String>()
     private var providerSearchQuery: String = ""
+    private var providerScreenState by mutableStateOf(AiProviderListScreenState())
+    private var providerFormScreenState by mutableStateOf(AiProviderFormScreenState())
+    private var showDisabledProviders = LocalConfig.aiProviderListShowDisabled
     private var modelSearchQuery: String = ""
     private var providerDetailTab = ProviderDetailTab.CONFIG
     private val autoFetchedModelProviderIds = hashSetOf<String>()
@@ -189,10 +203,8 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private var entryPage = Page.MAIN
     private var returnToMenuOnEntryBack = false
     private var ignoreMainFormChanges = false
-    private var ignoreProviderFormChanges = false
     private var ignorePurifyFormChanges = false
     private var ignoreModelDetailChanges = false
-    private var apiKeyVisible = false
     private val balanceNumberFormat by lazy { DecimalFormat("0.####") }
     private val importSkillFileLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -244,6 +256,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     }
 
     override fun onDestroyView() {
+        clearPageActions()
         super.onDestroyView()
         requestJob?.cancel()
         skillSummaryJob?.cancel()
@@ -423,22 +436,18 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     }
 
     private fun initProviderList() {
-        binding.recyclerProviders.layoutManager = LinearLayoutManager(requireContext())
-        providerAdapter.bindToRecyclerView(binding.recyclerProviders)
-        providerItemTouchHelper = ItemTouchHelper(ItemTouchCallback(providerAdapter).apply {
-            isCanSwipe = true
-        })
-        providerItemTouchHelper.attachToRecyclerView(binding.recyclerProviders)
-        providerAdapter.setOnItemClickListener { _, item ->
-            showDetail(item.id)
-        }
-        binding.buttonAddProvider.setOnClickListener {
-            showAddProviderDialog()
-        }
-        bindSearchEditText(binding.editSearchProvider)
-        binding.editSearchProvider.doOnTextChanged { text, _, _, _ ->
-            providerSearchQuery = text?.toString().orEmpty()
-            refreshProviders()
+        binding.composeProviders.apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    AiProviderListScreen(
+                        state = providerScreenState,
+                        onAction = ::handleProviderListAction
+                    )
+                }
+            }
         }
     }
 
@@ -464,9 +473,19 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     }
 
     private fun initDetail() {
-        updateApiKeyVisibility()
-        setupProviderAutoSave()
-        setupProviderFocusClear()
+        binding.composeProviderForm.apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    AiProviderFormScreen(
+                        state = providerFormScreenState,
+                        onAction = ::handleProviderFormAction
+                    )
+                }
+            }
+        }
         binding.recyclerModels.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerModels.setEdgeEffectColor(accentColor)
         modelAdapter.bindToRecyclerView(binding.recyclerModels)
@@ -480,44 +499,28 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         binding.buttonToggleModelSelection.setOnClickListener {
             toggleVisibleModelSelection()
         }
-        bindSearchEditText(binding.editSearchModel)
-        binding.editSearchModel.doOnTextChanged { text, _, _, _ ->
+        bindSearchEditText(binding.searchModel.editText)
+        binding.searchModel.editText.doOnTextChanged { text, _, _, _ ->
             modelSearchQuery = text?.toString().orEmpty()
             refreshModelList(currentProviderId?.let { AiProviderStore.provider(it) })
         }
-        binding.buttonToggleApiKey.setOnClickListener {
-            apiKeyVisible = !apiKeyVisible
-            updateApiKeyVisibility()
-        }
-        binding.buttonProviderTabConfig.setOnClickListener {
-            showProviderDetailTab(ProviderDetailTab.CONFIG)
-        }
-        binding.buttonProviderTabModels.setOnClickListener {
-            showProviderDetailTab(ProviderDetailTab.MODELS)
+        binding.providerDetailTabs.setItems(
+            items = listOf(
+                NgFloatingTabItem(
+                    iconRes = R.drawable.ic_ai_tab_config,
+                    contentDescription = getString(R.string.ai_tab_config)
+                ),
+                NgFloatingTabItem(
+                    iconRes = R.drawable.ic_ai_tab_models,
+                    contentDescription = getString(R.string.ai_tab_models)
+                )
+            ),
+            selectedIndex = ProviderDetailTab.CONFIG.ordinal
+        ) { index ->
+            showProviderDetailTab(ProviderDetailTab.entries[index])
         }
         binding.refreshModels.setColorSchemeColors(accentColor)
         binding.refreshModels.setOnRefreshListener { fetchModels() }
-        binding.buttonTestConnection.setOnClickListener {
-            testConnection()
-        }
-        binding.buttonQueryBalance.setOnClickListener {
-            queryBalance()
-        }
-        binding.switchCustomModelsUrl.setOnCheckedChangeListener { _, _ ->
-            if (!ignoreProviderFormChanges && currentPage == Page.DETAIL) {
-                saveCurrentProvider()
-                updateCustomEndpointVisibility()
-            }
-        }
-        binding.switchCustomBalanceUrl.setOnCheckedChangeListener { _, _ ->
-            if (!ignoreProviderFormChanges && currentPage == Page.DETAIL) {
-                saveCurrentProvider()
-                updateCustomEndpointVisibility()
-            }
-        }
-        binding.buttonDeleteProvider.setOnClickListener {
-            confirmDeleteCurrentProvider()
-        }
         setupModelDetailAutoSave()
     }
 
@@ -604,50 +607,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun setupProviderAutoSave() {
-        val fields = listOf(
-            binding.editProviderName,
-            binding.editApiKey,
-            binding.editBaseUrl,
-            binding.editChatPath,
-            binding.editModelsUrl,
-            binding.editBalanceUrl,
-            binding.editBalanceJsonPath,
-            binding.editTimeoutSeconds
-        )
-        fields.forEach { editText ->
-            editText.doOnTextChanged { _, _, _, _ ->
-                if (!ignoreProviderFormChanges && currentPage == Page.DETAIL) {
-                    val provider = saveCurrentProvider(updateHeader = editText === binding.editProviderName)
-                    if (editText === binding.editApiKey && provider != null) {
-                        refreshModelList(provider)
-                    }
-                }
-            }
-        }
-        binding.switchEnabled.setOnCheckedChangeListener { _, _ ->
-            if (!ignoreProviderFormChanges && currentPage == Page.DETAIL) {
-                saveCurrentProvider()
-            }
-        }
-        binding.switchStreamResponse.setOnCheckedChangeListener { _, _ ->
-            if (!ignoreProviderFormChanges && currentPage == Page.DETAIL) {
-                saveCurrentProvider()
-            }
-        }
-    }
-
-    private fun setupProviderFocusClear() {
-        val listener = View.OnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) {
-                clearProviderInputFocusIfOutside(event)
-            }
-            false
-        }
-        binding.layoutProviderDetail.setOnTouchListener(listener)
-        binding.scrollDetail.setOnTouchListener(listener)
-    }
-
     private fun initPromptList() {
         binding.recyclerPrompts.layoutManager = LinearLayoutManager(requireContext())
         promptAdapter.bindToRecyclerView(binding.recyclerPrompts)
@@ -719,12 +678,77 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     }
 
     private fun setPageTitle(title: CharSequence) {
+        clearPageActions()
         activity?.title = title
         requireActivity().findViewById<TitleBar>(R.id.title_bar)?.title = title
     }
 
     private fun setPageTitle(resId: Int) {
         setPageTitle(getString(resId))
+    }
+
+    private fun configureProviderPageActions() {
+        val titleBar = activity?.findViewById<TitleBar>(R.id.title_bar) ?: return
+        val providerMenu = titleBar.menu.addSubMenu(getString(R.string.menu))
+        providerMenu.item.apply {
+            setIcon(R.drawable.ic_more_vert)
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        providerMenu.add(
+            Menu.NONE,
+            MENU_ADD_PROVIDER_OPENAI,
+            0,
+            getString(R.string.ai_add_provider_openai)
+        ).setIcon(R.drawable.ic_provider_openai)
+        providerMenu.add(
+            Menu.NONE,
+            MENU_ADD_PROVIDER_CLAUDE,
+            1,
+            getString(R.string.ai_add_provider_anthropic)
+        ).setIcon(R.drawable.ic_model_anthropic)
+        providerMenu.add(
+            MENU_GROUP_PROVIDER_VISIBILITY,
+            R.id.menu_show_disabled,
+            2,
+            getString(R.string.show_disabled_items)
+        ).apply {
+            setIcon(R.drawable.ic_visibility)
+            isCheckable = true
+            isChecked = showDisabledProviders
+        }
+        NgMenuPopup.bindToolbarMenu(
+            context = requireContext(),
+            toolbar = titleBar.toolbar,
+            menu = titleBar.menu,
+            prepareMenu = {
+                providerMenu.findItem(R.id.menu_show_disabled)?.isChecked = showDisabledProviders
+            }
+        ) { item ->
+            when (item.itemId) {
+                MENU_ADD_PROVIDER_OPENAI -> {
+                    addProvider(AiProviderType.OPENAI)
+                }
+                MENU_ADD_PROVIDER_CLAUDE -> {
+                    addProvider(AiProviderType.CLAUDE)
+                }
+                R.id.menu_show_disabled -> {
+                    toggleShowDisabledProviders()
+                }
+            }
+        }
+    }
+
+    private fun toggleShowDisabledProviders() {
+        showDisabledProviders = !showDisabledProviders
+        LocalConfig.aiProviderListShowDisabled = showDisabledProviders
+        refreshProviders()
+    }
+
+    private fun clearPageActions() {
+        activity?.findViewById<TitleBar>(R.id.title_bar)?.let { titleBar ->
+            titleBar.toolbar.setOnMenuItemClickListener(null)
+            titleBar.menu.clear()
+        }
     }
 
     private fun showMain() {
@@ -755,6 +779,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         currentSkill = null
         currentPrompt = null
         setPageTitle(R.string.ai_provider_menu)
+        configureProviderPageActions()
         binding.layoutMainMenu.isVisible = false
         binding.layoutProviderList.isVisible = true
         binding.layoutProviderDetail.isVisible = false
@@ -967,18 +992,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     }
 
     private fun refreshAccentControls() {
-        val color = accentColor
-        applyAccentIconButton(binding.buttonAddProvider, color)
-    }
-
-    private fun applyAccentIconButton(button: ImageView, color: Int) {
-        button.imageTintList = ColorStateList.valueOf(color)
-        button.background = Selector.shapeBuild()
-            .setCornerRadius(12.dpToPx())
-            .setStrokeWidth(1.dpToPx())
-            .setDefaultStrokeColor(color)
-            .setPressedBgColor(ColorUtils.setAlphaComponent(color, 24))
-            .create()
+        binding.buttonToggleModelSelection.setTextColor(accentColor)
     }
 
     private fun createNgChoiceDialogRoot(
@@ -1328,14 +1342,127 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private fun refreshProviders() {
         val allProviders = AiProviderStore.providers()
         autoFetchedModelProviderIds.retainAll(allProviders.mapTo(hashSetOf()) { it.id })
-        val providers = allProviders
+        val providers = ConfigListVisibilitySupport.visibleItems(
+            allItems = allProviders,
+            showDisabled = showDisabledProviders,
+            isEnabled = AiProviderSetting::enabled
+        )
             .filter {
-                providerSearchQuery.isBlank()
-                    || it.name.contains(providerSearchQuery, ignoreCase = true)
-                    || it.type.displayName.contains(providerSearchQuery, ignoreCase = true)
-                    || it.type.localizedDisplayName().contains(providerSearchQuery, ignoreCase = true)
+                matchesAiProviderName(
+                    name = it.name,
+                    query = providerSearchQuery
+                )
             }
-        providerAdapter.setItems(providers)
+        providerScreenState = providerScreenState.copy(
+            query = providerSearchQuery,
+            listState = NgListState.Content(
+                providers.map { provider ->
+                    AiProviderListItemUiModel(
+                        id = provider.id,
+                        name = provider.name,
+                        iconRes = provider.iconRes(),
+                        enabled = provider.enabled,
+                        modelCountText = getString(
+                            R.string.ai_model_list_count,
+                            provider.visibleModelCount().toString()
+                        ),
+                        reorderable = true,
+                        deletable = !provider.builtIn
+                    )
+                }
+            ),
+            isRefreshing = false
+        )
+    }
+
+    private fun handleProviderListAction(action: AiProviderListScreenAction) {
+        when (action) {
+            is AiProviderListScreenAction.QueryChanged -> {
+                providerSearchQuery = action.query
+                refreshProviders()
+            }
+
+            is AiProviderListScreenAction.SearchSubmitted -> Unit
+            is AiProviderListScreenAction.ProviderClicked -> showDetail(action.providerId)
+            is AiProviderListScreenAction.ReorderCommitted -> {
+                commitProviderOrder(action.orderedProviderIds)
+            }
+
+            is AiProviderListScreenAction.DeleteRequested -> {
+                AiProviderStore.provider(action.providerId)?.let { provider ->
+                    confirmDeleteProvider(
+                        provider = provider,
+                        onCancel = ::refreshProviders,
+                        onDeleted = ::refreshProviders
+                    )
+                }
+            }
+
+            AiProviderListScreenAction.MoreMenuRequested -> configureProviderPageActions()
+            AiProviderListScreenAction.RetryRequested,
+            AiProviderListScreenAction.RefreshRequested -> refreshProviders()
+        }
+    }
+
+    private fun handleProviderFormAction(action: AiProviderFormScreenAction) {
+        if (currentPage != Page.DETAIL) return
+        when (action) {
+            is AiProviderFormScreenAction.FieldChanged -> {
+                providerFormScreenState = providerFormScreenState.withField(
+                    action.field,
+                    action.value
+                )
+                val provider = saveCurrentProvider(
+                    updateHeader = action.field == AiProviderFormField.NAME
+                )
+                if (action.field == AiProviderFormField.API_KEY && provider != null) {
+                    refreshModelList(provider)
+                }
+            }
+
+            is AiProviderFormScreenAction.ToggleChanged -> {
+                providerFormScreenState = providerFormScreenState.withToggle(
+                    action.toggle,
+                    action.checked
+                )
+                saveCurrentProvider()
+            }
+
+            AiProviderFormScreenAction.TestConnectionRequested -> testConnection()
+            AiProviderFormScreenAction.QueryBalanceRequested -> queryBalance()
+            AiProviderFormScreenAction.DeleteRequested -> confirmDeleteCurrentProvider()
+        }
+    }
+
+    private fun commitProviderOrder(orderedProviderIds: List<String>) {
+        if (providerSearchQuery.isNotBlank()) return
+        val allProviders = AiProviderStore.providers()
+        val visibleProviders = ConfigListVisibilitySupport.visibleItems(
+            allItems = allProviders,
+            showDisabled = showDisabledProviders,
+            isEnabled = AiProviderSetting::enabled
+        )
+        val visibleIds = visibleProviders.map(AiProviderSetting::id)
+        if (orderedProviderIds == visibleIds) return
+        if (orderedProviderIds.size != visibleIds.size ||
+            orderedProviderIds.toSet().size != orderedProviderIds.size ||
+            orderedProviderIds.toSet() != visibleIds.toSet()
+        ) {
+            refreshProviders()
+            return
+        }
+        val providersById = visibleProviders.associateBy(AiProviderSetting::id)
+        val reorderedProviders = orderedProviderIds.mapNotNull(providersById::get)
+        AiProviderStore.saveProviders(
+            ConfigListVisibilitySupport.mergeVisibleOrder(
+                allItems = allProviders,
+                reorderedVisibleItems = reorderedProviders,
+                showDisabled = showDisabledProviders,
+                isEnabled = AiProviderSetting::enabled
+            )
+        )
+        refreshMain()
+        refreshProviders()
     }
 
     private fun refreshCurrentDetail() {
@@ -1343,54 +1470,23 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         setPageTitle(provider.name)
         binding.textDetailTitle.text = provider.name
         binding.imageDetailIcon.setImageResource(provider.iconRes())
-        ignoreProviderFormChanges = true
-        try {
-            binding.switchEnabled.isChecked = provider.enabled
-            binding.switchStreamResponse.isChecked = provider.streamResponseEnabled
-            binding.editProviderName.setText(provider.name)
-            binding.textProviderTypeValue.text = provider.type.localizedDisplayName()
-            binding.textProviderTypeLabel.isVisible = !provider.builtIn
-            binding.textProviderTypeValue.isVisible = !provider.builtIn
-            binding.editBaseUrl.setText(provider.baseUrl)
-            binding.editApiKey.setText(provider.apiKey)
-            binding.editChatPath.setText(provider.chatCompletionsPath)
-            binding.editModelsUrl.setText(normalizeAiApiPath(provider.baseUrl, provider.modelsUrl))
-            binding.switchCustomModelsUrl.isChecked = provider.useCustomModelsUrl
-            binding.switchCustomBalanceUrl.isChecked = provider.useCustomBalanceUrl
-            binding.editBalanceUrl.setText(normalizeAiApiPath(provider.baseUrl, provider.balanceUrl))
-            binding.editBalanceJsonPath.setText(provider.balanceJsonPath)
-            binding.editTimeoutSeconds.setText(provider.timeoutSeconds.toString())
-            binding.buttonDeleteProvider.isVisible = !provider.builtIn
-            val openAiCompatible = provider.type == AiProviderType.OPENAI
-            binding.textOpenaiPathLabel.isVisible = openAiCompatible
-            binding.editChatPath.isVisible = openAiCompatible
-            binding.switchStreamResponse.isVisible = openAiCompatible
-            refreshModelList(provider)
-            updateApiKeyVisibility()
-            updateCustomEndpointVisibility()
-            showProviderDetailTab(providerDetailTab)
-        } finally {
-            ignoreProviderFormChanges = false
-        }
+        providerFormScreenState = provider.toProviderFormScreenState(
+            provider.type.localizedDisplayName()
+        )
+        refreshModelList(provider)
+        showProviderDetailTab(providerDetailTab)
     }
 
     private fun showProviderDetailTab(tab: ProviderDetailTab) {
         providerDetailTab = tab
         binding.scrollDetail.isVisible = tab == ProviderDetailTab.CONFIG
         binding.layoutDetailHeader.isVisible = tab == ProviderDetailTab.CONFIG
-        binding.layoutConfigTab.isVisible = tab == ProviderDetailTab.CONFIG
+        binding.composeProviderForm.isVisible = tab == ProviderDetailTab.CONFIG
         binding.layoutModelTab.isVisible = tab == ProviderDetailTab.MODELS
-        val activeColor = accentColor
-        val inactiveColor = ContextCompat.getColor(requireContext(), R.color.ng_on_surface_variant)
-        binding.buttonProviderTabConfig.imageTintList = ColorStateList.valueOf(
-            if (tab == ProviderDetailTab.CONFIG) activeColor else inactiveColor
-        )
-        binding.buttonProviderTabModels.imageTintList = ColorStateList.valueOf(
-            if (tab == ProviderDetailTab.MODELS) activeColor else inactiveColor
-        )
-        binding.buttonProviderTabConfig.setBackgroundResource(android.R.color.transparent)
-        binding.buttonProviderTabModels.setBackgroundResource(android.R.color.transparent)
+        binding.providerDetailTabs.select(tab.ordinal)
         if (tab == ProviderDetailTab.MODELS) {
+            binding.composeProviderForm.clearFocus()
+            binding.composeProviderForm.hideSoftInput()
             maybeAutoFetchModels()
         }
     }
@@ -1438,9 +1534,10 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     private fun bindModelEditTabs(sheetBinding: DialogAiModelEditBinding) {
         val activeColor = accentColor
+        val activeTextColor = accentColor
         val inactiveColor = ContextCompat.getColor(requireContext(), R.color.ng_on_surface_variant)
         sheetBinding.viewModelEditTabBasicIndicator.setBackgroundColor(activeColor)
-        sheetBinding.tabBasic.setTextColor(activeColor)
+        sheetBinding.tabBasic.setTextColor(activeTextColor)
         sheetBinding.tabBasic.typeface = Typeface.DEFAULT_BOLD
         sheetBinding.tabBasic.background = GradientDrawable().apply {
             setColor(Color.TRANSPARENT)
@@ -1702,12 +1799,13 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     private fun applySegmentStyles(vararg segments: TextView) {
         val activeColor = accentColor
+        val activeTextColor = accentColor
         val inactiveColor = ContextCompat.getColor(requireContext(), R.color.ng_on_surface_variant)
         val selectedBackground = ContextCompat.getColor(requireContext(), R.color.ng_success_container)
         val unselectedBackground = ContextCompat.getColor(requireContext(), R.color.ng_neutral_container)
         segments.forEach { segment ->
             val selected = segment.isSelected
-            segment.setTextColor(if (selected) activeColor else inactiveColor)
+            segment.setTextColor(if (selected) activeTextColor else inactiveColor)
             segment.typeface = Typeface.defaultFromStyle(if (selected) Typeface.BOLD else Typeface.NORMAL)
             segment.background = GradientDrawable().apply {
                 cornerRadius = 18.dpToPx().toFloat()
@@ -1739,37 +1837,13 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun updateCustomEndpointVisibility() {
-        val customModelsUrl = binding.switchCustomModelsUrl.isChecked
-        binding.textModelsUrlLabel.isVisible = customModelsUrl
-        binding.editModelsUrl.isVisible = customModelsUrl
-        val customBalanceUrl = binding.switchCustomBalanceUrl.isChecked
-        binding.textBalanceUrlLabel.isVisible = customBalanceUrl
-        binding.editBalanceUrl.isVisible = customBalanceUrl
-        binding.textBalanceJsonPathLabel.isVisible = customBalanceUrl
-        binding.editBalanceJsonPath.isVisible = customBalanceUrl
-    }
-
-    private fun showAddProviderDialog() {
-        val types = listOf(AiProviderType.OPENAI, AiProviderType.CLAUDE)
-        val labels = arrayOf(
-            getString(R.string.ai_add_provider_openai),
-            getString(R.string.ai_add_provider_anthropic)
-        )
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.ai_add_provider)
-            .setItems(labels) { _, which ->
-                val provider = AiProviderStore.createCustomProvider(types[which])
-                if (providerSearchQuery.isNotBlank()) {
-                    providerSearchQuery = ""
-                    binding.editSearchProvider.setText("")
-                }
-                refreshMain()
-                showDetail(provider.id)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-            .applyTint()
+    private fun addProvider(type: AiProviderType) {
+        val provider = AiProviderStore.createCustomProvider(type)
+        if (providerSearchQuery.isNotBlank()) {
+            providerSearchQuery = ""
+        }
+        refreshMain()
+        showDetail(provider.id)
     }
 
     private fun refreshPrompts() {
@@ -2473,10 +2547,14 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private fun showPurifyModelSelectDialog() {
         val sheet = NgLongListBottomSheet(
             context = requireContext(),
-            searchHint = getString(R.string.ai_purify_model_search_hint)
+            searchHint = getString(R.string.ai_search_model),
+            title = getString(R.string.ai_model_select),
+            showSearch = false,
+            compact = true
         )
+        val filters = AiModelSelectionFilters(requireContext(), sheet, purifyModelProviders())
         sheet.setScrollableContent { container, query, dialog ->
-            renderPurifyModelOptions(container, query, dialog)
+            renderPurifyModelOptions(container, query, dialog, filters)
         }
         sheet.show()
     }
@@ -2484,10 +2562,14 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private fun showReadAloudStoryboardModelSelectDialog() {
         val sheet = NgLongListBottomSheet(
             context = requireContext(),
-            searchHint = getString(R.string.ai_read_aloud_storyboard_model_search_hint)
+            searchHint = getString(R.string.ai_search_model),
+            title = getString(R.string.ai_model_select),
+            showSearch = false,
+            compact = true
         )
+        val filters = AiModelSelectionFilters(requireContext(), sheet, purifyModelProviders())
         sheet.setScrollableContent { container, query, dialog ->
-            renderReadAloudStoryboardModelOptions(container, query, dialog)
+            renderReadAloudStoryboardModelOptions(container, query, dialog, filters)
         }
         sheet.show()
     }
@@ -2495,11 +2577,12 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private fun renderPurifyModelOptions(
         container: LinearLayout,
         query: String,
-        dialog: BottomSheetDialog
+        dialog: BottomSheetDialog,
+        filters: AiModelSelectionFilters
     ) {
         container.removeAllViews()
         val normalizedQuery = query.trim()
-        val groupedOptions = purifyModelOptions(normalizedQuery)
+        val groupedOptions = purifyModelOptions(normalizedQuery, filters)
         if (groupedOptions.isEmpty()) {
             container.addView(TextView(requireContext()).apply {
                 text = getString(R.string.ai_purify_model_empty)
@@ -2524,11 +2607,12 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private fun renderReadAloudStoryboardModelOptions(
         container: LinearLayout,
         query: String,
-        dialog: BottomSheetDialog
+        dialog: BottomSheetDialog,
+        filters: AiModelSelectionFilters
     ) {
         container.removeAllViews()
         val normalizedQuery = query.trim()
-        val groupedOptions = purifyModelOptions(normalizedQuery)
+        val groupedOptions = purifyModelOptions(normalizedQuery, filters)
         if (groupedOptions.isEmpty()) {
             container.addView(TextView(requireContext()).apply {
                 text = getString(R.string.ai_read_aloud_storyboard_model_empty)
@@ -2550,9 +2634,18 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private fun purifyModelOptions(query: String): List<Pair<AiProviderSetting, List<AiModel>>> {
-        return AiProviderStore.providers()
-            .filter { it.enabled }
+    private fun purifyModelProviders(): List<AiProviderSetting> {
+        return AiProviderStore.providers().filter { provider ->
+            provider.enabled && provider.purifyEligibleModels().isNotEmpty()
+        }
+    }
+
+    private fun purifyModelOptions(
+        query: String,
+        filters: AiModelSelectionFilters
+    ): List<Pair<AiProviderSetting, List<AiModel>>> {
+        return purifyModelProviders()
+            .filter { filters.accepts(it.id) }
             .mapNotNull { provider ->
                 val models = provider.purifyEligibleModels()
                     .filter { model ->
@@ -2696,7 +2789,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
         showReasoningLevelDialog(
             title = getString(R.string.ai_purify_reasoning_title),
-            description = getString(R.string.ai_purify_reasoning_desc),
             currentLevel = AiConfig.purifyReasoningLevel,
             iconTintWhenOff = true
         ) { level ->
@@ -2709,8 +2801,12 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private fun showContextCompactionModelSelectDialog() {
         val sheet = NgLongListBottomSheet(
             context = requireContext(),
-            searchHint = getString(R.string.ai_context_compaction_model_search_hint)
+            searchHint = getString(R.string.ai_search_model),
+            title = getString(R.string.ai_model_select),
+            showSearch = false,
+            compact = true
         )
+        val filters = AiModelSelectionFilters(requireContext(), sheet, purifyModelProviders())
         sheet.setScrollableContent { container, query, dialog ->
             container.removeAllViews()
             if (query.isBlank() || getString(R.string.ai_context_compaction_model_follow)
@@ -2718,7 +2814,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
             ) {
                 container.addView(createFollowAssistantCompactionModelCard(dialog))
             }
-            purifyModelOptions(query.trim()).forEach { (provider, models) ->
+            purifyModelOptions(query.trim(), filters).forEach { (provider, models) ->
                 container.addView(createPurifyProviderHeader(provider))
                 models.forEach { model ->
                     val selected = AiConfig.contextCompactionProviderId == provider.id &&
@@ -2831,7 +2927,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
         showReasoningLevelDialog(
             title = getString(R.string.ai_read_aloud_reasoning_title),
-            description = getString(R.string.ai_read_aloud_reasoning_desc),
             currentLevel = AiConfig.readAloudStoryboardReasoningLevel,
             iconTintWhenOff = true
         ) { level ->
@@ -2874,7 +2969,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
         showReasoningLevelDialog(
             title = getString(R.string.ai_assistant_reasoning_title),
-            description = getString(R.string.ai_assistant_reasoning_desc),
             currentLevel = AiConfig.assistantReasoningLevel,
             iconTintWhenOff = false
         ) { level ->
@@ -2886,7 +2980,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     private fun showReasoningLevelDialog(
         title: String,
-        description: String,
         currentLevel: AiReasoningLevel,
         iconTintWhenOff: Boolean,
         onLevelChanged: (AiReasoningLevel) -> Unit
@@ -2895,7 +2988,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         val labels = levels.map { it.displayName() }
         showDiscreteScaleDialog(
             title = title,
-            description = description,
             iconRes = R.drawable.ic_ai_capability_reasoning,
             labels = labels,
             selectedIndex = levels.indexOf(currentLevel).coerceAtLeast(0),
@@ -2909,7 +3001,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     private fun showDiscreteScaleDialog(
         title: String,
-        description: String,
+        description: String? = null,
         iconRes: Int,
         labels: List<String>,
         currentLabels: List<String> = labels,
@@ -2934,14 +3026,23 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
             typeface = Typeface.DEFAULT_BOLD
             textSize = 20f
             gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            if (description.isNullOrBlank()) {
+                bottomMargin = 22.dpToPx()
+            }
         })
-        root.addView(TextView(requireContext()).apply {
-            text = description
-            setTextColor(ContextCompat.getColor(requireContext(), R.color.ng_on_surface_variant))
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setPadding(0, 8.dpToPx(), 0, 22.dpToPx())
-        })
+        description?.takeIf { it.isNotBlank() }?.let { helperText ->
+            root.addView(TextView(requireContext()).apply {
+                text = helperText
+                setTextColor(ContextCompat.getColor(requireContext(), R.color.ng_on_surface_variant))
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setPadding(0, 8.dpToPx(), 0, 22.dpToPx())
+            })
+        }
         val currentLabel = TextView(requireContext()).apply {
             text = currentLabels.getOrElse(initialIndex) { labels[initialIndex] }
             setTextColor(ContextCompat.getColor(requireContext(), R.color.ng_on_surface))
@@ -3058,36 +3159,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
 
     private fun readProviderFromForm(): AiProviderSetting? {
         val source = currentProviderId?.let { AiProviderStore.provider(it) } ?: return null
-        val baseUrl = binding.editBaseUrl.text?.toString()?.trim().orEmpty().ifBlank {
-            source.baseUrl
-        }
-        return source.copy(
-            enabled = binding.switchEnabled.isChecked,
-            name = binding.editProviderName.text?.toString()?.trim().orEmpty().ifBlank {
-                source.name
-            },
-            apiKey = binding.editApiKey.text?.toString()?.trim().orEmpty(),
-            baseUrl = baseUrl,
-            model = source.model,
-            timeoutSeconds = binding.editTimeoutSeconds.text?.toString()
-                ?.toIntOrNull()
-                ?.coerceIn(5, 600)
-                ?: source.timeoutSeconds,
-            chatCompletionsPath = binding.editChatPath.text?.toString()?.trim().orEmpty()
-                .ifBlank { source.chatCompletionsPath },
-            modelsUrl = normalizeAiApiPath(
-                baseUrl,
-                binding.editModelsUrl.text?.toString()?.trim().orEmpty()
-            ),
-            useCustomModelsUrl = binding.switchCustomModelsUrl.isChecked,
-            balanceUrl = normalizeAiApiPath(
-                baseUrl,
-                binding.editBalanceUrl.text?.toString()?.trim().orEmpty()
-            ),
-            balanceJsonPath = binding.editBalanceJsonPath.text?.toString()?.trim().orEmpty(),
-            useCustomBalanceUrl = binding.switchCustomBalanceUrl.isChecked,
-            streamResponseEnabled = binding.switchStreamResponse.isChecked
-        )
+        return providerFormScreenState.applyTo(source)
     }
 
     private fun saveCurrentProvider(
@@ -3104,21 +3176,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
             Toast.makeText(requireContext(), R.string.ai_provider_saved, Toast.LENGTH_SHORT).show()
         }
         return provider
-    }
-
-    private fun clearProviderInputFocusIfOutside(event: MotionEvent) {
-        val focus = requireActivity().currentFocus as? EditText ?: return
-        if (!focus.isShown || isTouchInsideView(focus, event.rawX.toInt(), event.rawY.toInt())) {
-            return
-        }
-        focus.clearFocus()
-        focus.hideSoftInput()
-    }
-
-    private fun isTouchInsideView(view: View, rawX: Int, rawY: Int): Boolean {
-        val rect = Rect()
-        view.getGlobalVisibleRect(rect)
-        return rect.contains(rawX, rawY)
     }
 
     private fun maybeAutoFetchModels() {
@@ -3256,7 +3313,8 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
         alert(getString(R.string.ai_delete_provider)) {
             setMessage(getString(R.string.sure_del_any, provider.name))
-            okButton {
+            okButton { dialog ->
+                dialog.dismiss()
                 if (AiProviderStore.deleteCustomProvider(provider.id)) {
                     Toast.makeText(
                         requireContext(),
@@ -3271,19 +3329,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
                 onCancel()
             }
         }
-    }
-
-    private fun updateApiKeyVisibility() {
-        val selection = binding.editApiKey.selectionStart.coerceAtLeast(0)
-        binding.editApiKey.inputType = if (apiKeyVisible) {
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-        } else {
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        binding.buttonToggleApiKey.setImageResource(
-            if (apiKeyVisible) R.drawable.ic_visibility else R.drawable.ic_visibility_off
-        )
-        binding.editApiKey.setSelection(selection.coerceAtMost(binding.editApiKey.text?.length ?: 0))
     }
 
     private fun formatBalanceResult(result: io.legado.app.help.ai.AiBalanceResult): String {
@@ -3650,96 +3695,6 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
         }
     }
 
-    private inner class AiProviderAdapter :
-        RecyclerAdapter<AiProviderSetting, ItemAiProviderBinding>(requireContext()),
-        ItemTouchCallback.Callback {
-
-        private var isMoved = false
-
-        override fun getViewBinding(parent: ViewGroup): ItemAiProviderBinding {
-            return ItemAiProviderBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemAiProviderBinding,
-            item: AiProviderSetting,
-            payloads: MutableList<Any>
-        ) {
-            binding.imageIcon.setImageResource(item.iconRes())
-            binding.viewActiveIndicator.isVisible = false
-            binding.imageDragHandle.isVisible = providerSearchQuery.isBlank()
-            binding.textName.text = item.name
-            binding.textEnabled.setBackgroundResource(
-                if (item.enabled) R.drawable.ng_bg_tag_success else R.drawable.ng_bg_tag_warning
-            )
-            binding.textEnabled.setTextColor(
-                ContextCompat.getColor(
-                    requireContext(),
-                    if (item.enabled) R.color.ng_success else R.color.ng_warning
-                )
-            )
-            binding.textEnabled.text =
-                if (item.enabled) getString(R.string.enabled) else getString(R.string.disabled)
-            binding.textModelCount.text =
-                getString(R.string.ai_model_list_count, item.visibleModelCount().toString())
-        }
-
-        @SuppressLint("ClickableViewAccessibility")
-        override fun registerListener(holder: ItemViewHolder, binding: ItemAiProviderBinding) {
-            binding.layoutSelectProvider.setOnClickListener {
-                getItemByLayoutPosition(holder.layoutPosition)?.let { item ->
-                    showDetail(item.id)
-                }
-            }
-            binding.imageDragHandle.setOnTouchListener { _, event ->
-                if (providerSearchQuery.isBlank()) {
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                        providerItemTouchHelper.startDrag(holder)
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-
-        override fun swap(srcPosition: Int, targetPosition: Int): Boolean {
-            if (providerSearchQuery.isNotBlank()) {
-                return false
-            }
-            swapItem(srcPosition, targetPosition)
-            isMoved = true
-            return true
-        }
-
-        override fun getSwipeFlags(adapterPosition: Int, defaultFlags: Int): Int {
-            val item = getItems().getOrNull(adapterPosition) ?: return 0
-            return if (!item.builtIn) ItemTouchHelper.RIGHT else 0
-        }
-
-        override fun onSwiped(adapterPosition: Int, direction: Int) {
-            val item = getItems().getOrNull(adapterPosition)
-            if (item == null || item.builtIn || direction != ItemTouchHelper.RIGHT) {
-                refreshProviders()
-                return
-            }
-            confirmDeleteProvider(
-                provider = item,
-                onCancel = { refreshProviders() },
-                onDeleted = { refreshProviders() }
-            )
-        }
-
-        override fun onClearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
-            if (isMoved && providerSearchQuery.isBlank()) {
-                AiProviderStore.saveProviders(getItems())
-                refreshMain()
-            }
-            isMoved = false
-        }
-    }
-
     private inner class AiModelAdapter :
         RecyclerAdapter<AiModel, ItemAiModelBinding>(requireContext()) {
 
@@ -3847,46 +3802,71 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
             item: AiSkillDefinition,
             payloads: MutableList<Any>
         ) {
-            binding.textIcon.text = item.iconText()
-            binding.textName.text = item.name
-            binding.textSummary.text = item.summary
-            binding.textScope.text = item.scope.displayName()
-            binding.textScope.setBackgroundResource(
-                when (item.scope) {
-                    AiSkillScope.APP -> R.drawable.ng_bg_tag_neutral
-                    AiSkillScope.AGENT -> R.drawable.ng_bg_tag_info
-                }
-            )
-            binding.textScope.setTextColor(
-                ContextCompat.getColor(
-                    requireContext(),
-                    when (item.scope) {
-                        AiSkillScope.APP -> R.color.tv_text_summary
-                        AiSkillScope.AGENT -> R.color.ng_info
+            binding.root.apply {
+                setLeadingText(item.iconText(), item.name)
+                setTitle(item.name)
+                setSummary(item.summary)
+                setHeaderTags(
+                    buildList {
+                        add(
+                            NgStatusTagSpec(
+                                text = item.scope.displayName(),
+                                variant = when (item.scope) {
+                                    AiSkillScope.APP -> NgStatusTagVariant.NEUTRAL
+                                    AiSkillScope.AGENT -> NgStatusTagVariant.INFO
+                                },
+                                style = NgStatusTagStyle.COMPACT
+                            )
+                        )
+                        if (!item.builtIn) {
+                            add(
+                                NgStatusTagSpec(
+                                    text = getString(R.string.ai_prompt_custom),
+                                    variant = NgStatusTagVariant.SUCCESS,
+                                    style = NgStatusTagStyle.COMPACT
+                                )
+                            )
+                        }
                     }
                 )
-            )
-            binding.textCustom.isVisible = !item.builtIn
-            binding.buttonMore.isVisible = !item.builtIn
+                setDetailTags(emptyList())
+                setSelectionIndicatorVisible(false)
+                setTrailing(
+                    trailing = if (item.builtIn) {
+                        NgManagementTrailing.NONE
+                    } else {
+                        NgManagementTrailing.MORE
+                    },
+                    contentDescription = getString(R.string.more)
+                )
+            }
         }
 
         override fun registerListener(holder: ItemViewHolder, binding: ItemAiPromptBinding) {
-            binding.buttonMore.setOnClickListener {
+            binding.root.trailingActionView.setOnClickListener {
                 val skill = getItemByLayoutPosition(holder.layoutPosition) ?: return@setOnClickListener
-                PopupMenu(requireContext(), binding.buttonMore).apply {
-                    menu.add(0, 1, 0, R.string.ai_skill_export)
-                    menu.add(0, 2, 1, R.string.delete)
-                    setOnMenuItemClickListener { menuItem ->
-                        currentSkill = skill
-                        currentPrompt = skill.editablePrompt
-                        when (menuItem.itemId) {
-                            1 -> exportCurrentSkill()
-                            2 -> confirmDeleteCurrentSkill()
-                        }
-                        true
+                NgActionPopup(
+                    context = requireContext(),
+                    items = listOf(
+                        NgActionPopupItem(
+                            itemId = 1,
+                            titleRes = R.string.ai_skill_export,
+                            iconRes = R.drawable.ic_export
+                        ),
+                        NgActionPopupItem(
+                            itemId = 2,
+                            titleRes = R.string.delete,
+                            iconRes = R.drawable.ic_outline_delete
+                        )
+                    )
+                ) { menuItem ->
+                    currentSkill = skill
+                    currentPrompt = skill.editablePrompt
+                    when (menuItem.itemId) {
+                        1 -> exportCurrentSkill()
+                        2 -> confirmDeleteCurrentSkill()
                     }
-                    show()
-                }
+                }.show(binding.root.trailingActionView)
             }
         }
     }

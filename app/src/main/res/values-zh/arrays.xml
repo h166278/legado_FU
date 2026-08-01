@@ -24,9 +24,6 @@
         <item>日间主题</item>
         <item>暗色主题</item>
         <item>E-Ink(墨水屏)</item>
-        <item>暖色渐变</item>
-        <item>竹影之韵</item>
-        <item>灰色雾霭</item>
     </string-array>
 
     <string-array name="ai_provider_type">

@@ -12,6 +12,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.Window
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
@@ -21,6 +22,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.NgThemeRuntimeAssets
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.backgroundColor
@@ -79,7 +81,17 @@ abstract class BaseActivity<VB : ViewBinding>(
         if (AppConst.menuViewNames.contains(name) && parent?.parent is FrameLayout) {
             (parent.parent as View).setBackgroundColor(backgroundColor)
         }
-        return super.onCreateView(parent, name, context, attrs)
+        val view = super.onCreateView(parent, name, context, attrs)
+        if (view is TextView && !attrs.hasExplicitTypeface()) {
+            NgThemeRuntimeAssets.applyAppTypeface(context, view)
+        }
+        return view
+    }
+
+    private fun AttributeSet.hasExplicitTypeface(): Boolean {
+        val androidNamespace = "http://schemas.android.com/apk/res/android"
+        return getAttributeValue(androidNamespace, "fontFamily") != null ||
+            getAttributeValue(androidNamespace, "typeface") != null
     }
 
     @SuppressLint("ObsoleteSdkInt")

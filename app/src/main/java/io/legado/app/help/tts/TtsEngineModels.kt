@@ -4,6 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import io.legado.app.data.entities.BaseSource
+import kotlin.random.Random
 
 enum class TtsEngineType {
     @SerializedName("system")
@@ -327,7 +328,29 @@ data class TtsEngineSetting(
             return optionValues
         }
         return options.associate { option ->
-            option.safeKey to (optionValues[option.safeKey] ?: option.defaultValue.orEmpty())
+            val key = option.safeKey
+            val value = optionValues[key] ?: option.defaultValue.orEmpty()
+            key to if (
+                option.normalizedType == "random_number" &&
+                !isValidTtsRandomNumber(
+                    value = value,
+                    digits = option.randomNumberDigits,
+                    allowLeadingZero = option.randomNumberAllowsLeadingZero
+                )
+            ) {
+                stableGeneratedTtsRandomNumber(
+                    cacheKey = GeneratedTtsRandomNumberKey(
+                        engineId = id,
+                        optionKey = key,
+                        digits = option.randomNumberDigits,
+                        allowLeadingZero = option.randomNumberAllowsLeadingZero
+                    ),
+                    digits = option.randomNumberDigits,
+                    allowLeadingZero = option.randomNumberAllowsLeadingZero
+                )
+            } else {
+                value
+            }
         }
     }
 
@@ -354,7 +377,11 @@ data class TtsScriptOption(
     @SerializedName(value = "defaultValue", alternate = ["default_value", "default"])
     val defaultValue: String? = null,
     @SerializedName(value = "values", alternate = ["items", "chars"])
-    val values: List<JsonElement>? = emptyList()
+    val values: List<JsonElement>? = emptyList(),
+    @SerializedName(value = "digits", alternate = ["length"])
+    val digits: Int? = null,
+    @SerializedName(value = "allowLeadingZero", alternate = ["allow_leading_zero"])
+    val allowLeadingZero: Boolean? = null
 ) {
     val safeKey: String get() = key.orEmpty()
 
@@ -400,8 +427,73 @@ data class TtsScriptOption(
             "select", "choice", "list", "enum" -> "select"
             "password" -> "password"
             "number", "int", "integer", "float", "decimal" -> "number"
+            "randomnumber", "random_number", "random-number" -> "random_number"
             else -> "text"
         }
+
+    val randomNumberDigits: Int
+        get() = (digits ?: DEFAULT_TTS_RANDOM_NUMBER_DIGITS)
+            .coerceIn(MIN_TTS_RANDOM_NUMBER_DIGITS, MAX_TTS_RANDOM_NUMBER_DIGITS)
+
+    val randomNumberAllowsLeadingZero: Boolean
+        get() = allowLeadingZero == true
+}
+
+internal fun generateTtsRandomNumber(
+    digits: Int = DEFAULT_TTS_RANDOM_NUMBER_DIGITS,
+    allowLeadingZero: Boolean = false,
+    random: Random = Random.Default
+): String {
+    val safeDigits = digits.coerceIn(
+        MIN_TTS_RANDOM_NUMBER_DIGITS,
+        MAX_TTS_RANDOM_NUMBER_DIGITS
+    )
+    return buildString(safeDigits) {
+        append(random.nextInt(if (allowLeadingZero) 0 else 1, 10))
+        repeat(safeDigits - 1) {
+            append(random.nextInt(0, 10))
+        }
+    }
+}
+
+internal fun isValidTtsRandomNumber(
+    value: String?,
+    digits: Int = DEFAULT_TTS_RANDOM_NUMBER_DIGITS,
+    allowLeadingZero: Boolean = false
+): Boolean {
+    val candidate = value ?: return false
+    val safeDigits = digits.coerceIn(
+        MIN_TTS_RANDOM_NUMBER_DIGITS,
+        MAX_TTS_RANDOM_NUMBER_DIGITS
+    )
+    return candidate.length == safeDigits &&
+            (allowLeadingZero || candidate.first() != '0') &&
+            candidate.all { it in '0'..'9' }
+}
+
+internal const val DEFAULT_TTS_RANDOM_NUMBER_DIGITS = 13
+private const val MIN_TTS_RANDOM_NUMBER_DIGITS = 1
+private const val MAX_TTS_RANDOM_NUMBER_DIGITS = 64
+
+private data class GeneratedTtsRandomNumberKey(
+    val engineId: String,
+    val optionKey: String,
+    val digits: Int,
+    val allowLeadingZero: Boolean
+)
+
+private val generatedTtsRandomNumbers = hashMapOf<GeneratedTtsRandomNumberKey, String>()
+
+private fun stableGeneratedTtsRandomNumber(
+    cacheKey: GeneratedTtsRandomNumberKey,
+    digits: Int,
+    allowLeadingZero: Boolean
+): String {
+    return synchronized(generatedTtsRandomNumbers) {
+        generatedTtsRandomNumbers.getOrPut(cacheKey) {
+            generateTtsRandomNumber(digits, allowLeadingZero)
+        }
+    }
 }
 
 data class TtsScriptOptionValue(

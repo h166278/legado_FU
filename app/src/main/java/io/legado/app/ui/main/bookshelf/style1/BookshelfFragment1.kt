@@ -3,6 +3,7 @@
 package io.legado.app.ui.main.bookshelf.style1
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -12,7 +13,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.widget.SearchView
-import androidx.core.content.ContextCompat
+import androidx.core.widget.TextViewCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
@@ -24,7 +25,6 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.FragmentBookshelf1Binding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
@@ -34,11 +34,10 @@ import io.legado.app.ui.book.manage.BookshelfManageActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.isCreated
 import io.legado.app.utils.setEdgeEffectColor
@@ -57,8 +56,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     companion object {
         private const val SORT_MENU_ID_OFFSET = 1000
-        private const val GRADIENT_GROUP_SELECTED_COLOR = 0xDE000000.toInt()
-        private const val GRADIENT_GROUP_UNSELECTED_COLOR = 0x8A000000.toInt()
         private val sortValues = intArrayOf(4, 0, 1, 2, 3, 5)
         private val bookshelfMenuActions = listOf(
             NgActionPopupItem(R.id.menu_update_toc, R.string.update_toc, R.drawable.ic_refresh_black_24dp),
@@ -113,6 +110,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         val searchView = binding.titleBar.findViewById<View>(R.id.tv_bookshelf_search)
         val moreButton = binding.titleBar.findViewById<View>(R.id.btn_bookshelf_more)
         applyTopBarBackground(searchView, moreButton)
+        applyBookshelfToolbarColors()
         applyContentPanelBackground()
         searchView.bindSoftPress()
         moreButton.bindSoftPress()
@@ -160,15 +158,21 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.bookshelfContentPanel.setBackgroundResource(R.color.transparent)
     }
 
-    private fun isTransparentTopBar(): Boolean {
-        return requireContext().transparentNavBar || requireContext().getPrefBoolean(
-            if (AppConfig.isNightTheme) {
-                PreferKey.tNavBarN
-            } else {
-                PreferKey.tNavBar
-            },
-            false
+    private fun applyBookshelfToolbarColors() {
+        val topBarTextColor = NgThemeResolver.resolve(requireContext()).colors.onTopBar
+        binding.tvBookshelfViewBooks.setTextColor(topBarTextColor)
+        binding.tvBookshelfViewHistory.setTextColor(topBarTextColor)
+        binding.tvBookshelfSort.setTextColor(topBarTextColor)
+        binding.tvBookshelfEdit.setTextColor(topBarTextColor)
+        TextViewCompat.setCompoundDrawableTintList(
+            binding.tvBookshelfSort,
+            ColorStateList.valueOf(topBarTextColor)
         )
+    }
+
+    private fun isTransparentTopBar(): Boolean {
+        return requireContext().transparentNavBar ||
+                requireContext().getPrefBoolean(PreferKey.tNavBar, false)
     }
 
     private fun animateTopBarIn() {
@@ -339,24 +343,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     private fun updateGroupTabStyles(animate: Boolean = true) {
         val selectedPosition = tabLayout.selectedTabPosition
-        val gradientTheme = isGradientTheme()
-        val normalTabTextColor = requireContext().getCompatColor(
-            if (isTransparentTopBar() || ColorUtils.isColorLight(primaryColor)) {
-                R.color.primaryText
-            } else {
-                R.color.white
-            }
-        )
+        val topBarTextColor = NgThemeResolver.resolve(requireContext()).colors.onTopBar
         for (i in 0 until tabLayout.tabCount) {
             val textView = tabLayout.getTabAt(i)?.customView as? TextView ?: continue
             val selected = i == selectedPosition
-            textView.setTextColor(
-                if (gradientTheme) {
-                    if (selected) GRADIENT_GROUP_SELECTED_COLOR else GRADIENT_GROUP_UNSELECTED_COLOR
-                } else {
-                    normalTabTextColor
-                }
-            )
+            textView.setTextColor(topBarTextColor)
             textView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
             textView.typeface = Typeface.create(
                 if (selected) "sans-serif-medium" else "sans-serif",
@@ -374,10 +365,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                 textView.scaleY = 1f
             }
         }
-    }
-
-    private fun isGradientTheme(): Boolean {
-        return ThemeConfig.isReadingNgBackgroundTheme()
     }
 
     override fun onTabReselected(tab: TabLayout.Tab) {

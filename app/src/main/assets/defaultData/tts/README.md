@@ -20,7 +20,7 @@ App 主动调用的协议函数只有：
 - `@audioType`：默认音频 MIME 类型，旧 `@contentType` 仍兼容。
 - `@sampleText`：该脚本的默认试听文本。发音人未提供 `sample_text` 时，试听优先使用这里的文本，再回落到 App 内置默认文本。
 
-`options()` 支持 `text/password/number/select/boolean`。`select.values` 可以是字符串数组，也可以是 `{ label, value }` 数组，保存时只保存 `value`。
+`options()` 支持 `text/password/number/select/boolean/randomNumber`。`select.values` 可以是字符串数组，也可以是 `{ label, value }` 数组，保存时只保存 `value`。`randomNumber` 显示为可重新生成的只读数字；`digits` 控制位数（默认 13），`allowLeadingZero` 控制首位是否允许为 0（默认不允许）。空值或不符合规则的旧值首次解析时自动生成，用户也可通过输入框尾部按钮重新生成；生成结果随引擎配置保存。
 
 `voices(options, ctx)` 必须返回标准发音人数组。App 不解析服务商私有响应格式；如果远端接口返回 `catalog`、map、嵌套对象或其它结构，脚本需要先在 `voices()` 内转换成标准数组再返回。发音人必填字段是 `id/name`，可选字段是 `language/gender/style/tags/sample_text/extra`，其中 `extra` 会原样传回 `synthesize()`。
 

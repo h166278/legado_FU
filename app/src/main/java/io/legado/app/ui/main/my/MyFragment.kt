@@ -11,11 +11,8 @@ import androidx.preference.PreferenceGroup
 import androidx.preference.Preference
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
-import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Theme
 import io.legado.app.databinding.FragmentMyConfigBinding
-import io.legado.app.help.config.ThemeConfig
-import io.legado.app.lib.prefs.NameListPreference
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
@@ -92,15 +89,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             addPreferencesFromResource(R.xml.pref_main)
             preferenceScreen?.let(::applyMyMenuLayout)
-            findPreference<NameListPreference>(PreferKey.themeMode)?.let {
-                it.setOnPreferenceChangeListener { _, newValue ->
-                    view?.post {
-                        val themeMode = newValue as? String
-                        ThemeConfig.applyThemeMode(requireContext(), themeMode ?: "4")
-                    }
-                    true
-                }
-            }
         }
 
         private fun applyMyMenuLayout(group: PreferenceGroup) {

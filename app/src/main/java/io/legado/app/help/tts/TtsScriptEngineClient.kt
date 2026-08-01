@@ -3,6 +3,7 @@ package io.legado.app.help.tts
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.JsonSyntaxException
 import io.legado.app.BuildConfig
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -48,17 +49,53 @@ object TtsScriptEngineClient {
         synchronized(optionsCache) {
             optionsCache[cacheKey]
         }?.let { return it }
-        val result = callEngineFunction(engine, "options")
-        val options = result?.let {
-            GSON.fromJsonArray<TtsScriptOption>(it)
-                .getOrDefault(emptyList())
-                .filter { option -> option.safeKey.isNotBlank() }
-                .distinctBy { option -> option.safeKey }
-        }.orEmpty()
+        val result = callOptionsFunction(engine)
+        val options = parseOptionsResult(result)
         synchronized(optionsCache) {
             optionsCache[cacheKey] = options
         }
         return options
+    }
+
+    internal fun parseOptionsResult(result: String?): List<TtsScriptOption> {
+        val options = result?.let {
+            GSON.fromJsonArray<TtsScriptOption>(it)
+                .getOrThrow()
+        }.orEmpty()
+        if (options.any { it.safeKey.isBlank() }) {
+            throw JsonSyntaxException("TTS options() contains an option without a key")
+        }
+        if (options.distinctBy { it.safeKey }.size != options.size) {
+            throw JsonSyntaxException("TTS options() contains duplicate option keys")
+        }
+        return options
+    }
+
+    private fun callOptionsFunction(engine: TtsEngineSetting): String? {
+        if (engine.script.isBlank()) {
+            return null
+        }
+        val js = """
+            ${engine.script}
+            (function() {
+                if (typeof options !== 'function') {
+                    return null;
+                }
+                var value = options();
+                if (value == null) {
+                    throw new Error('options() must return an array');
+                }
+                if (typeof value === 'string') {
+                    return value;
+                }
+                return JSON.stringify(value);
+            })();
+        """.trimIndent()
+        val result = engine.evalJS(js)?.toString() ?: return null
+        if (result.isBlank() || result == "null") {
+            throw JsonSyntaxException("TTS options() must return an array")
+        }
+        return result
     }
 
     suspend fun fetchVoices(engine: TtsEngineSetting): List<TtsVoice> {

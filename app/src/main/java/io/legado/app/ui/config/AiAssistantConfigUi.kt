@@ -75,10 +75,14 @@ object AiAssistantConfigUi {
     ) {
         val sheet = NgLongListBottomSheet(
             context = context,
-            searchHint = context.getString(R.string.ai_assistant_model_search_hint)
+            searchHint = context.getString(R.string.ai_search_model),
+            title = context.getString(R.string.ai_model_select),
+            showSearch = false,
+            compact = true
         )
+        val filters = AiModelSelectionFilters(context, sheet, assistantModelProviders())
         sheet.setScrollableContent { container, query, dialog ->
-            renderModelOptions(context, container, query, dialog, onChanged)
+            renderModelOptions(context, container, query, dialog, filters, onChanged)
         }
         sheet.show()
     }
@@ -134,13 +138,11 @@ object AiAssistantConfigUi {
             typeface = Typeface.DEFAULT_BOLD
             textSize = 22f
             gravity = Gravity.CENTER
-        })
-        root.addView(TextView(context).apply {
-            text = context.getString(R.string.ai_assistant_reasoning_desc)
-            setTextColor(ContextCompat.getColor(context, R.color.ng_on_surface_variant))
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setPadding(0, 8.dpToPx(context), 0, 22.dpToPx(context))
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            bottomMargin = 22.dpToPx(context)
         })
         val currentLabel = TextView(context).apply {
             text = AiConfig.assistantReasoningLevel.displayName(context)
@@ -375,10 +377,11 @@ object AiAssistantConfigUi {
         container: LinearLayout,
         query: String,
         dialog: BottomSheetDialog,
+        filters: AiModelSelectionFilters,
         onChanged: () -> Unit
     ) {
         container.removeAllViews()
-        val groupedOptions = modelOptions(query.trim())
+        val groupedOptions = modelOptions(query.trim(), filters)
         if (groupedOptions.isEmpty()) {
             container.addView(TextView(context).apply {
                 text = context.getString(R.string.ai_assistant_model_empty)
@@ -400,9 +403,18 @@ object AiAssistantConfigUi {
         }
     }
 
-    private fun modelOptions(query: String): List<Pair<AiProviderSetting, List<AiModel>>> {
-        return AiProviderStore.providers()
-            .filter { it.enabled }
+    private fun assistantModelProviders(): List<AiProviderSetting> {
+        return AiProviderStore.providers().filter { provider ->
+            provider.enabled && provider.assistantEligibleModels().isNotEmpty()
+        }
+    }
+
+    private fun modelOptions(
+        query: String,
+        filters: AiModelSelectionFilters
+    ): List<Pair<AiProviderSetting, List<AiModel>>> {
+        return assistantModelProviders()
+            .filter { filters.accepts(it.id) }
             .mapNotNull { provider ->
                 val models = provider.assistantEligibleModels()
                     .filter { model ->

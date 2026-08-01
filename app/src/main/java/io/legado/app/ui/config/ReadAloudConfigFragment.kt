@@ -1,29 +1,26 @@
 package io.legado.app.ui.config
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
-import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
-import androidx.core.widget.TextViewCompat
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
-import io.legado.app.databinding.FragmentDefaultTtsVoiceConfigBinding
-import io.legado.app.databinding.FragmentReadAloudConfigBinding
-import io.legado.app.databinding.ItemBookCharacterTtsBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.service.BaseReadAloudService
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -31,31 +28,43 @@ import kotlinx.coroutines.withContext
 
 class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config) {
 
-    private val binding by viewBinding(FragmentReadAloudConfigBinding::bind)
+    private var screenState by mutableStateOf(ReadAloudConfigScreenState())
     private val cardClickDebouncer = TtsSheetLaunchDebouncer()
     private var summaryJob: Job? = null
     private var skipNextResumeRefresh = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.read_aloud_settings)
-        binding.layoutTtsEngineEntry.setOnClickListener {
-            runCardAction {
-                requireContext().startActivity<ConfigActivity> {
-                    putExtra("configTag", ConfigTag.TTS_ENGINE_CONFIG)
-                }
-            }
-        }
-        binding.layoutMultiRoleEngineEntry.setOnClickListener {
-            runCardAction(::showMultiRoleEngineSheet)
-        }
-        binding.layoutDefaultVoiceEntry.setOnClickListener {
-            runCardAction {
-                requireContext().startActivity<ConfigActivity> {
-                    putExtra("configTag", ConfigTag.DEFAULT_TTS_VOICE_CONFIG)
-                }
-            }
-        }
         refreshContent()
+        (view as ComposeView).apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    ReadAloudConfigScreen(
+                        state = screenState,
+                        onOpenTtsEngine = {
+                            runCardAction {
+                                requireContext().startActivity<ConfigActivity> {
+                                    putExtra("configTag", ConfigTag.TTS_ENGINE_CONFIG)
+                                }
+                            }
+                        },
+                        onOpenMultiRoleEngine = {
+                            runCardAction(::showMultiRoleEngineSheet)
+                        },
+                        onOpenDefaultVoice = {
+                            runCardAction {
+                                requireContext().startActivity<ConfigActivity> {
+                                    putExtra("configTag", ConfigTag.DEFAULT_TTS_VOICE_CONFIG)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
         skipNextResumeRefresh = true
     }
 
@@ -76,11 +85,6 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
     }
 
     private fun refreshContent() {
-        val tint = ColorStateList.valueOf(accentColor)
-        binding.textSectionLabel.setTextColor(accentColor)
-        binding.imageTtsEngineIcon.imageTintList = tint
-        binding.imageMultiRoleEngineIcon.imageTintList = tint
-        binding.imageDefaultVoiceIcon.imageTintList = tint
         refreshMultiRoleEngineSummary()
     }
 
@@ -88,7 +92,9 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
         summaryJob?.cancel()
         val selectedId = AppConfig.multiRoleTtsEngineId
         if (selectedId.isNullOrBlank()) {
-            binding.textMultiRoleEngineSummary.setText(R.string.multi_role_tts_engine_unset)
+            screenState = screenState.copy(
+                multiRoleEngineSummary = getString(R.string.multi_role_tts_engine_unset)
+            )
             return
         }
         summaryJob = viewLifecycleOwner.lifecycleScope.launch {
@@ -98,8 +104,10 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
                     ?.name
             }
             if (view == null) return@launch
-            binding.textMultiRoleEngineSummary.text = selectedName
-                ?: getString(R.string.multi_role_tts_engine_unset)
+            screenState = screenState.copy(
+                multiRoleEngineSummary = selectedName
+                    ?: getString(R.string.multi_role_tts_engine_unset)
+            )
         }
     }
 
@@ -145,114 +153,130 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
 
 class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts_voice_config) {
 
-    private val binding by viewBinding(FragmentDefaultTtsVoiceConfigBinding::bind)
+    private var screenState by mutableStateOf<DefaultTtsVoiceConfigScreenState?>(null)
     private val cardClickDebouncer = TtsSheetLaunchDebouncer()
+    private var engineSnapshot = emptyList<TtsEngineSetting>()
+    private var engineSnapshotLoaded = false
+    private var refreshCardsJob: Job? = null
+    private var skipNextResumeRefresh = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.default_tts_voice)
-        bindCardClick(binding.cardNarrator) { showNarratorVoiceSheet() }
-        bindCardClick(binding.cardDialogueMale) { showDialogueVoiceSheet(DialogueGender.MALE) }
-        bindCardClick(binding.cardDialogueFemale) {
-            showDialogueVoiceSheet(DialogueGender.FEMALE)
+        (view as ComposeView).apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    screenState?.let { state ->
+                        DefaultTtsVoiceConfigScreen(
+                            state = state,
+                            onAction = ::handleScreenAction
+                        )
+                    }
+                }
+            }
         }
         refreshCards()
+        skipNextResumeRefresh = true
     }
 
     override fun onResume() {
         super.onResume()
-        if (view != null) refreshCards()
+        if (skipNextResumeRefresh) {
+            skipNextResumeRefresh = false
+        } else if (view != null) {
+            refreshCards()
+        }
     }
 
-    private fun bindCardClick(
-        card: ItemBookCharacterTtsBinding,
-        action: () -> Unit
-    ) {
-        card.root.setOnClickListener {
-            if (cardClickDebouncer.tryAcquire(SystemClock.elapsedRealtime())) action()
+    override fun onDestroyView() {
+        refreshCardsJob?.cancel()
+        refreshCardsJob = null
+        skipNextResumeRefresh = false
+        super.onDestroyView()
+    }
+
+    private fun handleScreenAction(action: DefaultTtsVoiceConfigScreenAction) {
+        if (!cardClickDebouncer.tryAcquire(SystemClock.elapsedRealtime())) return
+        when (action) {
+            DefaultTtsVoiceConfigScreenAction.NarratorClicked -> showNarratorVoiceSheet()
+            DefaultTtsVoiceConfigScreenAction.DialogueMaleClicked -> {
+                showDialogueVoiceSheet(DialogueGender.MALE)
+            }
+            DefaultTtsVoiceConfigScreenAction.DialogueFemaleClicked -> {
+                showDialogueVoiceSheet(DialogueGender.FEMALE)
+            }
         }
     }
 
     private fun refreshCards() {
-        val engine = selectedMultiRoleEngine()
-        bindDefaultVoiceCard(
-            card = binding.cardNarrator,
-            avatar = getString(R.string.default_tts_voice_avatar_narrator),
-            avatarBackground = R.drawable.bg_character_avatar_unknown,
-            title = getString(R.string.default_narrator_voice),
-            summary = narratorSummary(),
-            enabled = true,
-            showFallbackTag = false
-        )
-        bindDefaultVoiceCard(
-            card = binding.cardDialogueMale,
-            avatar = getString(R.string.default_tts_voice_avatar_male),
-            avatarBackground = R.drawable.bg_character_avatar_male,
-            title = getString(R.string.default_dialogue_male_voice),
-            summary = engine?.let {
-                dialogueSummary(it, AppConfig.defaultDialogueMaleTtsVoiceId)
-            } ?: getString(R.string.default_tts_voice_select_engine_first),
-            enabled = engine != null,
-            showFallbackTag = true
-        )
-        bindDefaultVoiceCard(
-            card = binding.cardDialogueFemale,
-            avatar = getString(R.string.default_tts_voice_avatar_female),
-            avatarBackground = R.drawable.bg_character_avatar_female,
-            title = getString(R.string.default_dialogue_female_voice),
-            summary = engine?.let {
-                dialogueSummary(it, AppConfig.defaultDialogueFemaleTtsVoiceId)
-            } ?: getString(R.string.default_tts_voice_select_engine_first),
-            enabled = engine != null,
-            showFallbackTag = true
-        )
+        bindCards(engineSnapshot, loading = !engineSnapshotLoaded)
+        refreshCardsJob?.cancel()
+        refreshCardsJob = viewLifecycleOwner.lifecycleScope.launch {
+            val engines = withContext(Dispatchers.IO) {
+                TtsEngineStore.engines()
+            }
+            if (view == null) return@launch
+            engineSnapshot = engines
+            engineSnapshotLoaded = true
+            bindCards(engines)
+        }
     }
 
-    private fun bindDefaultVoiceCard(
-        card: ItemBookCharacterTtsBinding,
-        avatar: String,
-        avatarBackground: Int,
-        title: String,
-        summary: String,
-        enabled: Boolean,
-        showFallbackTag: Boolean
-    ) = card.run {
-        tvAvatar.text = avatar
-        tvAvatar.setBackgroundResource(avatarBackground)
-        tvName.text = title
-        tvRole.isVisible = showFallbackTag
-        tvRole.text = if (showFallbackTag) {
-            getString(R.string.character_tts_dialogue_fallback)
-        } else {
-            null
-        }
-        tvVoice.text = summary
-        tvStyle.isVisible = false
-        tvAction.text = null
-        tvAction.setCompoundDrawablesRelativeWithIntrinsicBounds(
-            R.drawable.ic_chevron_right_20,
-            0,
-            0,
-            0
-        )
-        TextViewCompat.setCompoundDrawableTintList(
-            tvAction,
-            ColorStateList.valueOf(
-                ContextCompat.getColor(requireContext(), R.color.ng_on_surface_variant)
+    private fun bindCards(
+        engines: List<TtsEngineSetting>,
+        loading: Boolean = false
+    ) {
+        val engine = selectedMultiRoleEngine(engines)
+        val fallbackTag = getString(R.string.character_tts_dialogue_fallback)
+        screenState = DefaultTtsVoiceConfigScreenState(
+            narrator = DefaultTtsVoiceCardUiModel(
+                slot = DefaultTtsVoiceSlot.NARRATOR,
+                title = getString(R.string.default_narrator_voice),
+                summary = if (loading) {
+                    getString(R.string.loading)
+                } else {
+                    narratorSummary(engines)
+                },
+                avatarText = getString(R.string.default_tts_voice_avatar_narrator),
+                avatarRole = DefaultTtsVoiceAvatarRole.NARRATOR
+            ),
+            dialogueMale = DefaultTtsVoiceCardUiModel(
+                slot = DefaultTtsVoiceSlot.DIALOGUE_MALE,
+                title = getString(R.string.default_dialogue_male_voice),
+                summary = if (loading) {
+                    getString(R.string.loading)
+                } else {
+                    engine?.let {
+                        dialogueSummary(it, AppConfig.defaultDialogueMaleTtsVoiceId)
+                    } ?: getString(R.string.default_tts_voice_select_engine_first)
+                },
+                avatarText = getString(R.string.default_tts_voice_avatar_male),
+                avatarRole = DefaultTtsVoiceAvatarRole.MALE,
+                fallbackTag = fallbackTag,
+                enabled = !loading && engine != null
+            ),
+            dialogueFemale = DefaultTtsVoiceCardUiModel(
+                slot = DefaultTtsVoiceSlot.DIALOGUE_FEMALE,
+                title = getString(R.string.default_dialogue_female_voice),
+                summary = if (loading) {
+                    getString(R.string.loading)
+                } else {
+                    engine?.let {
+                        dialogueSummary(it, AppConfig.defaultDialogueFemaleTtsVoiceId)
+                    } ?: getString(R.string.default_tts_voice_select_engine_first)
+                },
+                avatarText = getString(R.string.default_tts_voice_avatar_female),
+                avatarRole = DefaultTtsVoiceAvatarRole.FEMALE,
+                fallbackTag = fallbackTag,
+                enabled = !loading && engine != null
             )
         )
-        tvAction.background = null
-        tvAction.foreground = null
-        tvAction.minWidth = 0
-        tvAction.setPadding(0, 0, 0, 0)
-        tvAction.isClickable = false
-        tvAction.isFocusable = false
-        tvAction.isEnabled = enabled
-        root.isEnabled = enabled
-        root.alpha = if (enabled) 1f else 0.55f
     }
 
-    private fun narratorSummary(): String {
-        val engine = TtsEngineStore.engine(AppConfig.defaultNarratorTtsEngineId)
+    private fun narratorSummary(engines: List<TtsEngineSetting>): String {
+        val engine = engines.firstOrNull { it.id == AppConfig.defaultNarratorTtsEngineId }
             ?.takeIf { it.enabled }
             ?: return getString(R.string.default_tts_voice_unset)
         if (engine.type == TtsEngineType.SYSTEM) {
@@ -283,7 +307,10 @@ class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts
             title = getString(R.string.default_narrator_voice),
             searchHint = getString(R.string.default_tts_voice_search),
             emptyText = getString(R.string.default_tts_voice_empty),
-            engines = { TtsEngineStore.engines().filter { it.enabled } },
+            engines = {
+                (engineSnapshot.takeIf { engineSnapshotLoaded } ?: TtsEngineStore.engines())
+                    .filter { it.enabled }
+            },
             isSelected = { option ->
                 selectedEngineId == option.engine.id && if (option.systemDefault) {
                     selectedVoiceId.isNullOrBlank()
@@ -296,21 +323,21 @@ class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts
                 AppConfig.defaultNarratorTtsVoiceId = option.voice.id
                     .takeUnless { option.systemDefault }
                 refreshRunningMultiRoleReadAloud(requireContext())
-                refreshCards()
+                bindCards(engineSnapshot)
             },
             titleAction = selectedEngineId?.takeIf { it.isNotBlank() }?.let {
                 getString(R.string.clear) to {
                     AppConfig.defaultNarratorTtsEngineId = null
                     AppConfig.defaultNarratorTtsVoiceId = null
                     refreshRunningMultiRoleReadAloud(requireContext())
-                    refreshCards()
+                    bindCards(engineSnapshot)
                 }
             }
         ).show()
     }
 
     private fun showDialogueVoiceSheet(gender: DialogueGender) {
-        val engine = selectedMultiRoleEngine() ?: return
+        val engine = selectedMultiRoleEngine(engineSnapshot) ?: return
         val selectedVoiceId = when (gender) {
             DialogueGender.MALE -> AppConfig.defaultDialogueMaleTtsVoiceId
             DialogueGender.FEMALE -> AppConfig.defaultDialogueFemaleTtsVoiceId
@@ -332,13 +359,13 @@ class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts
             onSelect = { option ->
                 setDialogueVoice(gender, option.voice.id)
                 refreshRunningMultiRoleReadAloud(requireContext())
-                refreshCards()
+                bindCards(engineSnapshot)
             },
             titleAction = selectedVoiceId?.takeIf { it.isNotBlank() }?.let {
                 getString(R.string.clear) to {
                     setDialogueVoice(gender, null)
                     refreshRunningMultiRoleReadAloud(requireContext())
-                    refreshCards()
+                    bindCards(engineSnapshot)
                 }
             }
         ).show()
@@ -351,8 +378,10 @@ class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts
         }
     }
 
-    private fun selectedMultiRoleEngine(): TtsEngineSetting? {
-        return TtsEngineStore.engine(AppConfig.multiRoleTtsEngineId)
+    private fun selectedMultiRoleEngine(
+        engines: List<TtsEngineSetting> = engineSnapshot
+    ): TtsEngineSetting? {
+        return engines.firstOrNull { it.id == AppConfig.multiRoleTtsEngineId }
             ?.takeIf { it.enabled && it.type == TtsEngineType.SCRIPT }
     }
 

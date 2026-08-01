@@ -125,7 +125,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -165,7 +164,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.bumptech.glide.Glide
@@ -219,9 +217,6 @@ import io.legado.app.help.ai.resolveAgentModeEntryMemoryProbeTarget
 import io.legado.app.help.ai.runtime.AgentSkillRuntimeDeclaration
 import io.legado.app.help.ai.runtime.ToolExecutionReceipt
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.ui.widget.compose.NgExpandableChildRow
 import io.legado.app.ui.widget.compose.NgExpandableSectionHeader
 import io.legado.app.ui.widget.compose.NgFunctionMenu
@@ -231,7 +226,7 @@ import io.legado.app.ui.widget.compose.NgListBadgeTone
 import io.legado.app.ui.widget.compose.toggleNgExpandedKey
 import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.ui.widget.dialog.PhotoDialog
-import io.legado.app.utils.ColorUtils
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.openUrl
@@ -286,10 +281,8 @@ class AiChatActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = true
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = true
         setContent {
-            RikkaChatTheme {
+            NgAppTheme {
                 AiChatRoute(
                     onBack = { finish() }
                 )
@@ -416,42 +409,6 @@ private data class AiChatInteractionAction(
     val skipped: Boolean = false,
     val onCompleted: (Boolean) -> Unit = {}
 )
-
-@Composable
-private fun RikkaChatTheme(content: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val accent = Color(context.accentColor)
-    val background = Color(context.backgroundColor)
-    val surface = Color(context.bottomBackground)
-    val onAccent = if (ColorUtils.isColorLight(context.accentColor)) {
-        Color(0xFF1D1B20)
-    } else {
-        Color.White
-    }
-    val colorScheme = lightColorScheme(
-        primary = accent,
-        onPrimary = onAccent,
-        primaryContainer = accent.copy(alpha = 0.18f),
-        onPrimaryContainer = Color(0xFF24124C),
-        secondary = Color(0xFF675C73),
-        secondaryContainer = accent.copy(alpha = 0.10f),
-        tertiary = accent,
-        tertiaryContainer = accent.copy(alpha = 0.14f),
-        background = background,
-        onBackground = Color(0xFF1D1B20),
-        surface = surface,
-        onSurface = Color(0xFF1D1B20),
-        surfaceVariant = Color(0xFFE9E1EC),
-        onSurfaceVariant = Color(0xFF49454F),
-        outline = Color(0xFF7A757F),
-        outlineVariant = Color(0xFFCBC4CF)
-    )
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = MaterialTheme.typography,
-        content = content
-    )
-}
 
 @Composable
 private fun ChatBackgroundImage(

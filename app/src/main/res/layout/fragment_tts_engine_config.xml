@@ -9,25 +9,13 @@
         android:id="@+id/layout_engine_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingStart="@dimen/ng_page_padding"
-        android:paddingTop="@dimen/ng_space_l"
-        android:paddingEnd="@dimen/ng_page_padding">
+        android:orientation="vertical">
 
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/refresh_engines"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/compose_engines"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recycler_engines"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:paddingBottom="16dp" />
-
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent" />
 
     </LinearLayout>
 
@@ -62,37 +50,55 @@
                 android:fillViewport="true">
 
                 <LinearLayout
+                    android:id="@+id/layout_config_form_content"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:paddingBottom="16dp">
 
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/recycler_config_rules"
+                    <androidx.compose.ui.platform.ComposeView
+                        android:id="@+id/compose_config_form"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:clipToPadding="false"
-                        android:nestedScrollingEnabled="false" />
+                        android:background="@android:color/transparent" />
 
                     <LinearLayout
+                        android:id="@+id/layout_config_actions"
                         android:layout_width="match_parent"
-                        android:layout_height="42dp"
-                        android:layout_marginTop="8dp"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
-                        <TextView
+                        <io.legado.app.ui.widget.text.AccentStrokeTextView
+                            android:id="@+id/button_config_source"
+                            style="@style/Ng.SmallButton.Secondary"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="38dp"
                             android:layout_weight="1"
-                            android:text="@string/enabled"
-                            android:textColor="@color/ng_on_surface"
-                            android:textSize="17sp" />
+                            android:text="@string/tts_source_mode"
+                            app:useSurfaceBackground="true" />
 
-                        <io.legado.app.lib.theme.view.ThemeSwitch
-                            android:id="@+id/switch_enabled"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content" />
+                        <io.legado.app.ui.widget.text.AccentStrokeTextView
+                            android:id="@+id/button_test_config"
+                            style="@style/Ng.SmallButton.Secondary"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:text="测速"
+                            app:useSurfaceBackground="true" />
+
+                        <io.legado.app.ui.widget.text.AccentStrokeTextView
+                            android:id="@+id/button_save_config"
+                            style="@style/Ng.SmallButton.Secondary"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:text="@string/save"
+                            app:useSurfaceBackground="true" />
 
                     </LinearLayout>
 
@@ -128,46 +134,6 @@
         </FrameLayout>
 
         <LinearLayout
-            android:id="@+id/layout_config_actions"
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="4dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <io.legado.app.ui.widget.text.AccentStrokeTextView
-                android:id="@+id/button_config_source"
-                style="@style/Ng.SmallButton.Secondary"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:text="@string/tts_source_mode"
-                app:useSurfaceBackground="true" />
-
-            <io.legado.app.ui.widget.text.AccentStrokeTextView
-                android:id="@+id/button_test_config"
-                style="@style/Ng.SmallButton.Secondary"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:text="测速"
-                app:useSurfaceBackground="true" />
-
-            <io.legado.app.ui.widget.text.AccentStrokeTextView
-                android:id="@+id/button_save_config"
-                style="@style/Ng.SmallButton.Secondary"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:text="@string/save"
-                app:useSurfaceBackground="true" />
-
-        </LinearLayout>
-
-        <LinearLayout
             android:id="@+id/layout_voices"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -179,47 +145,25 @@
             <LinearLayout
                 android:id="@+id/layout_voice_search"
                 android:layout_width="match_parent"
-                android:layout_height="40dp"
+                android:layout_height="44dp"
                 android:layout_marginBottom="2dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <LinearLayout
-                    style="@style/Ng.SearchPill"
+                <io.legado.app.ui.design.components.view.NgSearchBar
+                    android:id="@+id/search_voice"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="22dp"
-                        android:layout_height="22dp"
-                        android:src="@drawable/ic_search"
-                        android:tint="@color/tv_text_summary" />
-
-                    <EditText
-                        android:id="@+id/edit_search_voice"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:background="@android:color/transparent"
-                        android:hint="@string/tts_search_voice"
-                        android:singleLine="true"
-                        android:textColor="@color/tv_text_summary"
-                        android:textColorHint="@color/tv_text_summary"
-                        android:textSize="15sp" />
-
-                </LinearLayout>
+                    android:hint="@string/tts_search_voice" />
 
                 <io.legado.app.ui.widget.image.AccentStrokeImageButton
                     android:id="@+id/button_voice_params"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:layout_marginStart="8dp"
                     android:contentDescription="@string/tts_voice_params"
-                    android:padding="8dp"
+                    android:padding="11dp"
                     android:src="@drawable/ic_tts_params_grid" />
 
             </LinearLayout>
@@ -361,57 +305,11 @@
 
         </LinearLayout>
 
-        <LinearLayout
+        <io.legado.app.ui.design.components.view.NgFloatingTabBar
             android:id="@+id/layout_engine_detail_tabs"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:background="@android:color/transparent"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <FrameLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:clipChildren="false"
-                android:clipToPadding="false">
-
-                <ImageButton
-                    android:id="@+id/button_tab_config"
-                    android:layout_width="68dp"
-                    android:layout_height="34dp"
-                    android:layout_gravity="center"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="@string/tts_config_tab"
-                    android:padding="6dp"
-                    android:scaleType="center"
-                    android:src="@drawable/ic_ai_tab_config"
-                    android:tint="@color/ng_on_surface" />
-
-            </FrameLayout>
-
-            <FrameLayout
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:clipChildren="false"
-                android:clipToPadding="false">
-
-                <ImageButton
-                    android:id="@+id/button_tab_voices"
-                    android:layout_width="68dp"
-                    android:layout_height="34dp"
-                    android:layout_gravity="center"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="@string/tts_voices"
-                    android:padding="6dp"
-                    android:scaleType="center"
-                    android:src="@drawable/ic_tts_tab_voice"
-                    android:tint="@color/ng_on_surface_variant" />
-
-            </FrameLayout>
-
-        </LinearLayout>
+            android:layout_height="48dp"
+            android:layout_marginBottom="@dimen/ng_space_s" />
 
     </LinearLayout>
 

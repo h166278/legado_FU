@@ -67,9 +67,6 @@
 		<item>Day theme</item>
 		<item>Dark mode</item>
 		<item>E-Ink mode</item>
-		<item>Warm gradient</item>
-		<item>Bamboo shadow</item>
-		<item>Gray mist</item>
 	</string-array>
 
     <string-array name="ai_provider_type">

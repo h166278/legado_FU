@@ -2,9 +2,11 @@ package io.legado.app.help.tts
 
 import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.google.gson.JsonSyntaxException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -272,13 +274,16 @@ class TtsHttpForwarderClientTest {
         assertEquals(false, engine.builtIn)
         assertTrue(engine.supportsVoiceFetch())
         assertTrue(engine.script.contains("// @uuid script_options_example"))
-        assertTrue(engine.script.contains("// @version 1.0.3"))
+        assertTrue(engine.script.contains("// @version 1.0.4"))
         assertEquals(50, engine.defaultSpeed)
         assertEquals(50, engine.defaultVolume)
         assertEquals(50, engine.defaultPitch)
         assertTrue(engine.script.contains("function options()"))
         assertTrue(engine.script.contains("type: \"text\""))
         assertTrue(engine.script.contains("type: \"password\""))
+        assertTrue(engine.script.contains("type: \"randomNumber\""))
+        assertTrue(engine.script.contains("digits: 13"))
+        assertTrue(engine.script.contains("allowLeadingZero: false"))
         assertTrue(engine.script.contains("type: \"number\""))
         assertTrue(engine.script.contains("type: \"select\""))
         assertTrue(engine.script.contains("label: \"WAV 音频\""))
@@ -293,6 +298,96 @@ class TtsHttpForwarderClientTest {
         assertTrue(engine.script.contains("function synthesize(text, voice, params, options, ctx)"))
         assertEquals("http://localhost:8774", engine.baseUrl)
         assertEquals(emptyMap<String, String>(), engine.optionValues)
+    }
+
+    @Test
+    fun scriptOption_supportsReusableRandomNumberType() {
+        val options = Gson().fromJson(
+            """
+            [
+              {"key":"camel","type":"randomNumber","digits":6,"allowLeadingZero":true},
+              {"key":"snake","type":"random_number"},
+              {"key":"kebab","type":"random-number"}
+            ]
+            """.trimIndent(),
+            Array<TtsScriptOption>::class.java
+        ).toList()
+
+        assertEquals(
+            listOf("random_number", "random_number", "random_number"),
+            options.map { it.normalizedType }
+        )
+        assertEquals(6, options.first().randomNumberDigits)
+        assertTrue(options.first().randomNumberAllowsLeadingZero)
+        repeat(20) {
+            val randomNumber = generateTtsRandomNumber()
+            assertEquals(13, randomNumber.length)
+            assertTrue(randomNumber.all { it in '0'..'9' })
+            assertTrue(randomNumber.first() != '0')
+            assertTrue(isValidTtsRandomNumber(randomNumber))
+        }
+        assertTrue(isValidTtsRandomNumber("012345", digits = 6, allowLeadingZero = true))
+        assertFalse(isValidTtsRandomNumber("012345", digits = 6, allowLeadingZero = false))
+        assertFalse(isValidTtsRandomNumber(null))
+        assertFalse(isValidTtsRandomNumber(""))
+        assertFalse(isValidTtsRandomNumber("123456789012"))
+        assertFalse(isValidTtsRandomNumber("12345678901234"))
+        assertFalse(isValidTtsRandomNumber("123456789012x"))
+        assertFalse(isValidTtsRandomNumber("１２３４５６７８９０１２３"))
+    }
+
+    @Test
+    fun scriptOption_doesNotUseBusinessFieldNameAsRandomNumberType() {
+        assertEquals(
+            "text",
+            TtsScriptOption(key = "deviceId", type = "deviceId").normalizedType
+        )
+    }
+
+    @Test
+    fun scriptOption_invalidSchemaIsNotTreatedAsEmptySchema() {
+        assertEquals(emptyList<TtsScriptOption>(), TtsScriptEngineClient.parseOptionsResult(null))
+        assertEquals(emptyList<TtsScriptOption>(), TtsScriptEngineClient.parseOptionsResult("[]"))
+        assertThrows(JsonSyntaxException::class.java) {
+            TtsScriptEngineClient.parseOptionsResult("{\"token\":\"secret\"}")
+        }
+        assertThrows(JsonSyntaxException::class.java) {
+            TtsScriptEngineClient.parseOptionsResult("[{}]")
+        }
+        assertThrows(JsonSyntaxException::class.java) {
+            TtsScriptEngineClient.parseOptionsResult("[{\"key\":\"\"}]")
+        }
+        assertThrows(JsonSyntaxException::class.java) {
+            TtsScriptEngineClient.parseOptionsResult(
+                "[{\"key\":\"token\"},{\"key\":\"token\"}]"
+            )
+        }
+    }
+
+    @Test
+    fun effectiveOptionValues_materializesStableRandomNumberBeforeFormLoads() {
+        val option = TtsScriptOption(
+            key = "deviceId",
+            type = "random_number",
+            digits = 13,
+            allowLeadingZero = false
+        )
+        val first = engine.effectiveOptionValues(listOf(option)).getValue("deviceId")
+        val second = engine.effectiveOptionValues(listOf(option)).getValue("deviceId")
+
+        assertTrue(isValidTtsRandomNumber(first))
+        assertEquals(first, second)
+
+        val explicit = "1234567890123"
+        val saved = engine.copy(optionValues = mapOf("deviceId" to explicit))
+        assertEquals(explicit, saved.effectiveOptionValues(listOf(option)).getValue("deviceId"))
+
+        repeat(80) { index ->
+            engine.effectiveOptionValues(
+                listOf(option.copy(key = "generated-$index"))
+            )
+        }
+        assertEquals(first, engine.effectiveOptionValues(listOf(option)).getValue("deviceId"))
     }
 
     @Test

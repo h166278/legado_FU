@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.LifecycleCoroutineScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -62,6 +63,16 @@ internal class TtsVoicePreviewDebouncer(
     }
 }
 
+internal object TtsVoicePreviewCompletionGuard {
+    private const val POSITION_TOLERANCE_MILLIS = 50L
+
+    fun isAtTimelineEnd(positionMillis: Long, durationMillis: Long): Boolean {
+        return durationMillis != C.TIME_UNSET &&
+            durationMillis > 0L &&
+            positionMillis >= (durationMillis - POSITION_TOLERANCE_MILLIS).coerceAtLeast(0L)
+    }
+}
+
 class TtsVoicePreviewController(
     private val context: Context,
     private val lifecycleScope: LifecycleCoroutineScope,
@@ -79,6 +90,7 @@ class TtsVoicePreviewController(
     private var requestToken = 0
     private var activeKey: String? = null
     private var previewState = TtsVoicePreviewState.IDLE
+    private var previewCompletionCheck: Runnable? = null
 
     fun preview(
         engine: TtsEngineSetting,
@@ -185,6 +197,53 @@ class TtsVoicePreviewController(
             prepare()
             play()
         }
+        schedulePreviewCompletionCheck(checkNotNull(previewPlayer), key, token)
+    }
+
+    private fun schedulePreviewCompletionCheck(player: ExoPlayer, key: String, token: Int) {
+        cancelPreviewCompletionCheck()
+        val check = object : Runnable {
+            private var timelineEndReachedAt = Long.MIN_VALUE
+
+            override fun run() {
+                if (
+                    token != requestToken ||
+                    activeKey != key ||
+                    previewPlayer !== player
+                ) {
+                    return
+                }
+                if (player.playbackState == Player.STATE_ENDED) {
+                    finishPreview(key)
+                    return
+                }
+                val atTimelineEnd = TtsVoicePreviewCompletionGuard.isAtTimelineEnd(
+                    positionMillis = player.currentPosition,
+                    durationMillis = player.duration
+                )
+                if (atTimelineEnd) {
+                    if (timelineEndReachedAt == Long.MIN_VALUE) {
+                        timelineEndReachedAt = SystemClock.elapsedRealtime()
+                    } else if (
+                        SystemClock.elapsedRealtime() - timelineEndReachedAt >=
+                        TIMELINE_END_GRACE_MILLIS
+                    ) {
+                        finishPreview(key)
+                        return
+                    }
+                } else {
+                    timelineEndReachedAt = Long.MIN_VALUE
+                }
+                mainHandler.postDelayed(this, COMPLETION_CHECK_INTERVAL_MILLIS)
+            }
+        }
+        previewCompletionCheck = check
+        mainHandler.post(check)
+    }
+
+    private fun cancelPreviewCompletionCheck() {
+        previewCompletionCheck?.let(mainHandler::removeCallbacks)
+        previewCompletionCheck = null
     }
 
     private fun previewSystemVoice(engine: TtsEngineSetting, voice: TtsVoice, key: String) {
@@ -258,6 +317,7 @@ class TtsVoicePreviewController(
         requestToken++
         previewJob?.cancel()
         previewJob = null
+        cancelPreviewCompletionCheck()
         previewPlayer?.release()
         previewPlayer = null
         previewFile?.delete()
@@ -293,6 +353,9 @@ class TtsVoicePreviewController(
     }
 
     companion object {
+        private const val COMPLETION_CHECK_INTERVAL_MILLIS = 100L
+        private const val TIMELINE_END_GRACE_MILLIS = 300L
+
         fun keyOf(
             engine: TtsEngineSetting,
             voice: TtsVoice,

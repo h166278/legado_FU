@@ -1,59 +1,59 @@
 package io.legado.app.lib.prefs
 
 import android.content.Context
-import android.content.ContextWrapper
+import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
-import android.os.Bundle
+import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
-import androidx.fragment.app.FragmentActivity
+import android.widget.LinearLayout
+import androidx.core.content.ContextCompat
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceViewHolder
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemIconPreferenceBinding
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.theme.accentColor
+import io.legado.app.ui.widget.dialog.NgLongListBottomSheet
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatDrawable
-import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 
 class IconListPreference(context: Context, attrs: AttributeSet) : ListPreference(context, attrs) {
-    private var iconNames: Array<CharSequence>
-    private val mEntryDrawables = arrayListOf<Drawable?>()
+    private val iconNames: Array<CharSequence>
+    private val entryDrawables = arrayListOf<Drawable?>()
 
     init {
         layoutResource = R.layout.view_preference
         widgetLayoutResource = R.layout.view_icon
 
-        val a = context.theme.obtainStyledAttributes(attrs, R.styleable.IconListPreference, 0, 0)
-
+        val attributes = context.theme.obtainStyledAttributes(
+            attrs,
+            R.styleable.IconListPreference,
+            0,
+            0
+        )
         iconNames = try {
-            a.getTextArray(R.styleable.IconListPreference_icons)
+            attributes.getTextArray(R.styleable.IconListPreference_icons)
         } finally {
-            a.recycle()
+            attributes.recycle()
         }
 
-        for (iconName in iconNames) {
-            val resId = context.resources
-                .getIdentifier(iconName.toString(), "mipmap", context.packageName)
-            var d: Drawable? = null
-            kotlin.runCatching {
-                d = context.getCompatDrawable(resId)
-            }
-            mEntryDrawables.add(d)
+        iconNames.forEach { iconName ->
+            val resId = context.resources.getIdentifier(
+                iconName.toString(),
+                "mipmap",
+                context.packageName
+            )
+            entryDrawables.add(runCatching { context.getCompatDrawable(resId) }.getOrNull())
         }
     }
 
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
-        val v = Preference.bindView<ImageView>(
+        val preview = Preference.bindView<ImageView>(
             context,
             holder,
             icon,
@@ -64,152 +64,155 @@ class IconListPreference(context: Context, attrs: AttributeSet) : ListPreference
             50,
             50
         )
-        if (v is ImageView) {
-            val selectedIndex = findIndexOfValue(value)
-            if (selectedIndex >= 0) {
-                val drawable = mEntryDrawables[selectedIndex]
-                v.setImageDrawable(drawable)
-            }
+        if (preview is ImageView) {
+            preview.setImageDrawable(entryDrawables.getOrNull(findIndexOfValue(value)))
         }
     }
 
     override fun onClick() {
-        getActivity()?.let {
-            val dialog = IconDialog().apply {
-                val args = Bundle()
-                args.putString("value", value)
-                args.putCharSequenceArray("entries", entries)
-                args.putCharSequenceArray("entryValues", entryValues)
-                args.putCharSequenceArray("iconNames", iconNames)
-                arguments = args
-                onChanged = { value ->
-                    this@IconListPreference.value = value
-                }
-            }
-            it.supportFragmentManager
-                .beginTransaction()
-                .add(dialog, getFragmentTag())
-                .commitAllowingStateLoss()
-        }
+        val sheet = NgLongListBottomSheet(
+            context = context,
+            searchHint = "",
+            title = title ?: context.getString(R.string.change_icon),
+            showSearch = false,
+            heightRatio = 0.48f
+        )
+        sheet.setContent(createIconGrid(sheet)) {}
+        sheet.show()
     }
 
-    override fun onAttached() {
-        super.onAttached()
-        val fragment =
-            getActivity()?.supportFragmentManager?.findFragmentByTag(getFragmentTag()) as IconDialog?
-        fragment?.onChanged = { value ->
-            this@IconListPreference.value = value
-        }
-    }
+    private fun createIconGrid(sheet: NgLongListBottomSheet): View {
+        val values = entryValues.orEmpty()
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            clipToPadding = false
+            setPadding(0, 4.dpToPx(), 0, 10.dpToPx())
 
-    private fun getActivity(): FragmentActivity? {
-        val context = context
-        if (context is FragmentActivity) {
-            return context
-        } else if (context is ContextWrapper) {
-            val baseContext = context.baseContext
-            if (baseContext is FragmentActivity) {
-                return baseContext
-            }
-        }
-        return null
-    }
+            values.indices.chunked(ICONS_PER_ROW).forEach { rowIndices ->
+                addView(
+                    LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER
 
-    private fun getFragmentTag(): String {
-        return "icon_$key"
-    }
-
-    class IconDialog : BaseDialogFragment(R.layout.dialog_recycler_view) {
-
-        var onChanged: ((value: String) -> Unit)? = null
-        var dialogValue: String? = null
-        var dialogEntries: Array<CharSequence>? = null
-        var dialogEntryValues: Array<CharSequence>? = null
-        var dialogIconNames: Array<CharSequence>? = null
-        private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-
-        override fun onStart() {
-            super.onStart()
-            setLayout(0.8f, ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
-
-        override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-            binding.toolBar.setBackgroundColor(primaryColor)
-            binding.toolBar.setTitle(R.string.change_icon)
-            binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-            val adapter = Adapter(requireContext())
-            binding.recyclerView.adapter = adapter
-            arguments?.let {
-                dialogValue = it.getString("value")
-                dialogEntries = it.getCharSequenceArray("entries")
-                dialogEntryValues = it.getCharSequenceArray("entryValues")
-                dialogIconNames = it.getCharSequenceArray("iconNames")
-                dialogEntryValues?.let { values ->
-                    adapter.setItems(values.toList())
-                }
-            }
-        }
-
-
-        inner class Adapter(context: Context) :
-            RecyclerAdapter<CharSequence, ItemIconPreferenceBinding>(context) {
-
-            override fun getViewBinding(parent: ViewGroup): ItemIconPreferenceBinding {
-                return ItemIconPreferenceBinding.inflate(inflater, parent, false)
-            }
-
-            override fun convert(
-                holder: ItemViewHolder,
-                binding: ItemIconPreferenceBinding,
-                item: CharSequence,
-                payloads: MutableList<Any>
-            ) {
-                binding.run {
-                    val index = findIndexOfValue(item.toString())
-                    dialogEntries?.let {
-                        label.text = it[index]
-                    }
-                    dialogIconNames?.let {
-                        val resId = context.resources
-                            .getIdentifier(it[index].toString(), "mipmap", context.packageName)
-                        val d = try {
-                            context.getCompatDrawable(resId)
-                        } catch (e: Exception) {
-                            null
+                        rowIndices.forEach { index ->
+                            addView(
+                                createIconCell(
+                                    index = index,
+                                    newValue = values[index].toString(),
+                                    sheet = sheet
+                                ),
+                                LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    1f
+                                )
+                            )
                         }
-                        d?.let {
-                            icon.setImageDrawable(d)
+                        repeat(ICONS_PER_ROW - rowIndices.size) {
+                            addView(
+                                View(context),
+                                LinearLayout.LayoutParams(
+                                    0,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    1f
+                                )
+                            )
                         }
-                    }
-                    label.isChecked = item.toString() == dialogValue
-                    root.setOnClickListener {
-                        onChanged?.invoke(item.toString())
-                        this@IconDialog.dismissAllowingStateLoss()
-                    }
-                }
-            }
-
-            override fun registerListener(
-                holder: ItemViewHolder,
-                binding: ItemIconPreferenceBinding
-            ) {
-                holder.itemView.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let {
-                        onChanged?.invoke(it.toString())
-                    }
-                }
-            }
-
-            private fun findIndexOfValue(value: String?): Int {
-                dialogEntryValues?.let { values ->
-                    for (i in values.indices.reversed()) {
-                        if (values[i] == value) {
-                            return i
-                        }
-                    }
-                }
-                return -1
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f
+                    )
+                )
             }
         }
+    }
+
+    private fun createIconCell(
+        index: Int,
+        newValue: String,
+        sheet: NgLongListBottomSheet
+    ): View {
+        val selected = newValue == value
+        return FrameLayout(context).apply {
+            isClickable = true
+            isFocusable = true
+            isSelected = selected
+            contentDescription = "${context.getString(R.string.change_icon)} ${index + 1}"
+
+            val iconCard = FrameLayout(context).apply {
+                background = createIconCardBackground(selected)
+                setPadding(8.dpToPx(), 8.dpToPx(), 8.dpToPx(), 8.dpToPx())
+                addView(
+                    ImageView(context).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        setImageDrawable(entryDrawables.getOrNull(index))
+                    },
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+                if (selected) {
+                    addView(createSelectedIndicator(), FrameLayout.LayoutParams(
+                        24.dpToPx(),
+                        24.dpToPx(),
+                        Gravity.END or Gravity.BOTTOM
+                    ))
+                }
+            }
+            addView(
+                iconCard,
+                FrameLayout.LayoutParams(
+                    78.dpToPx(),
+                    78.dpToPx(),
+                    Gravity.CENTER
+                )
+            )
+            setOnClickListener {
+                if (newValue == value || callChangeListener(newValue)) {
+                    if (newValue != value) {
+                        value = newValue
+                        notifyChanged()
+                    }
+                    sheet.dismiss()
+                }
+            }
+        }
+    }
+
+    private fun createIconCardBackground(selected: Boolean): Drawable {
+        return GradientDrawable().apply {
+            cornerRadius = 18.dpToPx().toFloat()
+            setColor(ContextCompat.getColor(context, R.color.ng_surface_card))
+            setStroke(
+                (if (selected) 2 else 1).dpToPx(),
+                if (selected) {
+                    context.accentColor
+                } else {
+                    ContextCompat.getColor(context, R.color.ng_card_stroke)
+                }
+            )
+        }
+    }
+
+    private fun createSelectedIndicator(): View {
+        return ImageView(context).apply {
+            setImageResource(R.drawable.ic_check)
+            imageTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(context, R.color.ng_on_primary)
+            )
+            setPadding(4.dpToPx(), 4.dpToPx(), 4.dpToPx(), 4.dpToPx())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(context.accentColor)
+            }
+        }
+    }
+
+    private companion object {
+        const val ICONS_PER_ROW = 4
     }
 }

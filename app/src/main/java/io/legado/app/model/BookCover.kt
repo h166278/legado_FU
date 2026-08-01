@@ -5,6 +5,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import androidx.annotation.Keep
+import androidx.collection.LruCache
+import androidx.core.graphics.drawable.toDrawable
 import com.bumptech.glide.Glide
 import com.bumptech.glide.RequestBuilder
 import com.bumptech.glide.load.DataSource
@@ -24,6 +26,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.help.CacheManager
 import io.legado.app.help.DefaultData
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.NgCoverAlbumStore
 import io.legado.app.help.glide.BlurTransformation
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
@@ -38,7 +41,7 @@ import io.legado.app.utils.getPrefString
 import kotlinx.coroutines.currentCoroutineContext
 import splitties.init.appCtx
 import java.io.File
-import androidx.core.graphics.drawable.toDrawable
+import kotlin.random.Random
 
 @Keep
 @Suppress("ConstPropertyName")
@@ -53,6 +56,7 @@ object BookCover {
         private set
     lateinit var defaultDrawable: Drawable
         private set
+    private val defaultDrawableCache = LruCache<String, Drawable>(16)
 
 
     init {
@@ -61,20 +65,46 @@ object BookCover {
 
     @SuppressLint("UseCompatLoadingForDrawables")
     fun upDefaultCover() {
-        var path: String?
         val isNightTheme = AppConfig.isNightTheme
         if (isNightTheme) {
             drawBookName = appCtx.getPrefBoolean(PreferKey.coverShowNameN, true)
             drawBookAuthor = appCtx.getPrefBoolean(PreferKey.coverShowAuthorN, true)
-            path = appCtx.getPrefString(PreferKey.defaultCoverDark)
         } else {
             drawBookName = appCtx.getPrefBoolean(PreferKey.coverShowName, true)
             drawBookAuthor = appCtx.getPrefBoolean(PreferKey.coverShowAuthor, true)
-            path = appCtx.getPrefString(PreferKey.defaultCover)
         }
-        defaultDrawable = runCatching {
-            BitmapUtils.decodeBitmap(path!!, 600, 900)!!.toDrawable(appCtx.resources)
-        }.getOrDefault(appCtx.resources.getDrawable(R.drawable.image_cover_default, null))
+        defaultDrawableCache.evictAll()
+        defaultDrawable = getDefaultDrawable(isNight = isNightTheme)
+    }
+
+    fun getDefaultPath(
+        seed: Any? = null,
+        isNight: Boolean = AppConfig.isNightTheme,
+    ): String? {
+        val albumPaths = NgCoverAlbumStore.selectedImagePaths(appCtx, isNight)
+        if (albumPaths.isNotEmpty()) {
+            val random = seed?.let { Random(it.hashCode()) } ?: Random
+            return albumPaths[random.nextInt(albumPaths.size)]
+        }
+        val preferenceKey = if (isNight) PreferKey.defaultCoverDark else PreferKey.defaultCover
+        return appCtx.getPrefString(preferenceKey)?.takeIf { File(it).isFile }
+    }
+
+    @SuppressLint("UseCompatLoadingForDrawables")
+    fun getDefaultDrawable(
+        seed: Any? = null,
+        isNight: Boolean = AppConfig.isNightTheme,
+    ): Drawable {
+        val path = getDefaultPath(seed, isNight)
+            ?: return appCtx.resources.getDrawable(R.drawable.image_cover_default, null)
+        val file = File(path)
+        val cacheKey = "${file.absolutePath}:${file.lastModified()}:${file.length()}"
+        val drawable = defaultDrawableCache[cacheKey] ?: runCatching {
+            requireNotNull(BitmapUtils.decodeBitmap(path, 600, 900)).toDrawable(appCtx.resources)
+        }.getOrElse {
+            return appCtx.resources.getDrawable(R.drawable.image_cover_default, null)
+        }.also { defaultDrawableCache.put(cacheKey, it) }
+        return drawable.constantState?.newDrawable(appCtx.resources)?.mutate() ?: drawable
     }
 
     /**
@@ -87,8 +117,9 @@ object BookCover {
         sourceOrigin: String? = null,
         onLoadFinish: (() -> Unit)? = null,
     ): RequestBuilder<Drawable> {
+        val currentDefault = getDefaultDrawable(seed = path)
         if (AppConfig.useDefaultCover) {
-            return ImageLoader.load(context, defaultDrawable)
+            return ImageLoader.load(context, currentDefault)
                 .centerCrop()
         }
         var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)
@@ -121,8 +152,8 @@ object BookCover {
                 }
             })
         }
-        return builder.placeholder(defaultDrawable)
-            .error(defaultDrawable)
+        return builder.placeholder(currentDefault)
+            .error(currentDefault)
             .centerCrop()
     }
 
@@ -180,7 +211,8 @@ object BookCover {
         loadOnlyWifi: Boolean = false,
         sourceOrigin: String? = null,
     ): RequestBuilder<Drawable> {
-        val loadBlur = ImageLoader.load(context, defaultDrawable)
+        val currentDefault = getDefaultDrawable(seed = path)
+        val loadBlur = ImageLoader.load(context, currentDefault)
             .transform(BlurTransformation(25), CenterCrop())
         if (AppConfig.useDefaultCover) {
             return loadBlur

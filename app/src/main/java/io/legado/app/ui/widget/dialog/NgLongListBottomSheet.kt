@@ -1,7 +1,6 @@
 package io.legado.app.ui.widget.dialog
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -10,14 +9,12 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
-import androidx.core.widget.TextViewCompat
 import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doOnTextChanged
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -26,6 +23,7 @@ import io.legado.app.R
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.design.components.view.NgSearchBar
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.windowSize
 import splitties.systemservices.windowManager
@@ -37,7 +35,9 @@ class NgLongListBottomSheet(
     private val showSearch: Boolean = true,
     private val showCloseButton: Boolean = false,
     private val heightRatio: Float = 0.88f,
-    private val compact: Boolean = false
+    private val compact: Boolean = false,
+    private val searchInitiallyVisible: Boolean = !compact,
+    private val showCompactSearchAction: Boolean = compact
 ) {
 
     val dialog = BottomSheetDialog(context)
@@ -59,36 +59,15 @@ class NgLongListBottomSheet(
         isVisible = false
         setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
     }
-    val searchEdit = EditText(context).apply {
-        background = if (compact) {
-            ContextCompat.getDrawable(context, R.drawable.ng_bg_search_pill)
-        } else {
-            GradientDrawable().apply {
-                cornerRadius = 28.dpToPx().toFloat()
-                setColor(ContextCompat.getColor(context, R.color.ng_neutral_container))
-            }
-        }
+    val searchBar = NgSearchBar(context).apply {
         hint = searchHint
-        setSingleLine(true)
-        setTextColor(ContextCompat.getColor(context, R.color.ng_on_surface))
-        setHintTextColor(ContextCompat.getColor(context, R.color.ng_on_surface_variant))
-        textSize = if (compact) 14f else 16f
-        compoundDrawablePadding = 10.dpToPx()
-        val horizontalPadding = (if (compact) 14 else 18).dpToPx()
-        setPadding(horizontalPadding, 0, horizontalPadding, 0)
-        if (compact) {
-            setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
-            TextViewCompat.setCompoundDrawableTintList(
-                this,
-                ColorStateList.valueOf(
-                    ContextCompat.getColor(context, R.color.ng_on_surface_variant)
-                )
-            )
-            isVisible = false
-        }
+        isVisible = searchInitiallyVisible
     }
+    val searchEdit get() = searchBar.editText
     private val compactSearchAction = ImageButton(context).apply {
-        setImageResource(R.drawable.ic_search)
+        setImageResource(
+            if (searchInitiallyVisible) R.drawable.ic_baseline_close else R.drawable.ic_search
+        )
         background = null
         contentDescription = context.getString(R.string.search)
         setColorFilter(ContextCompat.getColor(context, R.color.ng_on_surface_variant))
@@ -100,6 +79,9 @@ class NgLongListBottomSheet(
         orientation = LinearLayout.HORIZONTAL
     }
     private var compactTitleView: TextView? = null
+    private var onQueryChanged: ((String) -> Unit)? = null
+    private var scrollableContent: NestedScrollView? = null
+    private var searchVisibilityHost: View? = null
     val contentFrame = FrameLayout(context)
 
     private fun createSheetBackground() = runCatching {
@@ -131,12 +113,12 @@ class NgLongListBottomSheet(
         }
         if (showSearch) {
             root.addView(
-                searchEdit,
+                searchBar,
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    (if (compact) 42 else 52).dpToPx()
+                    44.dpToPx()
                 ).apply {
-                    bottomMargin = (if (compact) 12 else 16).dpToPx()
+                    bottomMargin = 12.dpToPx()
                 }
             )
         }
@@ -217,7 +199,7 @@ class NgLongListBottomSheet(
             )
             if (compact) {
                 compactEndActions.removeAllViews()
-                if (showSearch) {
+                if (showSearch && showCompactSearchAction) {
                     compactEndActions.addView(
                         compactSearchAction,
                         LinearLayout.LayoutParams(40.dpToPx(), 40.dpToPx())
@@ -252,8 +234,8 @@ class NgLongListBottomSheet(
     }
 
     private fun toggleCompactSearch() {
-        val show = !searchEdit.isVisible
-        searchEdit.isVisible = show
+        val show = !searchBar.isVisible
+        setSearchVisible(show)
         compactSearchAction.setImageResource(
             if (show) R.drawable.ic_baseline_close else R.drawable.ic_search
         )
@@ -269,6 +251,11 @@ class NgLongListBottomSheet(
             searchEdit.clearFocus()
             inputMethodManager?.hideSoftInputFromWindow(searchEdit.windowToken, 0)
         }
+    }
+
+    private fun setSearchVisible(visible: Boolean) {
+        searchBar.isVisible = visible
+        searchVisibilityHost?.isVisible = visible
     }
 
     fun setScrollableContent(
@@ -292,6 +279,8 @@ class NgLongListBottomSheet(
         content: View,
         onQueryChanged: (String) -> Unit
     ) {
+        this.onQueryChanged = onQueryChanged
+        scrollableContent = content as? NestedScrollView
         contentFrame.removeAllViews()
         contentFrame.addView(
             content,
@@ -304,6 +293,16 @@ class NgLongListBottomSheet(
             onQueryChanged(text?.toString().orEmpty())
         }
         onQueryChanged(searchEdit.text?.toString().orEmpty())
+    }
+
+    fun refreshContent() {
+        onQueryChanged?.invoke(searchEdit.text?.toString().orEmpty())
+    }
+
+    fun scrollContentToTop() {
+        scrollableContent?.post {
+            scrollableContent?.scrollTo(0, 0)
+        }
     }
 
     fun setFooter(footer: View) {
@@ -332,6 +331,37 @@ class NgLongListBottomSheet(
         )
     }
 
+    /**
+     * 将紧凑抽屉的折叠搜索框放入 Reading NG 的透明筛选容器。
+     * 搜索开关仍由标题栏控制，业务页面不再重复处理容器显隐。
+     */
+    fun useCompactFilterSearchPanel() {
+        check(compact && showSearch) {
+            "Filter search panel requires compact mode with search enabled"
+        }
+        check(searchVisibilityHost == null) { "Filter search panel is already installed" }
+
+        val initiallyVisible = searchBar.isVisible
+        (searchBar.parent as? ViewGroup)?.removeView(searchBar)
+        searchBar.setBackgroundResource(R.drawable.ng_bg_tts_filter_search)
+
+        val panel = FrameLayout(context).apply {
+            setBackgroundResource(R.drawable.ng_bg_tts_filter_panel)
+            setPadding(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 10.dpToPx())
+            isVisible = initiallyVisible
+            addView(
+                searchBar,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    40.dpToPx()
+                )
+            )
+        }
+        searchVisibilityHost = panel
+        setSearchVisible(initiallyVisible)
+        setTopContent(panel)
+    }
+
     fun addCompactTitleIcon(
         iconRes: Int,
         contentDescription: CharSequence,
@@ -355,7 +385,7 @@ class NgLongListBottomSheet(
         compactTitleView?.setPadding(
             if (showCloseButton) 48.dpToPx() else 4.dpToPx(),
             0,
-            (if (showSearch) 160 else 120).dpToPx(),
+            (if (showSearch && showCompactSearchAction) 160 else 120).dpToPx(),
             0
         )
         return button

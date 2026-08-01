@@ -1,20 +1,22 @@
 package io.legado.app.ui.config
 
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
-import io.legado.app.databinding.FragmentAiConfigMenuBinding
 import io.legado.app.help.ai.AiConfig
 import io.legado.app.help.ai.AiModel
 import io.legado.app.help.ai.AiProviderSetting
 import io.legado.app.help.ai.AiProviderStore
 import io.legado.app.help.ai.AiReasoningLevel
 import io.legado.app.help.ai.AiSkillRegistry
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.ui.design.theme.NgAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -27,35 +29,25 @@ class AiConfigMenuFragment : BaseFragment(R.layout.fragment_ai_config_menu) {
         val model: AiModel
     )
 
-    private val binding by viewBinding(FragmentAiConfigMenuBinding::bind)
+    private var screenState by mutableStateOf(AiConfigMenuScreenState())
     private var skillSummaryJob: Job? = null
-    private var ignoreChatFabChanges = false
     private var navigationPending = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.ai_setting)
-        binding.layoutProviderEntry.setOnClickListener {
-            openPage(AiConfigFragment.PAGE_PROVIDERS)
-        }
-        binding.layoutPromptEntry.setOnClickListener {
-            openPage(AiConfigFragment.PAGE_PROMPTS)
-        }
-        binding.layoutPurifyEntry.setOnClickListener {
-            openPage(AiConfigFragment.PAGE_PURIFY)
-        }
-        binding.layoutModelEntry.setOnClickListener {
-            openPage(AiConfigFragment.PAGE_ASSISTANT)
-        }
-        binding.layoutReadAloudEntry.setOnClickListener {
-            openPage(AiConfigFragment.PAGE_READ_ALOUD)
-        }
-        binding.layoutChatFab.setOnClickListener {
-            binding.switchChatFab.isChecked = !binding.switchChatFab.isChecked
-        }
-        binding.switchChatFab.setOnCheckedChangeListener { _, isChecked ->
-            if (!ignoreChatFabChanges) {
-                AiConfig.chatFabEnabled = isChecked
-                refreshChatFabSummary()
+        refreshContent()
+        (view as ComposeView).apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    AiConfigMenuScreen(
+                        state = screenState,
+                        onOpenPage = ::openPage,
+                        onChatFabChanged = ::updateChatFab
+                    )
+                }
             }
         }
     }
@@ -82,47 +74,43 @@ class AiConfigMenuFragment : BaseFragment(R.layout.fragment_ai_config_menu) {
 
     private fun refreshContent() {
         val providers = AiProviderStore.providers()
-        val color = accentColor
-        val iconTint = ColorStateList.valueOf(color)
-        binding.textMainSectionLabel.setTextColor(color)
-        binding.imageProviderEntryIcon.imageTintList = iconTint
-        binding.imagePromptEntryIcon.imageTintList = iconTint
-        binding.imageChatFabIcon.imageTintList = iconTint
-        binding.imagePurifyEntryIcon.imageTintList = iconTint
-        binding.imageModelEntryIcon.imageTintList = iconTint
-        binding.imageReadAloudEntryIcon.imageTintList = iconTint
-
-        ignoreChatFabChanges = true
-        try {
-            binding.switchChatFab.isChecked = AiConfig.chatFabEnabled
-        } finally {
-            ignoreChatFabChanges = false
-        }
-        refreshChatFabSummary()
-        binding.textProviderEntrySummary.text = getString(
-            R.string.ai_provider_menu_summary,
-            providers.size.toString()
-        )
-        binding.textModelEntrySummary.text = getString(
-            R.string.ai_model_function_summary,
-            assistantModelSummary(providers),
-            assistantReasoningSummary(providers)
-        )
-        binding.textPurifyEntrySummary.text = getString(
-            R.string.ai_model_function_summary,
-            purifyModelSummary(providers),
-            purifyReasoningSummary(providers)
-        )
-        binding.textReadAloudEntrySummary.text = getString(
-            R.string.ai_model_function_summary,
-            readAloudModelSummary(providers),
-            readAloudReasoningSummary(providers)
+        screenState = AiConfigMenuScreenState(
+            providerSummary = getString(
+                R.string.ai_provider_menu_summary,
+                providers.size.toString()
+            ),
+            skillSummary = screenState.skillSummary,
+            chatFabEnabled = AiConfig.chatFabEnabled,
+            chatFabSummary = chatFabSummary(),
+            purifySummary = getString(
+                R.string.ai_model_function_summary,
+                purifyModelSummary(providers),
+                purifyReasoningSummary(providers)
+            ),
+            assistantSummary = getString(
+                R.string.ai_model_function_summary,
+                assistantModelSummary(providers),
+                assistantReasoningSummary(providers)
+            ),
+            readAloudSummary = getString(
+                R.string.ai_model_function_summary,
+                readAloudModelSummary(providers),
+                readAloudReasoningSummary(providers)
+            )
         )
         refreshSkillSummary()
     }
 
-    private fun refreshChatFabSummary() {
-        binding.textChatFabSummary.setText(
+    private fun updateChatFab(enabled: Boolean) {
+        AiConfig.chatFabEnabled = enabled
+        screenState = screenState.copy(
+            chatFabEnabled = enabled,
+            chatFabSummary = chatFabSummary()
+        )
+    }
+
+    private fun chatFabSummary(): String {
+        return getString(
             if (AiConfig.chatFabEnabled) {
                 R.string.ai_chat_fab_summary_on
             } else {
@@ -138,9 +126,11 @@ class AiConfigMenuFragment : BaseFragment(R.layout.fragment_ai_config_menu) {
                 AiSkillRegistry.managementSkills().size
             }
             if (view == null) return@launch
-            binding.textPromptEntrySummary.text = getString(
-                R.string.ai_prompt_menu_summary,
-                count.toString()
+            screenState = screenState.copy(
+                skillSummary = getString(
+                    R.string.ai_prompt_menu_summary,
+                    count.toString()
+                )
             )
         }
     }

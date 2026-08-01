@@ -2,10 +2,12 @@
 
 package io.legado.app.ui.main
 
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.MenuItem
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
@@ -23,12 +25,15 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
+import io.legado.app.data.appDb
 import io.legado.app.databinding.ActivityMainBinding
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.ai.AiConfig
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.config.NgThemeNavigationIcons
+import io.legado.app.help.config.NgThemeRuntimeAssets
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
@@ -39,7 +44,10 @@ import io.legado.app.ui.about.CrashLogsDialog
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
+import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.config.AiChatActivity
+import io.legado.app.ui.design.components.view.NgFloatingTabItem
+import io.legado.app.ui.design.components.view.NgFloatingTabBarVariant
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.style1.BookshelfFragment1
 import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
@@ -49,6 +57,7 @@ import io.legado.app.ui.main.rss.RssFragment
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.ui.widget.text.BadgeView
 import io.legado.app.utils.isCreated
+import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.dpToPx
@@ -104,11 +113,16 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         TabFragmentPageAdapter(supportFragmentManager)
     }
     private var onUpBooksBadgeView: BadgeView? = null
+    private var bookshelfBadgeCount = 0
+    private var defaultBottomNavigationIconTint: ColorStateList? = null
+    private var defaultBottomNavigationIconSize = 0
+    private var bottomNavigationIconTintCaptured = false
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         upBottomMenu()
         initView()
         upHomePage()
+        openLastReadBookAfterStartup(savedInstanceState)
         onBackPressedDispatcher.addCallback(this) {
             if (pagePosition != 0) {
                 binding.viewPagerMain.currentItem = 0
@@ -127,6 +141,22 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                     finish()
                 } else {
                     moveTaskToBack(true)
+                }
+            }
+        }
+    }
+
+    private fun openLastReadBookAfterStartup(savedInstanceState: Bundle?) {
+        if (savedInstanceState != null || !getPrefBoolean(PreferKey.defaultToRead)) {
+            return
+        }
+        binding.root.post {
+            lifecycleScope.launch {
+                val hasLastReadBook = withContext(IO) {
+                    appDb.bookDao.lastReadBook != null
+                }
+                if (hasLastReadBook && !isFinishing && !isDestroyed) {
+                    startActivity<ReadBookActivity>()
                 }
             }
         }
@@ -160,6 +190,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     override fun onResume() {
         super.onResume()
+        updateBottomNavigationStyle()
         refreshAiChatFab()
     }
 
@@ -218,8 +249,19 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     override fun onNavigationItemReselected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_bookshelf -> {
+        val pageId = when (item.itemId) {
+            R.id.menu_bookshelf -> idBookshelf
+            R.id.menu_discovery -> idExplore
+            R.id.menu_rss -> idRss
+            R.id.menu_my_config -> idMy
+            else -> return
+        }
+        handleNavigationReselected(pageId)
+    }
+
+    private fun handleNavigationReselected(pageId: Int) {
+        when (pageId) {
+            idBookshelf -> {
                 if (System.currentTimeMillis() - bookshelfReselected > 300) {
                     bookshelfReselected = System.currentTimeMillis()
                 } else {
@@ -227,7 +269,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 }
             }
 
-            R.id.menu_discovery -> {
+            idExplore -> {
                 if (System.currentTimeMillis() - exploreReselected > 300) {
                     exploreReselected = System.currentTimeMillis()
                 } else {
@@ -244,14 +286,18 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         viewPagerMain.addOnPageChangeListener(PageChangeCallback())
         bottomNavigationView.setOnNavigationItemSelectedListener(this@MainActivity)
         bottomNavigationView.setOnNavigationItemReselectedListener(this@MainActivity)
+        floatingBottomNavigation.setVariant(NgFloatingTabBarVariant.CONTENT_OVERLAY)
         if (AppConfig.isEInkMode) {
             bottomNavigationView.setBackgroundResource(R.drawable.bg_eink_border_top)
         }
-        bottomNavigationView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
+        root.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
             val height = windowInsets.navigationBarHeight
-            view.bottomPadding = height
-            windowInsets.inset(0, 0, 0, height)
+            bottomNavigationView.bottomPadding = height
+            floatingBottomNavigationContainer.bottomPadding = height
+            windowInsets
         }
+        updateFloatingBottomMenu()
+        updateBottomNavigationStyle()
         fabAiChat.setOnClickListener {
             if (pagePosition == 0) {
                 startBookshelfGenericAiChat()
@@ -399,10 +445,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     override fun observeLiveBus() {
         viewModel.onUpBooksLiveData.observe(this) {
+            bookshelfBadgeCount = it
             if (onUpBooksBadgeView == null) {
                 onUpBooksBadgeView = binding.bottomNavigationView.addBadgeView(0)
             }
             onUpBooksBadgeView!!.setBadgeCount(it)
+            updateFloatingBottomMenu()
         }
         observeEvent<String>(EventBus.RECREATE) {
             recreate()
@@ -444,7 +492,97 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         index++
         realPositions[index] = idMy
         bottomMenuCount = index + 1
+        updateFloatingBottomMenu()
         adapter.notifyDataSetChanged()
+    }
+
+    private fun updateFloatingBottomMenu() = binding.run {
+        if (!bottomNavigationIconTintCaptured) {
+            defaultBottomNavigationIconTint = bottomNavigationView.itemIconTintList
+            defaultBottomNavigationIconSize = bottomNavigationView.itemIconSize
+            bottomNavigationIconTintCaptured = true
+        }
+        val themedIcons = NgThemeRuntimeAssets.navigationIcons(this@MainActivity)
+        val themedIconSizeDp = if (themedIcons == null) 24 else 40
+        updateStandardBottomNavigationIcons(themedIcons)
+        val items = (0 until bottomMenuCount).map { position ->
+            when (realPositions[position]) {
+                idBookshelf -> NgFloatingTabItem(
+                    iconRes = R.drawable.ic_bottom_books_e,
+                    selectedIconRes = R.drawable.ic_bottom_books_s,
+                    iconDrawable = themedIcons?.bookshelf(this@MainActivity),
+                    tintIcon = themedIcons == null,
+                    iconSizeDp = themedIconSizeDp,
+                    count = bookshelfBadgeCount.takeIf { it > 0 },
+                    contentDescription = getString(R.string.bookshelf)
+                )
+
+                idExplore -> NgFloatingTabItem(
+                    iconRes = R.drawable.ic_bottom_explore_e,
+                    selectedIconRes = R.drawable.ic_bottom_explore_s,
+                    iconDrawable = themedIcons?.explore(this@MainActivity),
+                    tintIcon = themedIcons == null,
+                    iconSizeDp = themedIconSizeDp,
+                    contentDescription = getString(R.string.discovery)
+                )
+
+                idRss -> NgFloatingTabItem(
+                    iconRes = R.drawable.ic_bottom_rss_feed_e,
+                    selectedIconRes = R.drawable.ic_bottom_rss_feed_s,
+                    iconDrawable = themedIcons?.rss(this@MainActivity),
+                    tintIcon = themedIcons == null,
+                    iconSizeDp = themedIconSizeDp,
+                    contentDescription = getString(R.string.rss)
+                )
+
+                else -> NgFloatingTabItem(
+                    iconRes = R.drawable.ic_bottom_person_e,
+                    selectedIconRes = R.drawable.ic_bottom_person_s,
+                    iconDrawable = themedIcons?.my(this@MainActivity),
+                    tintIcon = themedIcons == null,
+                    iconSizeDp = themedIconSizeDp,
+                    contentDescription = getString(R.string.my)
+                )
+            }
+        }
+        floatingBottomNavigation.setItems(
+            items = items,
+            selectedIndex = pagePosition.coerceIn(items.indices)
+        ) { position ->
+            if (position == pagePosition) {
+                handleNavigationReselected(realPositions[position])
+            } else {
+                viewPagerMain.setCurrentItem(position, false)
+            }
+        }
+    }
+
+    private fun updateStandardBottomNavigationIcons(themedIcons: NgThemeNavigationIcons?) =
+        binding.bottomNavigationView.run {
+            itemIconTintList = defaultBottomNavigationIconTint.takeIf { themedIcons == null }
+            itemIconSize = if (themedIcons == null) {
+                defaultBottomNavigationIconSize
+            } else {
+                40.dpToPx()
+            }
+            menu.findItem(R.id.menu_bookshelf).icon = themedIcons?.bookshelf(this@MainActivity)
+                ?: getDrawable(R.drawable.ic_bottom_books)
+            menu.findItem(R.id.menu_discovery).icon = themedIcons?.explore(this@MainActivity)
+                ?: getDrawable(R.drawable.ic_bottom_explore)
+            menu.findItem(R.id.menu_rss).icon = themedIcons?.rss(this@MainActivity)
+                ?: getDrawable(R.drawable.ic_bottom_rss_feed)
+            menu.findItem(R.id.menu_my_config).icon = themedIcons?.my(this@MainActivity)
+                ?: getDrawable(R.drawable.ic_bottom_person)
+        }
+
+    private fun updateBottomNavigationStyle() = binding.run {
+        val useFloating = AppConfig.useFloatingBottomBar
+        bottomNavigationView.visibility = if (useFloating) View.GONE else View.VISIBLE
+        floatingBottomNavigationContainer.visibility =
+            if (useFloating) View.VISIBLE else View.GONE
+        if (useFloating) {
+            floatingBottomNavigation.select(pagePosition, notify = false)
+        }
     }
 
     private fun upHomePage() {
@@ -475,6 +613,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         override fun onPageSelected(position: Int) {
             pagePosition = position
             binding.bottomNavigationView.menu[realPositions[position]].isChecked = true
+            binding.floatingBottomNavigation.select(position, notify = false)
         }
 
     }

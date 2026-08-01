@@ -1,35 +1,11 @@
 [
   {
-    "themeName": "默认",
+    "themeName": "经典主题",
     "isNightTheme": false,
     "primaryColor": "#795548",
     "accentColor": "#E53935",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE"
-  },
-  {
-    "themeName": "典雅蓝",
-    "isNightTheme": false,
-    "primaryColor": "#03A9F4",
-    "accentColor": "#AD1457",
-    "backgroundColor": "#F5F5F5",
-    "bottomBackground": "#EEEEEE"
-  },
-  {
-    "themeName": "黑白",
-    "isNightTheme": true,
-    "primaryColor": "#303030",
-    "accentColor": "#E0E0E0",
-    "backgroundColor": "#424242",
-    "bottomBackground": "#424242"
-  },
-  {
-    "themeName": "A屏黑",
-    "isNightTheme": true,
-    "primaryColor": "#000000",
-    "accentColor": "#FFFFFF",
-    "backgroundColor": "#000000",
-    "bottomBackground": "#000000"
   },
   {
     "themeName": "暖色渐变",
@@ -38,7 +14,6 @@
     "accentColor": "#f78e66",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE",
-    "transparentNavBar": true,
     "backgroundImgPath": "asset://defaultData/theme/reading_ng_warm.png",
     "backgroundImgBlur": 0
   },
@@ -49,7 +24,6 @@
     "accentColor": "#7F9554",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE",
-    "transparentNavBar": true,
     "backgroundImgPath": "asset://defaultData/theme/reading_ng_bamboo.png",
     "backgroundImgBlur": 0
   },
@@ -60,7 +34,6 @@
     "accentColor": "#758db4",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE",
-    "transparentNavBar": true,
     "backgroundImgPath": "asset://defaultData/theme/reading_ng_mist.png",
     "backgroundImgBlur": 0
   }

@@ -261,8 +261,7 @@ object NgMenuPopup {
             R.id.menu_import_local,
             R.id.menu_import_onLine,
             R.id.menu_import_qr,
-            R.id.menu_import_default,
-            R.id.menu_import -> R.drawable.ic_import
+            R.id.menu_import_default -> R.drawable.ic_import
 
             R.id.menu_help -> R.drawable.ic_help
             R.id.menu_group,
@@ -297,6 +296,8 @@ object NgMenuPopup {
             R.id.menu_enable_record,
             R.id.menu_can_update,
             R.id.menu_update_enable -> R.drawable.ic_check
+
+            R.id.menu_show_disabled -> R.drawable.ic_visibility
 
             R.id.menu_disabled_group,
             R.id.menu_disable_selection,

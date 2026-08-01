@@ -31,4 +31,12 @@ class TtsVoicePreviewDebouncerTest {
         assertTrue(debouncer.tryAcquire("voice-a", 3_000L))
         assertTrue(debouncer.tryAcquire("voice-b", 3_100L))
     }
+
+    @Test
+    fun completionGuardRecognizesTimelineEnd() {
+        assertFalse(TtsVoicePreviewCompletionGuard.isAtTimelineEnd(9_900L, 10_000L))
+        assertTrue(TtsVoicePreviewCompletionGuard.isAtTimelineEnd(9_950L, 10_000L))
+        assertTrue(TtsVoicePreviewCompletionGuard.isAtTimelineEnd(10_000L, 10_000L))
+        assertFalse(TtsVoicePreviewCompletionGuard.isAtTimelineEnd(0L, 0L))
+    }
 }

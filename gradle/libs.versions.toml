@@ -3,6 +3,8 @@
 kotlin = "2.3.10"
 ksp = "2.3.4"
 agp = "8.13.2"
+roborazzi = "1.59.0"
+robolectric = "4.16.1"
 appcompat = "1.7.1"
 colorpicker = "1.1.0"
 constraintlayout = "2.2.1"
@@ -22,6 +24,7 @@ coroutines = "1.10.2"
 liveeventbus = "1.8.14"
 markwon = "4.6.2"
 material = "1.13.0"
+materialKolor = "4.1.1"
 media = "1.7.1"
 danmaku = "0.9.25"
 nanoHttpd = "2.3.1"
@@ -92,6 +95,8 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 
 androidx-annotation = { group = "androidx.annotation", name = "annotation", version = "1.9.1" }
 #androidx-annotation-experimental = { group = "androidx.annotation", name = "annotation-experimental", version = "1.3.1" }
@@ -197,6 +202,10 @@ json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath"
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 jsoupxpath = { module = "cn.wanghaomiao:JsoupXpath", version.ref = "jsoupxpath" }
 junit = { module = "junit:junit", version = "4.13.2" }
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+roborazzi-junit-rule = { module = "io.github.takahirom.roborazzi:roborazzi-junit-rule", version.ref = "roborazzi" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 
@@ -208,6 +217,7 @@ kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref =
 #kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinxSerialization" }
 liveeventbus = { module = "com.github.michaellee123:LiveEventBus", version.ref = "liveeventbus" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
+material-color-utilities = { module = "com.materialkolor:material-color-utilities-android", version.ref = "materialKolor" }
 
 mozilla-rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 
@@ -223,6 +233,7 @@ androidTest = ["androidx-espresso-core", "androidx-junit", "androidx-runner"]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 
 #androidx-benchmark = { id = "androidx.benchmark", version = "1.3.3" }
 

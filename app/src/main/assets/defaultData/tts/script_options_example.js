@@ -1,6 +1,6 @@
 // @name 脚本选项示例
 // @schema 1
-// @version 1.0.3
+// @version 1.0.4
 // @uuid script_options_example
 // @author Legado
 // @url http://localhost:8774
@@ -10,12 +10,20 @@
 // @defaultSpeed 50
 // @defaultVolume 50
 // @defaultPitch 50
-// @description 展示 text/password/number/select/boolean 五类 options，并使用 MultiTTS 接口验证表单、发音人和试听。
+// @description 展示 text/password/number/select/boolean/randomNumber 六类 options，并使用 MultiTTS 接口验证表单、发音人和试听。
 
 function options() {
     return [
         { key: "baseUrl", label: "服务地址", type: "text", defaultValue: "http://localhost:8774" },
         { key: "token", label: "密码示例", type: "password", defaultValue: "" },
+        {
+            key: "deviceId",
+            label: "设备 ID 示例",
+            type: "randomNumber",
+            digits: 13,
+            allowLeadingZero: false,
+            defaultValue: ""
+        },
         { key: "timeout", label: "数字示例", type: "number", defaultValue: "30" },
         {
             key: "audioFormat",

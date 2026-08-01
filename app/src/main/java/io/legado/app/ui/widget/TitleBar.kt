@@ -23,8 +23,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.utils.activity
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import splitties.views.bottomPadding
 import splitties.views.topPadding
@@ -187,13 +187,13 @@ class TitleBar @JvmOverloads constructor(
             } else if (!opaque && context.transparentNavBar) {
                 setBackgroundColor(Color.TRANSPARENT)
                 elevation = 0f
-                val textColor = context.getCompatColor(R.color.primaryText)
-                setTextColor(textColor)
-                setColorFilter(textColor)
             } else {
                 setBackgroundColor(context.primaryColor)
                 elevation = context.elevation
             }
+            val topBarContentColor = NgThemeResolver.resolve(context).colors.onTopBar
+            setTextColor(topBarContentColor)
+            setColorFilter(topBarContentColor)
 
             stateListAnimator = null
         }
@@ -278,6 +278,8 @@ class TitleBar @JvmOverloads constructor(
             activity?.let {
                 it.setSupportActionBar(toolbar)
                 it.supportActionBar?.setDisplayHomeAsUpEnabled(displayHomeAsUp)
+                toolbar.contentInsetStartWithNavigation = 0
+                toolbar.titleMarginStart = 0
             }
         }
     }

@@ -321,8 +321,12 @@ class CoverImageView @JvmOverloads constructor(
             this.name = it
         }
         this.bitmapPath = path
+        val defaultCover = BookCover.getDefaultDrawable(
+            seed = listOfNotNull(currentName, currentAuthor).joinToString("\u0000")
+                .ifEmpty { path.orEmpty() }
+        )
         if (AppConfig.useDefaultCover) {
-            ImageLoader.load(context, BookCover.defaultDrawable)
+            ImageLoader.load(context, defaultCover)
                 .centerCrop()
                 .into(this)
         } else {
@@ -344,8 +348,8 @@ class CoverImageView @JvmOverloads constructor(
                 ImageLoader.load(context, path)//Glide自动识别http://,content://和file://
             }
             builder = builder.apply(options)
-                .placeholder(BookCover.defaultDrawable)
-                .error(BookCover.defaultDrawable)
+                .placeholder(defaultCover)
+                .error(defaultCover)
                 .listener(glideListener)
             if (onLoadFinish != null) {
                 builder = builder.addListener(object : RequestListener<Drawable> {

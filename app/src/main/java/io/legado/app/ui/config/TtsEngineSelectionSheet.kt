@@ -39,6 +39,7 @@ class TtsEngineSelectionSheet(
             heightRatio = 0.68f,
             compact = true
         )
+        sheet.useCompactFilterSearchPanel()
         titleAction?.let { (text, action) ->
             sheet.setTitleAction(text) {
                 action()
@@ -128,7 +129,7 @@ private class TtsEngineSelectionAdapter(
                 }
             )
             root.setOnClickListener { onSelect(engine) }
-            layoutSelectEngine.setOnClickListener { onSelect(engine) }
+            root.leadingActionView.setOnClickListener { onSelect(engine) }
             root.layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT

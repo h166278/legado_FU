@@ -4,6 +4,10 @@ import io.legado.app.help.tts.TtsVoice
 
 object TtsVoiceFilterSupport {
 
+    fun matchesName(voice: TtsVoice, query: String): Boolean {
+        return voice.name.contains(query.trim(), ignoreCase = true)
+    }
+
     fun availableLanguageLabels(voices: List<TtsVoice>): List<String> {
         return sortLanguageLabels(
             voices.flatMap { languageLabels(it.language) }.distinct()

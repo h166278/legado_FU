@@ -49,7 +49,6 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
             ConfigTag.THEME_CONFIG -> replaceFragment<ThemeConfigFragment>(configTag)
             ConfigTag.BACKUP_CONFIG -> replaceFragment<BackupConfigFragment>(configTag)
             ConfigTag.COVER_CONFIG -> replaceFragment<CoverConfigFragment>(configTag)
-            ConfigTag.WELCOME_CONFIG -> replaceFragment<WelcomeConfigFragment>(configTag)
             else -> finish()
         }
     }
@@ -76,6 +75,28 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
                 "${ConfigTag.AI_CONFIG}:$page"
             )
             .addToBackStack(page)
+            .commit()
+    }
+
+    fun openThemeColorConfigPage() {
+        supportFragmentManager.beginTransaction()
+            .replace(
+                R.id.configFrameLayout,
+                ThemeColorConfigFragment(),
+                ConfigTag.THEME_COLOR_CONFIG
+            )
+            .addToBackStack(ConfigTag.THEME_COLOR_CONFIG)
+            .commit()
+    }
+
+    fun openThemeManagerPage() {
+        supportFragmentManager.beginTransaction()
+            .replace(
+                R.id.configFrameLayout,
+                ThemeManagerFragment(),
+                ConfigTag.THEME_MANAGER
+            )
+            .addToBackStack(ConfigTag.THEME_MANAGER)
             .commit()
     }
 

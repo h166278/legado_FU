@@ -3,7 +3,6 @@ package io.legado.app.help.config
 import android.content.SharedPreferences
 import android.os.Build
 import io.legado.app.BuildConfig
-import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.utils.GSON
@@ -29,6 +28,14 @@ internal fun normalizeReadAloudWorkerCount(value: String?): Int {
     return value?.toIntOrNull()?.coerceIn(1, 5) ?: 3
 }
 
+internal fun normalizeThemeMode(value: String?): String {
+    return when (value) {
+        "0", "1", "2", "3" -> value
+        "4", "5", "6" -> "1"
+        else -> "0"
+    }
+}
+
 @Suppress("MemberVisibilityCanBePrivate", "ConstPropertyName")
 object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val isCronet = appCtx.getPrefBoolean(PreferKey.cronet)
@@ -38,7 +45,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var editTheme = appCtx.getPrefInt(PreferKey.editTheme, 0)
     var editThemeDark = appCtx.getPrefInt(PreferKey.editThemeDark, 0)
     var editTemeAuto = appCtx.getPrefBoolean(PreferKey.editTemeAuto)
-    private fun getThemeModePref(): String = appCtx.getPrefString(PreferKey.themeMode, "4") ?: "4"
+    private fun getThemeModePref(): String = normalizeThemeMode(
+        appCtx.getPrefString(PreferKey.themeMode, "0")
+    )
 
     var isEInkMode = getThemeModePref() == "3"
     var clickActionTL = appCtx.getPrefInt(PreferKey.clickActionTL, 2)
@@ -171,12 +180,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var isNightTheme: Boolean
         get() = when (themeMode) {
             "2" -> true
-            "0" -> false
+            "0" -> isSystemNightTheme
             "1" -> false
             "3" -> false
-            "4" -> false
-            "5" -> false
-            "6" -> false
             else -> sysConfiguration.isNightMode
         }
         set(value) {
@@ -237,11 +243,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val textSelectAble: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.textSelectAble, true)
 
-    val isTransparentStatusBar: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.transparentStatusBar, true)
+    val isTransparentStatusBar = true
 
-    val immNavigationBar: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.immNavigationBar, true)
+    val immNavigationBar = true
+
+    val useFloatingBottomBar: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.useFloatingBottomBar, false)
 
     val screenOrientation: String?
         get() = appCtx.getPrefString(PreferKey.screenOrientation)
@@ -391,14 +398,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.systemTypefaces, value)
         }
 
-    var elevation: Int
-        get() = if (isEInkMode) 0 else appCtx.getPrefInt(
-            PreferKey.barElevation,
-            AppConst.sysElevation
-        )
-        set(value) {
-            appCtx.putPrefInt(PreferKey.barElevation, value)
-        }
+    val elevation: Int
+        get() = if (isEInkMode) 0 else 12
 
     var readUrlInBrowser: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readUrlOpenInBrowser)
@@ -850,42 +851,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.enableMangaGray, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.enableMangaGray, value)
-        }
-
-    var welcomeImage
-        get() = appCtx.getPrefString(PreferKey.welcomeImage)
-        set(value) {
-            appCtx.putPrefString(PreferKey.welcomeImage, value)
-        }
-
-    var welcomeShowText
-        get() = appCtx.getPrefBoolean(PreferKey.welcomeShowText, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.welcomeShowText, value)
-        }
-
-    var welcomeShowIcon
-        get() = appCtx.getPrefBoolean(PreferKey.welcomeShowIcon, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.welcomeShowIcon, value)
-        }
-
-    var welcomeImageDark
-        get() = appCtx.getPrefString(PreferKey.welcomeImageDark)
-        set(value) {
-            appCtx.putPrefString(PreferKey.welcomeImageDark, value)
-        }
-
-    var welcomeShowTextDark
-        get() = appCtx.getPrefBoolean(PreferKey.welcomeShowTextDark, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.welcomeShowTextDark, value)
-        }
-
-    var welcomeShowIconDark
-        get() = appCtx.getPrefBoolean(PreferKey.welcomeShowIconDark, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.welcomeShowIconDark, value)
         }
 
     val autoUpdateVariant get() = appCtx.getPrefBoolean("autoUpdateVariant", true)

@@ -11,6 +11,7 @@ plugins {
     alias libs.plugins.kotlin.parcelize
     alias libs.plugins.room
     alias libs.plugins.ksp
+    alias libs.plugins.roborazzi
 }
 apply from: 'download.gradle'
 
@@ -161,6 +162,16 @@ android {
     lint { //忽略string翻译缺失，后面需要翻译时去掉，todo
         disable 'MissingTranslation'
     }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+            all {
+                systemProperty 'robolectric.pixelCopyRenderMode', 'hardware'
+                maxHeapSize = '3072m'
+            }
+        }
+    }
 }
 
 dependencies {
@@ -169,7 +180,14 @@ dependencies {
     //coreLibraryDesugaring('com.android.tools:desugar_jdk_libs_nio:2.0.4')
     coreLibraryDesugaring(libs.desugar)
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.bundles.androidTest)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     //kotlin
     //noinspection GradleDependency,DifferentStdlibGradleVersion
     implementation(libs.kotlin.stdlib)
@@ -206,6 +224,7 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.material.color.utilities)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.flexbox)
@@ -323,6 +342,68 @@ dependencies {
     implementation(libs.soraEditor.language.textmate)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+def ngDesignBaselineFile = rootProject.file("config/ng-design-system-baseline.txt")
+
+roborazzi {
+    outputDir.set(file("src/test/screenshots"))
+}
+
+def ngDesignRules = [
+        hex           : ~/(?i)#[0-9a-f]{6,8}/,
+        theme_store   : ~/\bThemeStore\b/,
+        private_scheme: ~/\b(lightColorScheme|darkColorScheme)\s*\(/,
+        visual_boolean: ~/\b(useWhiteBackground|disableGlass|useSurfaceBackground|useDarkText|useStrongBorder)\b/
+]
+
+tasks.register("verifyNgDesignSystem") {
+    group = "verification"
+    description = "阻止 Feature 新增绕过 NG Design System 的视觉实现"
+
+    doLast {
+        def baseline = [:].withDefault { 0 }
+        if (ngDesignBaselineFile.exists()) {
+            ngDesignBaselineFile.eachLine("UTF-8") { line ->
+                def normalized = line.trim()
+                if (normalized && !normalized.startsWith("#")) {
+                    def parts = normalized.split("\\|", 3)
+                    if (parts.length == 3) baseline[parts[0] + "|" + parts[1]] = parts[2] as int
+                }
+            }
+        }
+
+        def sources = files(
+                fileTree("src/main/java/io/legado/app/ui") { include "**/*.kt" },
+                fileTree("src/main/res/layout") { include "**/*.xml" }
+        )
+        def failures = []
+        ngDesignRules.each { ruleName, pattern ->
+            sources.files.sort().each { source ->
+                def relative = rootProject.projectDir.toPath().relativize(source.toPath())
+                        .toString().replace('\\', '/')
+                if (relative.contains("/ui/design/")) return
+                def matcher = pattern.matcher(source.getText("UTF-8"))
+                def count = 0
+                while (matcher.find()) count++
+                def allowed = baseline[ruleName + "|" + relative]
+                if (count > allowed) failures << "${ruleName}|${relative}|${count} (baseline ${allowed})"
+            }
+        }
+
+        fileTree("src/main/res/layout") { include "**/item_*.xml" }.files.each { source ->
+            if (source.getText("UTF-8").contains("NgGlassLayout")) {
+                failures << "recycler_glass|${rootProject.projectDir.toPath().relativize(source.toPath()).toString().replace('\\', '/')}"
+            }
+        }
+        if (!failures.isEmpty()) {
+            throw new GradleException("NG Design System 检查失败:\n" + failures.join("\n"))
+        }
+    }
+}
+
+tasks.named("check").configure {
+    dependsOn(tasks.named("verifyNgDesignSystem"))
 }
 
 def resolveAdbExecutable = {

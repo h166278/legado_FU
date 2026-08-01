@@ -126,6 +126,35 @@ internal object TtsEngineImportResolver {
     }
 }
 
+internal object TtsEngineOrderResolver {
+
+    /**
+     * 只把调用方确认过的 ID 顺序合并到最新快照，保留其余条目及最新字段值。
+     * 当条目已被删除、ID 重复或顺序集合失配时拒绝提交，避免旧 UI 快照复活数据。
+     */
+    fun mergeLatest(
+        latest: List<TtsEngineSetting>,
+        orderedIds: List<String>
+    ): List<TtsEngineSetting>? {
+        if (orderedIds.isEmpty() || orderedIds.toSet().size != orderedIds.size) {
+            return null
+        }
+        val orderedIdSet = orderedIds.toSet()
+        val latestById = latest.associateBy(TtsEngineSetting::id)
+        if (!latestById.keys.containsAll(orderedIdSet)) {
+            return null
+        }
+        val affectedSlots = latest.count { it.id in orderedIdSet }
+        if (affectedSlots != orderedIds.size) {
+            return null
+        }
+        val reordered = orderedIds.map { latestById.getValue(it) }.iterator()
+        return latest.map { engine ->
+            if (engine.id in orderedIdSet) reordered.next() else engine
+        }
+    }
+}
+
 object TtsEngineStore {
 
     const val SYSTEM_DEFAULT_ID = "system_default"
@@ -163,6 +192,7 @@ object TtsEngineStore {
         defaultScriptEngineSnapshots.mapTo(hashSetOf()) { it.id }
     }
 
+    @Synchronized
     fun engines(): List<TtsEngineSetting> {
         val savedEngines = savedEnginesWithSystemDefaultDisabled()
         val saved = savedEngines.associateBy { it.id }
@@ -246,6 +276,7 @@ object TtsEngineStore {
         return engines().firstOrNull { it.id == id }
     }
 
+    @Synchronized
     fun saveEngine(engine: TtsEngineSetting, restartReadAloud: Boolean = true) {
         val wasActive = activeEngineId() == engine.id
         val previous = engine(engine.id)
@@ -302,6 +333,7 @@ object TtsEngineStore {
             ?: error("自定义朗读引擎模板解析失败")
     }
 
+    @Synchronized
     fun importEngineText(
         text: String,
         conflictAction: TtsEngineImportConflictAction = TtsEngineImportConflictAction.ASK
@@ -322,6 +354,7 @@ object TtsEngineStore {
         }
     }
 
+    @Synchronized
     fun saveEngines(engines: List<TtsEngineSetting>) {
         appCtx.putPrefString(
             PreferKey.ttsEngineV2SettingsJson,
@@ -329,6 +362,17 @@ object TtsEngineStore {
         )
     }
 
+    @Synchronized
+    fun saveVisibleEngineOrder(orderedIds: List<String>): Boolean {
+        val reordered = TtsEngineOrderResolver.mergeLatest(
+            latest = engines(),
+            orderedIds = orderedIds
+        ) ?: return false
+        saveEngines(reordered)
+        return true
+    }
+
+    @Synchronized
     fun deleteEngine(id: String): Boolean {
         val engine = engine(id) ?: return false
         if (!isDeletableEngine(engine)) {
@@ -359,6 +403,7 @@ object TtsEngineStore {
         ReadAloud.upReadAloudClass()
     }
 
+    @Synchronized
     fun selectVoice(engineId: String, voiceId: String?): TtsEngineSetting? {
         val engine = engine(engineId)?.takeIf { it.enabled } ?: return null
         val selectedVoiceId = voiceId?.takeIf { id ->
@@ -374,6 +419,7 @@ object TtsEngineStore {
         return engine(engineId)
     }
 
+    @Synchronized
     fun upsertVoiceList(
         engineId: String,
         voices: List<TtsVoice>,
@@ -393,6 +439,7 @@ object TtsEngineStore {
         return updated.copy(runtimeVoices = voices, lastVoiceUpdateTime = now)
     }
 
+    @Synchronized
     fun setVoiceEnabled(
         engineId: String,
         voiceId: String,
@@ -410,6 +457,7 @@ object TtsEngineStore {
         return engine(updated.id)
     }
 
+    @Synchronized
     fun setAllVoicesEnabled(
         engineId: String,
         voiceIds: List<String>,

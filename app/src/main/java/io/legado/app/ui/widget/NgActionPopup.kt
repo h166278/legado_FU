@@ -99,6 +99,10 @@ class NgActionPopup(
         onClick: () -> Unit
     ): View {
         val color = context.getCompatColor(R.color.ng_on_surface)
+        val textMaxWidth = (
+            width - 12.dpToPx() - 20.dpToPx() - 10.dpToPx() - 12.dpToPx() -
+                (if (item.checked) 30.dpToPx() else 0)
+            ).coerceAtLeast(0)
         return LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
@@ -125,13 +129,17 @@ class NgActionPopup(
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 includeFontPadding = false
                 maxLines = 1
+                maxWidth = textMaxWidth
                 ellipsize = TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            }, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
             if (item.checked) {
                 addView(ImageView(context).apply {
                     scaleType = ImageView.ScaleType.CENTER_INSIDE
                     setPadding(2.dpToPx(), 2.dpToPx(), 2.dpToPx(), 2.dpToPx())
-                    setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_check))
+                    setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ng_ic_popup_selected))
                     setColorFilter(color)
                 }, LinearLayout.LayoutParams(20.dpToPx(), 20.dpToPx()).apply {
                     marginStart = 10.dpToPx()
@@ -169,21 +177,21 @@ class NgActionPopup(
                     context.resources.displayMetrics
                 )
             }
-            val textWidth = items.maxOfOrNull { item ->
+            val rowBaseWidth = 12.dpToPx() + 20.dpToPx() + 10.dpToPx() + 12.dpToPx()
+            val selectedIndicatorWidth = 10.dpToPx() + 20.dpToPx()
+            val contentWidth = items.maxOfOrNull { item ->
                 textPaint.measureText(
                     item.title?.toString()
                         ?: item.titleRes.takeIf { it != 0 }?.let { context.getString(it) }
                         ?: ""
-                )
-            }?.toInt() ?: 0
-            val hasChecked = items.any { it.checked }
-            val chromeWidth = 12.dpToPx() + 20.dpToPx() + 10.dpToPx() + 12.dpToPx() +
-                if (hasChecked) 30.dpToPx() else 0
+                ).toInt() + rowBaseWidth +
+                    if (item.checked) selectedIndicatorWidth else 0
+            } ?: 0
             val minWidth = 152.dpToPx()
             val maxWidth = (context.resources.displayMetrics.widthPixels - 16.dpToPx())
                 .coerceAtMost(280.dpToPx())
                 .coerceAtLeast(minWidth)
-            return (textWidth + chromeWidth + 4.dpToPx()).coerceIn(minWidth, maxWidth)
+            return (contentWidth + 4.dpToPx()).coerceIn(minWidth, maxWidth)
         }
     }
 }

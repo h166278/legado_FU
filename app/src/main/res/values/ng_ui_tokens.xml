@@ -6,6 +6,7 @@
     <color name="ng_surface_card">#E6FFFFFF</color>
     <color name="ng_surface_soft">#FFFAF7</color>
     <color name="ng_surface_panel">#F2FFFFFF</color>
+    <color name="ng_floating_dock_surface">#99FFFFFF</color>
     <color name="ng_settings_group">#30FFFFFF</color>
     <color name="ng_settings_group_stroke">#66FFFFFF</color>
     <color name="ng_settings_item">#70FFFFFF</color>

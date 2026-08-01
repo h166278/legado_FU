@@ -349,14 +349,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     }
 
     private fun isTransparentTopBar(): Boolean {
-        return transparentNavBar || getPrefBoolean(
-            if (AppConfig.isNightTheme) {
-                PreferKey.tNavBarN
-            } else {
-                PreferKey.tNavBar
-            },
-            false
-        )
+        return transparentNavBar || getPrefBoolean(PreferKey.tNavBar, false)
     }
 
     private fun ViewGroup.findActionMenuView(): ActionMenuView? {
