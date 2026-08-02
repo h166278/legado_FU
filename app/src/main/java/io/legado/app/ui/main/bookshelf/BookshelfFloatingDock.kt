@@ -1,0 +1,409 @@
+package io.legado.app.ui.main.bookshelf
+
+import android.view.View
+import android.widget.ImageView
+import androidx.annotation.DrawableRes
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import io.legado.app.R
+import io.legado.app.data.entities.BookGroup
+import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.glide.ImageLoader
+import io.legado.app.ui.design.theme.NgTheme
+
+internal data class BookshelfDockGroup(
+    val groupId: Long,
+    val name: String,
+    val cover: String?
+)
+
+@Composable
+internal fun BookshelfFloatingDock(
+    groups: List<BookshelfDockGroup>,
+    selectedIndex: Int,
+    onSearchClick: () -> Unit,
+    onMoreClick: (View) -> Unit,
+    onGroupClick: (Int) -> Unit,
+    onGroupLongClick: (Int) -> Unit,
+    topDistancePx: Int,
+    contentTopInsetPx: Int,
+    transparencyPercent: Int,
+    modifier: Modifier = Modifier
+) {
+    val snapshot = NgTheme.snapshot
+    val shape = RoundedCornerShape(12.dp)
+    val surfaceColor = colorResource(R.color.ng_floating_dock_surface).copy(
+        alpha = BookshelfFloatingDockConfig.surfaceAlpha(transparencyPercent)
+    )
+    val dockTopSpacerHeight = with(LocalDensity.current) {
+        (topDistancePx - contentTopInsetPx).coerceAtLeast(0).toDp()
+    }
+    val dockBorderColor = when {
+        snapshot.isEInk -> Color.Black
+        snapshot.isDark -> Color.White.copy(alpha = 0.18f)
+        else -> Color.White.copy(alpha = 0.68f)
+    }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(dockTopSpacerHeight)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .clip(shape)
+                    .background(surfaceColor)
+                    .border(0.6.dp, dockBorderColor, shape),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DockAction(
+                    iconRes = R.drawable.ic_bookshelf_dock_search,
+                    label = stringResource(R.string.search),
+                    onClick = onSearchClick
+                )
+                GroupTrack(
+                    groups = groups,
+                    selectedIndex = selectedIndex,
+                    onGroupClick = onGroupClick,
+                    onGroupLongClick = onGroupLongClick,
+                    modifier = Modifier.weight(1f)
+                )
+                MoreAction(onClick = onMoreClick)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DockAction(
+    @DrawableRes iconRes: Int,
+    label: String,
+    onClick: () -> Unit
+) {
+    val contentColor = Color(NgTheme.colors.onSurfaceVariant).copy(alpha = 0.66f)
+    DockItemContent(
+        label = label,
+        contentColor = contentColor,
+        modifier = Modifier
+            .width(48.dp)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                role = Role.Button
+            }
+    ) {
+        DockVectorIcon(iconRes = iconRes, tint = contentColor)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GroupTrack(
+    groups: List<BookshelfDockGroup>,
+    selectedIndex: Int,
+    onGroupClick: (Int) -> Unit,
+    onGroupLongClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxHeight()) {
+        if (groups.isEmpty()) return@BoxWithConstraints
+        val evenlyDistributed = groups.size <= MAX_VISIBLE_GROUPS
+        val itemWidth = if (evenlyDistributed) {
+            maxWidth / groups.size.toFloat()
+        } else {
+            GROUP_ITEM_WIDTH
+        }
+        val listState = rememberLazyListState()
+        val density = LocalDensity.current
+        LaunchedEffect(selectedIndex, groups.size, itemWidth, maxWidth) {
+            if (!evenlyDistributed && selectedIndex in groups.indices) {
+                val viewportWidth = listState.layoutInfo.viewportSize.width
+                val itemWidthPx = with(density) { itemWidth.roundToPx() }
+                val centeredOffset = if (viewportWidth > itemWidthPx) {
+                    -((viewportWidth - itemWidthPx) / 2)
+                } else {
+                    0
+                }
+                listState.animateScrollToItem(selectedIndex, centeredOffset)
+            }
+        }
+        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+            LazyRow(
+                state = listState,
+                userScrollEnabled = !evenlyDistributed,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                itemsIndexed(
+                    items = groups,
+                    key = { _, item -> item.groupId }
+                ) { index, group ->
+                    GroupItem(
+                        group = group,
+                        selected = index == selectedIndex,
+                        width = itemWidth,
+                        onClick = { onGroupClick(index) },
+                        onLongClick = { onGroupLongClick(index) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GroupItem(
+    group: BookshelfDockGroup,
+    selected: Boolean,
+    width: Dp,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val colors = NgTheme.colors
+    val contentColor = if (selected) {
+        Color(colors.primary)
+    } else {
+        Color(colors.onSurfaceVariant).copy(alpha = 0.66f)
+    }
+    DockItemContent(
+        label = group.name,
+        contentColor = contentColor,
+        labelWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        modifier = Modifier
+            .width(width)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .semantics(mergeDescendants = true) {
+                this.selected = selected
+                role = Role.Tab
+                contentDescription = group.name
+            }
+    ) {
+        GroupIcon(group = group, selected = selected)
+    }
+}
+
+@Composable
+private fun DockItemContent(
+    label: String,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    labelWeight: FontWeight = FontWeight.Normal,
+    iconContent: @Composable () -> Unit
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier.size(28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            iconContent()
+        }
+        Text(
+            text = label,
+            color = contentColor,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            fontWeight = labelWeight,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+        )
+    }
+}
+
+@Composable
+private fun DockVectorIcon(@DrawableRes iconRes: Int, tint: Color) {
+    Icon(
+        painter = painterResource(iconRes),
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier.size(22.dp)
+    )
+}
+
+@Composable
+private fun GroupIcon(group: BookshelfDockGroup, selected: Boolean) {
+    val colors = NgTheme.colors
+    val builtInIconRes = group.builtInIconRes()
+    when {
+        builtInIconRes != null -> DockVectorIcon(
+            iconRes = builtInIconRes,
+            tint = if (selected) {
+                Color(colors.primary)
+            } else {
+                Color(colors.onSurfaceVariant).copy(alpha = 0.66f)
+            }
+        )
+
+        !group.cover.isNullOrBlank() -> GroupCoverIcon(
+            path = group.cover.orEmpty(),
+            selected = selected
+        )
+
+        else -> Text(
+            text = group.name.firstOrNull()?.toString().orEmpty(),
+            color = if (selected) {
+                Color(colors.primary)
+            } else {
+                Color(colors.onSurfaceVariant).copy(alpha = 0.66f)
+            },
+            fontSize = 18.sp,
+            lineHeight = 22.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.offset(y = (-1).dp)
+        )
+    }
+}
+
+@Composable
+private fun GroupCoverIcon(path: String, selected: Boolean) {
+    val borderColor = Color(NgTheme.colors.primary)
+    val shape = RoundedCornerShape(7.dp)
+    AndroidView(
+        factory = { context ->
+            AppCompatImageView(context).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            }
+        },
+        update = { imageView ->
+            if (imageView.tag != path) {
+                imageView.tag = path
+                ImageLoader.load(imageView.context, path)
+                    .centerCrop()
+                    .into(imageView)
+            }
+        },
+        modifier = Modifier
+            .size(22.dp)
+            .clip(shape)
+            .then(
+                if (selected) Modifier.border(1.dp, borderColor, shape) else Modifier
+            )
+    )
+}
+
+@Composable
+private fun MoreAction(onClick: (View) -> Unit) {
+    val contentColor = Color(NgTheme.colors.onSurfaceVariant)
+        .copy(alpha = 0.66f)
+    val label = stringResource(R.string.more)
+    val popupAnchor = remember { arrayOfNulls<View>(1) }
+    Box(
+        modifier = Modifier
+            .width(48.dp)
+            .fillMaxHeight()
+    ) {
+        AndroidView(
+            factory = { context ->
+                View(context).apply {
+                    isClickable = false
+                    isFocusable = false
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    popupAnchor[0] = this
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(1.dp)
+        )
+        DockItemContent(
+            label = label,
+            contentColor = contentColor,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { popupAnchor[0]?.let(onClick) }
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription = label
+                }
+        ) {
+            DockVectorIcon(
+                iconRes = R.drawable.ic_bookshelf_dock_more,
+                tint = contentColor
+            )
+        }
+    }
+}
+
+@DrawableRes
+private fun BookshelfDockGroup.builtInIconRes(): Int? {
+    return when (groupId) {
+        BookGroup.IdAll -> R.drawable.ic_bookshelf_dock_all
+        BookGroup.IdLocal -> R.drawable.ic_bookshelf_dock_local
+        BookGroup.IdAudio -> R.drawable.ic_bookshelf_dock_audio
+        BookGroup.IdVideo -> R.drawable.ic_bookshelf_dock_video
+        else -> null
+    }
+}
+
+private const val MAX_VISIBLE_GROUPS = 4
+private val GROUP_ITEM_WIDTH = 52.dp

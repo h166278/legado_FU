@@ -4,16 +4,28 @@ package io.legado.app.ui.main.bookshelf.style1
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.drawable.InsetDrawable
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.SearchView
 import androidx.core.widget.TextViewCompat
+import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
@@ -25,6 +37,8 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.FragmentBookshelf1Binding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
@@ -33,7 +47,10 @@ import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.manage.BookshelfManageActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.BookshelfDockGroup
+import io.legado.app.ui.main.bookshelf.BookshelfFloatingDock
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
@@ -43,6 +60,7 @@ import io.legado.app.utils.isCreated
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.statusBarHeight
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlin.collections.set
@@ -71,6 +89,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             NgActionPopupItem(R.id.menu_log, R.string.log, R.drawable.ic_cfg_about, dividerBefore = true),
             NgActionPopupItem(R.id.menu_network_log, R.string.network_request_log, R.drawable.ic_network_check)
         )
+        private val floatingDockMenuActions = listOf(
+            NgActionPopupItem(
+                R.id.menu_read_record,
+                R.string.browse_history,
+                R.drawable.ic_history
+            )
+        ) + bookshelfMenuActions
     }
 
     constructor(position: Int) : this() {
@@ -85,7 +110,16 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.titleBar.findViewById(R.id.tab_layout)
     }
     private val bookGroups = mutableListOf<BookGroup>()
+    private val bookCounts = mutableMapOf<Long, Int>()
     private val fragmentMap = hashMapOf<Long, BooksFragment>()
+    private var dockGroups by mutableStateOf<List<BookshelfDockGroup>>(emptyList())
+    private var dockSelectedIndex by mutableIntStateOf(0)
+    private var dockTopDistancePx by mutableIntStateOf(0)
+    private var dockContentTopInsetPx by mutableIntStateOf(0)
+    private var dockTransparency by mutableIntStateOf(
+        BookshelfFloatingDockConfig.DEFAULT_TRANSPARENCY_PERCENT
+    )
+    private var configuredTopBarStyle: BookshelfTopBarStyle? = null
     override val groupId: Long get() = selectedGroup?.groupId ?: 0
 
     override val books: List<Book>
@@ -110,8 +144,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         val searchView = binding.titleBar.findViewById<View>(R.id.tv_bookshelf_search)
         val moreButton = binding.titleBar.findViewById<View>(R.id.btn_bookshelf_more)
         applyTopBarBackground(searchView, moreButton)
-        applyBookshelfToolbarColors()
-        applyContentPanelBackground()
         searchView.bindSoftPress()
         moreButton.bindSoftPress()
         searchView.setOnClickListener {
@@ -142,6 +174,150 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         tabLayout.setupWithViewPager(binding.viewPagerBookshelf)
         binding.viewPagerBookshelf.offscreenPageLimit = 1
         binding.viewPagerBookshelf.adapter = adapter
+        configureTopBarMode()
+        applyBookshelfToolbarColors()
+    }
+
+    private fun configureTopBarMode() {
+        val legacyTopBar = binding.titleBar.findViewById<View>(R.id.bookshelf_legacy_top_bar)
+        val floatingDock = binding.titleBar.findViewById<ComposeView>(R.id.bookshelf_floating_dock)
+        configuredTopBarStyle = AppConfig.bookshelfTopBarStyle
+        if (configuredTopBarStyle == BookshelfTopBarStyle.TRADITIONAL) {
+            legacyTopBar.visibility = View.VISIBLE
+            floatingDock.visibility = View.GONE
+            return
+        }
+        legacyTopBar.visibility = View.GONE
+        floatingDock.visibility = View.VISIBLE
+        configureFloatingToolbar()
+        updateFloatingDockSettings()
+        floatingDock.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        floatingDock.setContent {
+            NgAppTheme {
+                BookshelfFloatingDock(
+                    groups = dockGroups,
+                    selectedIndex = dockSelectedIndex,
+                    onSearchClick = {
+                        SearchActivity.start(requireContext(), null)
+                    },
+                    onMoreClick = { anchor ->
+                        showBookshelfMenu(anchor, includeBrowseHistory = true)
+                    },
+                    onGroupClick = { index ->
+                        tabLayout.getTabAt(index)?.select()
+                    },
+                    onGroupLongClick = { index ->
+                        bookGroups.getOrNull(index)?.let { group ->
+                            showDialogFragment(GroupEditDialog(group))
+                        }
+                    },
+                    topDistancePx = dockTopDistancePx,
+                    contentTopInsetPx = dockContentTopInsetPx,
+                    transparencyPercent = dockTransparency
+                )
+            }
+        }
+    }
+
+    private fun updateFloatingDockSettings() {
+        val displayMetrics = resources.displayMetrics
+        dockContentTopInsetPx = requireContext().statusBarHeight
+        val topGapPx = BookshelfFloatingDockConfig.resolveTopDistancePx(
+            storedDistancePx = AppConfig.bookshelfFloatingDockTopDistancePx,
+            screenWidthPx = displayMetrics.widthPixels,
+            density = displayMetrics.density,
+            statusBarHeightPx = dockContentTopInsetPx
+        )
+        dockTopDistancePx = BookshelfFloatingDockConfig.screenTopDistancePx(
+            topGapPx = topGapPx,
+            statusBarHeightPx = dockContentTopInsetPx
+        )
+        dockTransparency = AppConfig.bookshelfFloatingDockTransparency
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val appliedStyle = configuredTopBarStyle ?: return
+        val currentStyle = AppConfig.bookshelfTopBarStyle
+        if (currentStyle != appliedStyle) {
+            activity?.recreate()
+            return
+        }
+        if (currentStyle == BookshelfTopBarStyle.FLOATING_DOCK) {
+            updateFloatingDockSettings()
+        }
+    }
+
+    private fun configureFloatingToolbar() {
+        binding.tvBookshelfViewHistory.visibility = View.GONE
+        binding.bookshelfToolbarDivider.visibility = View.GONE
+        binding.bookshelfContentToolbar.layoutParams =
+            binding.bookshelfContentToolbar.layoutParams.apply {
+                height = 40.dpToPx()
+        }
+        binding.tvBookshelfViewBooks.apply {
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        val actionBackgroundInset = 8.dpToPx()
+        listOf(binding.tvBookshelfSort, binding.tvBookshelfEdit).forEach { action ->
+            action.layoutParams = action.layoutParams.apply {
+                height = 40.dpToPx()
+            }
+            action.background = AppCompatResources.getDrawable(
+                requireContext(),
+                R.drawable.bg_bookshelf_compact_action
+            )?.let { background ->
+                InsetDrawable(
+                    background,
+                    0,
+                    actionBackgroundInset,
+                    0,
+                    actionBackgroundInset
+                )
+            }
+            action.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
+            action.setPadding(6.dpToPx(), 0, 6.dpToPx(), 0)
+        }
+        binding.tvBookshelfEdit.layoutParams =
+            (binding.tvBookshelfEdit.layoutParams as LinearLayout.LayoutParams).apply {
+                marginStart = 6.dpToPx()
+        }
+        val actionIconSize = 16.dpToPx()
+        binding.tvBookshelfSort.setCompoundDrawablesRelative(
+            AppCompatResources.getDrawable(
+                requireContext(),
+                R.drawable.ic_swap_vert
+            )?.mutate()?.apply {
+                setBounds(0, 0, actionIconSize, actionIconSize)
+            },
+            null,
+            AppCompatResources.getDrawable(
+                requireContext(),
+                R.drawable.ic_arrow_drop_down_summary
+            )?.mutate()?.apply {
+                setBounds(0, 0, actionIconSize, actionIconSize)
+            },
+            null
+        )
+        binding.tvBookshelfSort.compoundDrawablePadding = 2.dpToPx()
+        binding.tvBookshelfEdit.apply {
+            setCompoundDrawablesRelative(
+                AppCompatResources.getDrawable(
+                    requireContext(),
+                    R.drawable.ic_grid_menu
+                )?.mutate()?.apply {
+                    setBounds(0, 0, actionIconSize, actionIconSize)
+                },
+                null,
+                null,
+                null
+            )
+            compoundDrawablePadding = 2.dpToPx()
+        }
+        updateBookCountLabel()
     }
 
     private fun applyTopBarBackground(searchView: View, moreButton: View) {
@@ -154,12 +330,15 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         }
     }
 
-    private fun applyContentPanelBackground() {
-        binding.bookshelfContentPanel.setBackgroundResource(R.color.transparent)
-    }
-
     private fun applyBookshelfToolbarColors() {
-        val topBarTextColor = NgThemeResolver.resolve(requireContext()).colors.onTopBar
+        val snapshot = NgThemeResolver.resolve(requireContext())
+        val topBarTextColor = if (
+            AppConfig.bookshelfTopBarStyle == BookshelfTopBarStyle.FLOATING_DOCK
+        ) {
+            ColorUtils.setAlphaComponent(snapshot.colors.onSurfaceVariant, 184)
+        } else {
+            snapshot.colors.onTopBar
+        }
         binding.tvBookshelfViewBooks.setTextColor(topBarTextColor)
         binding.tvBookshelfViewHistory.setTextColor(topBarTextColor)
         binding.tvBookshelfSort.setTextColor(topBarTextColor)
@@ -168,6 +347,41 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             binding.tvBookshelfSort,
             ColorStateList.valueOf(topBarTextColor)
         )
+        TextViewCompat.setCompoundDrawableTintList(
+            binding.tvBookshelfEdit,
+            ColorStateList.valueOf(topBarTextColor)
+        )
+    }
+
+    internal fun onBookCountChanged(groupId: Long, count: Int) {
+        bookCounts[groupId] = count
+        if (selectedGroup?.groupId == groupId) {
+            updateBookCountLabel()
+        }
+    }
+
+    private fun updateBookCountLabel() {
+        if (AppConfig.bookshelfTopBarStyle != BookshelfTopBarStyle.FLOATING_DOCK) {
+            binding.tvBookshelfViewBooks.setText(R.string.bookshelf)
+            return
+        }
+        val currentGroupId = selectedGroup?.groupId ?: return
+        val count = bookCounts[currentGroupId]
+            ?: fragmentMap[currentGroupId]?.getBooksCount()
+            ?: return
+        val label = getString(R.string.bookshelf_book_total, count)
+        val countText = count.toString()
+        binding.tvBookshelfViewBooks.text = SpannableString(label).apply {
+            val start = label.indexOf(countText)
+            if (start >= 0) {
+                setSpan(
+                    ForegroundColorSpan(requireContext().accentColor),
+                    start,
+                    start + countText.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
     }
 
     private fun isTransparentTopBar(): Boolean {
@@ -221,7 +435,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                 NgActionPopupItem(
                     itemId = SORT_MENU_ID_OFFSET + sort,
                     title = getString(sortLabelRes(sort)),
-                    iconRes = R.drawable.ic_sort,
+                    iconRes = sortIconRes(sort),
                     checked = sort == currentSort,
                     payload = sort
                 )
@@ -248,7 +462,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     }
 
     private fun updateSortLabel() {
-        binding.tvBookshelfSort.text = getString(sortLabelRes(currentBookSort()))
+        binding.tvBookshelfSort.text = if (
+            AppConfig.bookshelfTopBarStyle == BookshelfTopBarStyle.FLOATING_DOCK
+        ) {
+            getString(R.string.sort)
+        } else {
+            getString(sortLabelRes(currentBookSort()))
+        }
     }
 
     private fun currentBookSort(): Int {
@@ -266,9 +486,25 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         }
     }
 
-    private fun showBookshelfMenu(anchor: View) {
-        NgActionPopup(requireContext(), bookshelfMenuActions) { action ->
-            handleBookshelfMenuItem(action.itemId)
+    private fun sortIconRes(sort: Int): Int {
+        return when (sort) {
+            0 -> R.drawable.ic_history
+            1 -> R.drawable.ic_update
+            2 -> R.drawable.ic_ai_capability_text
+            3 -> R.drawable.ic_drag_handle
+            5 -> R.drawable.ic_author
+            else -> R.drawable.ic_baseline_sort_24
+        }
+    }
+
+    private fun showBookshelfMenu(anchor: View, includeBrowseHistory: Boolean = false) {
+        val actions = if (includeBrowseHistory) floatingDockMenuActions else bookshelfMenuActions
+        NgActionPopup(requireContext(), actions) { action ->
+            if (action.itemId == R.id.menu_read_record) {
+                startActivity<ReadRecordActivity>()
+            } else {
+                handleBookshelfMenuItem(action.itemId)
+            }
         }.show(anchor)
     }
 
@@ -289,6 +525,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             if (data != bookGroups) {
                 bookGroups.clear()
                 bookGroups.addAll(data)
+                dockGroups = data.map { group ->
+                    BookshelfDockGroup(
+                        groupId = group.groupId,
+                        name = group.groupName,
+                        cover = group.cover
+                    )
+                }
                 adapter.notifyDataSetChanged()
                 selectLastTab()
                 tabLayout.post {
@@ -315,10 +558,12 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         tabLayout.post {
             tabLayout.removeOnTabSelectedListener(this)
             tabLayout.getTabAt(AppConfig.saveTabPosition)?.select()
+            dockSelectedIndex = tabLayout.selectedTabPosition.coerceAtLeast(0)
             tabLayout.addOnTabSelectedListener(this)
             applyGroupTabViews()
             updateGroupTabStyles(animate = false)
             updateSortLabel()
+            updateBookCountLabel()
         }
     }
 
@@ -381,8 +626,10 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     override fun onTabSelected(tab: TabLayout.Tab) {
         AppConfig.saveTabPosition = tab.position
+        dockSelectedIndex = tab.position
         updateGroupTabStyles()
         updateSortLabel()
+        updateBookCountLabel()
     }
 
     override fun gotoTop() {

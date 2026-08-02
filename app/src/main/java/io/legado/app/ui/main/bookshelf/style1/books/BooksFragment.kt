@@ -49,6 +49,7 @@ import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.aloud.ReadAloudLauncher
 import io.legado.app.ui.main.bookshelf.BookshelfBookActionSheet
 import io.legado.app.ui.main.bookshelf.BookshelfBookGroupSheet
+import io.legado.app.ui.main.bookshelf.style1.BookshelfFragment1
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
@@ -298,6 +299,7 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
                 binding.tvEmptyMsg.isGone = itemCount > 0
                 binding.refreshLayout.isEnabled = enableRefresh && itemCount > 0
                 booksAdapter.setItems(list)
+                (parentFragment as? BookshelfFragment1)?.onBookCountChanged(groupId, itemCount)
                 delay(100)
             }
         }

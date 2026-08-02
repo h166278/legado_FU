@@ -196,6 +196,7 @@
     <string name="bookshelf_new_group">New group</string>
     <string name="bookshelf_new_group_hint">Within 20 chars, Chinese, letters or numbers</string>
     <string name="bookshelf_group_book_count">%1$d books</string>
+    <string name="bookshelf_book_total">%1$d books</string>
     <string name="book_group_full">The number of groups has reached the limit</string>
     <string name="group_name_empty">Group name cannot be empty</string>
     <string name="layout_list">List</string>
