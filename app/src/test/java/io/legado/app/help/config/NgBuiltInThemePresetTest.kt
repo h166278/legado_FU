@@ -36,4 +36,29 @@ class NgBuiltInThemePresetTest {
             NgBuiltInThemes.mist.colors.darkTopBarTextMode,
         )
     }
+
+    @Test
+    fun `autumn preset reuses warm palette and configures both floating docks`() {
+        val autumn = NgBuiltInThemes.autumn
+
+        assertEquals("秋山书意", autumn.name)
+        assertEquals(NgBuiltInThemes.warm.colors, autumn.colors)
+        assertEquals(
+            "asset://defaultData/theme/reading_ng_autumn_mountains.png",
+            autumn.lightBackground.path,
+        )
+        assertNull(autumn.darkBackground.path)
+        assertEquals(
+            NgThemeBarProfile(
+                useFloatingBottomBar = true,
+                floatingBottomBarBottomDistancePx = 40,
+                floatingBottomBarTransparency = 40,
+                bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
+                bookshelfFloatingDockTopDistancePx = 360,
+                bookshelfFloatingDockTransparency = 40,
+            ),
+            autumn.barProfile,
+        )
+        assertEquals(autumn, NgBuiltInThemes.all.last())
+    }
 }

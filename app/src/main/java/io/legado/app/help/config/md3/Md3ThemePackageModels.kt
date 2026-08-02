@@ -86,6 +86,15 @@ internal data class Md3ThemeExportData(
     @SerializedName("useFloatingBottomBar") val useFloatingBottomBar: Boolean = false,
     @SerializedName("useFloatingBottomBarLiquidGlass")
     val useFloatingBottomBarLiquidGlass: Boolean = false,
+    @SerializedName("floatingBottomBarBottomDistancePx")
+    val floatingBottomBarBottomDistancePx: Int? = null,
+    @SerializedName("floatingBottomBarTransparency")
+    val floatingBottomBarTransparency: Int? = null,
+    @SerializedName("bookshelfTopBarStyle") val bookshelfTopBarStyle: String? = null,
+    @SerializedName("bookshelfFloatingDockTopDistancePx")
+    val bookshelfFloatingDockTopDistancePx: Int? = null,
+    @SerializedName("bookshelfFloatingDockTransparency")
+    val bookshelfFloatingDockTransparency: Int? = null,
     @SerializedName("tabletInterface") val tabletInterface: String = "auto",
     @SerializedName("labelVisibilityMode") val labelVisibilityMode: String = "auto",
     @SerializedName("defaultHomePage") val defaultHomePage: String = "bookshelf",

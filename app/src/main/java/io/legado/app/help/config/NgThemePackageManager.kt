@@ -24,7 +24,7 @@ private data class NgThemePackageManifest(
     @SerializedName("darkBackgroundAsset") val darkBackgroundAsset: String? = null
 )
 
-/** Reading NG 自有主题包；MD3 和旧 JSON 的字段适配留到后续兼容层。 */
+/** Reading NG 自有主题包；完整保留可选栏配置，MD3/旧 JSON 由兼容层按字段映射。 */
 internal object NgThemePackageManager {
 
     const val PACKAGE_DIR = "ng_theme_packages"

@@ -6,6 +6,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.NgCoverAlbumImport
 import io.legado.app.help.config.NgCoverAlbumStore
 import io.legado.app.help.config.NgManagedTheme
+import io.legado.app.help.config.NgThemeBarProfile
 import io.legado.app.help.config.NgThemeCoverProfile
 import io.legado.app.help.config.NgThemeBackground
 import io.legado.app.help.config.NgThemeLibraryStore
@@ -45,8 +46,8 @@ internal data class Md3ThemeInstallResult(
 /**
  * MD3/旧版主题包的预览与事务式安装边界。
  *
- * 预览不写文件和偏好；安装只在用户确认后执行。外部主题包提供颜色、背景、字体和
- * 功能封面 Profile，但不接管 NG 的主题模式、悬浮 Dock、圆角或透明度等结构样式。
+ * 预览不写文件和偏好；安装只在用户确认后执行。外部主题包提供颜色、背景、字体、
+ * 功能封面及显式声明的 Dock Profile；未声明的 NG 栏字段保持用户现有配置。
  */
 internal object Md3ThemeImportManager {
 
@@ -171,10 +172,60 @@ internal object Md3ThemeImportManager {
         )
     }
 
+    internal fun materializeBarProfile(spec: NgThemePackageSpec): NgThemeBarProfile? {
+        val directFields = listOf(
+            "useFloatingBottomBar",
+            "floatingBottomBarBottomDistancePx",
+            "floatingBottomBarTransparency",
+            "bookshelfTopBarStyle",
+            "bookshelfFloatingDockTopDistancePx",
+            "bookshelfFloatingDockTransparency",
+            "topBarOpacity",
+            "bottomBarOpacity",
+        )
+        if (directFields.none(spec.normalizedFields::containsKey)) return null
+        val bottomTransparency = spec.intField("floatingBottomBarTransparency")
+            ?: spec.intField("bottomBarOpacity")?.let { 100 - it.coerceIn(0, 100) }
+        val topTransparency = spec.intField("bookshelfFloatingDockTransparency")
+            ?: spec.intField("topBarOpacity")?.let { 100 - it.coerceIn(0, 100) }
+        return NgThemeBarProfile(
+            useFloatingBottomBar = spec.booleanField("useFloatingBottomBar"),
+            floatingBottomBarBottomDistancePx =
+                spec.intField("floatingBottomBarBottomDistancePx"),
+            floatingBottomBarTransparency = bottomTransparency,
+            bookshelfTopBarStyle = spec.topBarStyleField("bookshelfTopBarStyle"),
+            bookshelfFloatingDockTopDistancePx =
+                spec.intField("bookshelfFloatingDockTopDistancePx"),
+            bookshelfFloatingDockTransparency = topTransparency,
+        ).normalized()
+    }
+
     private fun NgThemePackageSpec.booleanField(name: String): Boolean? =
         normalizedFields[name]?.let { value ->
             runCatching { GSON.fromJson(value, Boolean::class.java) }.getOrNull()
         }
+
+    private fun NgThemePackageSpec.intField(name: String): Int? =
+        normalizedFields[name]?.let { value ->
+            runCatching { GSON.fromJson(value, Int::class.java) }.getOrNull()
+        }
+
+    private fun NgThemePackageSpec.topBarStyleField(name: String): Int? {
+        val value = normalizedFields[name] ?: return null
+        runCatching { GSON.fromJson(value, Int::class.java) }.getOrNull()?.let {
+            return io.legado.app.help.config.BookshelfTopBarStyle.fromValue(it).value
+        }
+        val text = runCatching { GSON.fromJson(value, String::class.java) }
+            .getOrNull()
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            ?: return null
+        return when (text) {
+            "1", "floating", "floating_dock", "dock" -> 1
+            "0", "traditional" -> 0
+            else -> null
+        }
+    }
 
     private fun materializeDraft(
         context: Context,
@@ -214,6 +265,7 @@ internal object Md3ThemeImportManager {
                 blur = backgrounds.dark.blur,
             ),
             transparentAppBars = context.getPrefBoolean(PreferKey.tNavBar, false),
+            barProfile = materializeBarProfile(preview.spec),
             packageRootPath = packageRoot?.absolutePath,
             resourceProfile = NgThemeResourceProfile(
                 navigation = NgThemeNavigationAssets(

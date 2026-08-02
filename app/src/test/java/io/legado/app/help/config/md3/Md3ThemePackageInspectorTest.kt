@@ -104,8 +104,8 @@ class Md3ThemePackageInspectorTest {
 
     @Test
     fun `coverage registry contains exact portable field set`() {
-        assertEquals(105, Md3ThemeCoverageRegistry.fields.size)
-        assertEquals(105, Md3ThemeCoverageRegistry.knownFieldNames.size)
+        assertEquals(110, Md3ThemeCoverageRegistry.fields.size)
+        assertEquals(110, Md3ThemeCoverageRegistry.knownFieldNames.size)
         assertEquals(12, Md3ThemeAssetSlots.all.size)
         assertTrue(Md3ThemeCoverageRegistry.fields.all {
             it.transport == Md3ThemeTransportCoverage.LOSSLESS &&

@@ -15,6 +15,77 @@ import java.util.zip.ZipOutputStream
 class Md3ThemePackageNormalizerTest {
 
     @Test
+    fun `portable dock fields become a complete NG bar profile`() {
+        val inspection = inspectZip(
+            "manifest.json" to """
+                {
+                  "formatVersion": 1,
+                  "name": "秋山书意",
+                  "config": {
+                    "useFloatingBottomBar": true,
+                    "floatingBottomBarBottomDistancePx": 40,
+                    "floatingBottomBarTransparency": 40,
+                    "bookshelfTopBarStyle": "floating",
+                    "bookshelfFloatingDockTopDistancePx": 360,
+                    "bookshelfFloatingDockTransparency": 40
+                  }
+                }
+            """.trimIndent(),
+        )
+
+        val spec = Md3ThemePackageNormalizer.normalize(inspection).spec
+        val profile = requireNotNull(Md3ThemeImportManager.materializeBarProfile(spec))
+
+        assertEquals(true, profile.useFloatingBottomBar)
+        assertEquals(40, profile.floatingBottomBarBottomDistancePx)
+        assertEquals(40, profile.floatingBottomBarTransparency)
+        assertEquals(1, profile.bookshelfTopBarStyle)
+        assertEquals(360, profile.bookshelfFloatingDockTopDistancePx)
+        assertEquals(40, profile.bookshelfFloatingDockTransparency)
+    }
+
+    @Test
+    fun `portable without dock fields leaves current NG bar settings untouched`() {
+        val inspection = inspectZip(
+            "manifest.json" to """
+                {
+                  "formatVersion": 1,
+                  "name": "旧主题包",
+                  "config": {"showStatusBar": true}
+                }
+            """.trimIndent(),
+        )
+
+        val spec = Md3ThemePackageNormalizer.normalize(inspection).spec
+
+        assertNull(Md3ThemeImportManager.materializeBarProfile(spec))
+    }
+
+    @Test
+    fun `portable opacity fields map to NG dock transparency`() {
+        val inspection = inspectZip(
+            "manifest.json" to """
+                {
+                  "formatVersion": 1,
+                  "name": "透明栏主题",
+                  "config": {
+                    "topBarOpacity": 60,
+                    "bottomBarOpacity": 75
+                  }
+                }
+            """.trimIndent(),
+        )
+
+        val spec = Md3ThemePackageNormalizer.normalize(inspection).spec
+        val profile = requireNotNull(Md3ThemeImportManager.materializeBarProfile(spec))
+
+        assertEquals(40, profile.bookshelfFloatingDockTransparency)
+        assertEquals(25, profile.floatingBottomBarTransparency)
+        assertNull(profile.bookshelfTopBarStyle)
+        assertNull(profile.floatingBottomBarBottomDistancePx)
+    }
+
+    @Test
     fun `portable selected cover album and visible cover settings become theme profile`() {
         val inspection = inspectZip(
             "manifest.json" to """

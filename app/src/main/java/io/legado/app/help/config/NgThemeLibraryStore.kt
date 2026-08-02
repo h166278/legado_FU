@@ -17,6 +17,7 @@ import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
+import io.legado.app.utils.statusBarHeight
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,45 @@ internal data class NgThemeBackground(
     @SerializedName("path") val path: String? = null,
     @SerializedName("blur") val blur: Int = 0
 )
+
+@Keep
+internal data class NgThemeBarProfile(
+    @SerializedName("useFloatingBottomBar")
+    val useFloatingBottomBar: Boolean? = null,
+    @SerializedName("floatingBottomBarBottomDistancePx")
+    val floatingBottomBarBottomDistancePx: Int? = null,
+    @SerializedName("floatingBottomBarTransparency")
+    val floatingBottomBarTransparency: Int? = null,
+    @SerializedName("bookshelfTopBarStyle")
+    val bookshelfTopBarStyle: Int? = null,
+    @SerializedName("bookshelfFloatingDockTopDistancePx")
+    val bookshelfFloatingDockTopDistancePx: Int? = null,
+    @SerializedName("bookshelfFloatingDockTransparency")
+    val bookshelfFloatingDockTransparency: Int? = null,
+) {
+    fun normalized(): NgThemeBarProfile = copy(
+        floatingBottomBarBottomDistancePx = floatingBottomBarBottomDistancePx?.let {
+            FloatingBottomBarConfig.normalizeBottomDistancePx(it)
+        },
+        floatingBottomBarTransparency = floatingBottomBarTransparency?.let {
+            FloatingBottomBarConfig.normalizeTransparencyPercent(it)
+        },
+        bookshelfTopBarStyle = bookshelfTopBarStyle?.let {
+            BookshelfTopBarStyle.fromValue(it).value
+        },
+        bookshelfFloatingDockTopDistancePx = bookshelfFloatingDockTopDistancePx?.let {
+            BookshelfFloatingDockConfig.normalizeTopDistancePx(it)
+        },
+        bookshelfFloatingDockTransparency = bookshelfFloatingDockTransparency?.let {
+            BookshelfFloatingDockConfig.normalizeTransparencyPercent(it)
+        },
+    )
+
+    companion object {
+        const val EDITOR_DEFAULT_BOTTOM_DISTANCE_PX = 40
+        const val EDITOR_DEFAULT_TOP_DISTANCE_PX = 360
+    }
+}
 
 @Keep
 internal data class NgThemeNavigationAssets(
@@ -90,6 +130,8 @@ internal data class NgManagedTheme(
     val darkBackground: NgThemeBackground = NgThemeBackground(),
     @SerializedName("transparentAppBars")
     val transparentAppBars: Boolean = false,
+    @SerializedName("barProfile")
+    val barProfile: NgThemeBarProfile? = null,
     @SerializedName("packageRootPath") val packageRootPath: String? = null,
     @SerializedName("resourceProfile")
     val resourceProfile: NgThemeResourceProfile? = null,
@@ -103,6 +145,7 @@ internal data class NgManagedTheme(
         colors = colors.normalized(),
         lightBackground = lightBackground.copy(blur = lightBackground.blur.coerceIn(0, 25)),
         darkBackground = darkBackground.copy(blur = darkBackground.blur.coerceIn(0, 25)),
+        barProfile = barProfile?.normalized(),
         resourceProfile = resourceProfile?.normalized() ?: NgThemeResourceProfile(),
         coverProfile = coverProfile?.normalized(),
     )
@@ -178,6 +221,25 @@ internal object NgThemeLibraryStore {
                 blur = context.getPrefInt(PreferKey.bgImageNBlurring, 0)
             ),
             transparentAppBars = context.getPrefBoolean(PreferKey.tNavBar, false),
+            barProfile = NgThemeBarProfile(
+                useFloatingBottomBar = AppConfig.useFloatingBottomBar,
+                floatingBottomBarBottomDistancePx =
+                    FloatingBottomBarConfig.resolveBottomDistancePx(
+                        storedDistancePx = AppConfig.floatingBottomBarBottomDistancePx,
+                        density = context.resources.displayMetrics.density,
+                    ),
+                floatingBottomBarTransparency = AppConfig.floatingBottomBarTransparency,
+                bookshelfTopBarStyle = AppConfig.bookshelfTopBarStyle.value,
+                bookshelfFloatingDockTopDistancePx =
+                    BookshelfFloatingDockConfig.resolveTopDistancePx(
+                        storedDistancePx = AppConfig.bookshelfFloatingDockTopDistancePx,
+                        screenWidthPx = context.resources.displayMetrics.widthPixels,
+                        density = context.resources.displayMetrics.density,
+                        statusBarHeightPx = context.statusBarHeight,
+                    ),
+                bookshelfFloatingDockTransparency =
+                    AppConfig.bookshelfFloatingDockTransparency,
+            ),
             packageRootPath = active?.packageRootPath,
             resourceProfile = active?.resourceProfile ?: NgThemeResourceProfile(),
             coverProfile = NgThemeCoverProfile(
@@ -377,7 +439,23 @@ internal object NgBuiltInThemes {
         transparentAppBars = true
     )
 
-    val all = listOf(classic, warm, bamboo, mist)
+    val autumn = warm.copy(
+        id = "builtin.ng.autumn_mountains",
+        name = "秋山书意",
+        lightBackground = NgThemeBackground(
+            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains.png"
+        ),
+        barProfile = NgThemeBarProfile(
+            useFloatingBottomBar = true,
+            floatingBottomBarBottomDistancePx = 40,
+            floatingBottomBarTransparency = 40,
+            bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
+            bookshelfFloatingDockTopDistancePx = 360,
+            bookshelfFloatingDockTransparency = 40,
+        ),
+    )
+
+    val all = listOf(classic, warm, bamboo, mist, autumn)
 
     private fun theme(
         id: String,

@@ -1961,6 +1961,7 @@
     <string name="ng_theme_details">Theme content</string>
     <string name="ng_theme_colors">Theme colors</string>
     <string name="ng_theme_built_in_copy">Built-in theme</string>
+    <string name="ng_theme_bars">Top and bottom bars</string>
     <string name="ng_theme_built_in_copy_summary">Saving creates an editable copy</string>
     <string name="ng_theme_name_required">Enter a theme name</string>
     <string name="ng_theme_copy_name">%1$s copy</string>

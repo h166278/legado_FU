@@ -217,6 +217,8 @@ internal object Md3ThemeCoverageRegistry {
             "showBottomView",
             "useFloatingBottomBar",
             "useFloatingBottomBarLiquidGlass",
+            "floatingBottomBarBottomDistancePx",
+            "floatingBottomBarTransparency",
             "labelVisibilityMode",
             "navIconHome",
             "navIconBookshelf",
@@ -224,6 +226,13 @@ internal object Md3ThemeCoverageRegistry {
             "navIconRss",
             "navIconMy",
             "useFlexibleTopAppBar",
+        )
+        addFields(
+            Md3ThemeFieldArea.BOOKSHELF,
+            Md3ThemeFieldDisposition.FEATURE_PROFILE,
+            "bookshelfTopBarStyle",
+            "bookshelfFloatingDockTopDistancePx",
+            "bookshelfFloatingDockTransparency",
         )
         addFields(
             Md3ThemeFieldArea.BACKGROUND,
@@ -282,7 +291,7 @@ internal object Md3ThemeCoverageRegistry {
 
     val knownFieldNames: Set<String> = byName.keys
 
-    const val EXPECTED_FIELD_COUNT = 105
+    const val EXPECTED_FIELD_COUNT = 110
 
     private fun MutableList<Md3ThemeFieldSpec>.addFields(
         area: Md3ThemeFieldArea,

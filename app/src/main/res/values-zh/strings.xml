@@ -1856,6 +1856,7 @@
     <string name="ng_theme_details">主题内容</string>
     <string name="ng_theme_colors">主题配色</string>
     <string name="ng_theme_built_in_copy">内置主题</string>
+    <string name="ng_theme_bars">顶栏与底栏</string>
     <string name="ng_theme_built_in_copy_summary">保存时会创建可编辑副本</string>
     <string name="ng_theme_name_required">请输入主题名称</string>
     <string name="ng_theme_copy_name">%1$s 副本</string>

@@ -433,6 +433,26 @@ object ThemeConfig {
             context.putPrefInt(PreferKey.bgImageBlurring, theme.lightBackground.blur)
             context.putPrefInt(PreferKey.bgImageNBlurring, theme.darkBackground.blur)
             context.putPrefBoolean(PreferKey.tNavBar, theme.transparentAppBars)
+            theme.barProfile?.normalized()?.let { bars ->
+                bars.useFloatingBottomBar?.let {
+                    context.putPrefBoolean(PreferKey.useFloatingBottomBar, it)
+                }
+                bars.floatingBottomBarBottomDistancePx?.let {
+                    AppConfig.floatingBottomBarBottomDistancePx = it
+                }
+                bars.floatingBottomBarTransparency?.let {
+                    AppConfig.floatingBottomBarTransparency = it
+                }
+                bars.bookshelfTopBarStyle?.let {
+                    AppConfig.bookshelfTopBarStyle = BookshelfTopBarStyle.fromValue(it)
+                }
+                bars.bookshelfFloatingDockTopDistancePx?.let {
+                    AppConfig.bookshelfFloatingDockTopDistancePx = it
+                }
+                bars.bookshelfFloatingDockTransparency?.let {
+                    AppConfig.bookshelfFloatingDockTransparency = it
+                }
+            }
             NgColorConfigStore.update(context, theme.colors)
             theme.coverProfile?.let { cover ->
                 if (cover.applyAlbumSelection) {
