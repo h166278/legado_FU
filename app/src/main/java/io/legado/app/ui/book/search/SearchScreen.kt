@@ -83,6 +83,7 @@ internal fun SearchScreen(
     scopeNames: List<String>,
     isSourceScope: Boolean,
     precisionSearch: Boolean,
+    blockSourceDialogs: Boolean,
     focusRequestToken: Long,
     onQueryChange: (String) -> Unit,
     onSubmitSearch: (String) -> Unit,
@@ -95,6 +96,7 @@ internal fun SearchScreen(
     isInBookshelf: (SearchBook) -> Boolean,
     onClearHistory: () -> Unit,
     onTogglePrecisionSearch: () -> Unit,
+    onToggleBlockSourceDialogs: () -> Unit,
     onSourceManage: () -> Unit,
     onScopeSourceQueryChange: (String) -> Unit,
     onApplySearchScope: (SearchScope) -> Unit,
@@ -156,10 +158,15 @@ internal fun SearchScreen(
             scopeNames = scopeNames,
             isSourceScope = isSourceScope,
             precisionSearch = precisionSearch,
+            blockSourceDialogs = blockSourceDialogs,
             onClearHistory = onClearHistory,
             onTogglePrecisionSearch = {
                 showInputHelp = false
                 onTogglePrecisionSearch()
+            },
+            onToggleBlockSourceDialogs = {
+                showInputHelp = false
+                onToggleBlockSourceDialogs()
             },
             onSourceManage = onSourceManage,
             onSearchScope = { showScopeDialog = true },
@@ -260,8 +267,10 @@ private fun SearchTopBar(
     scopeNames: List<String>,
     isSourceScope: Boolean,
     precisionSearch: Boolean,
+    blockSourceDialogs: Boolean,
     onClearHistory: () -> Unit,
     onTogglePrecisionSearch: () -> Unit,
+    onToggleBlockSourceDialogs: () -> Unit,
     onSourceManage: () -> Unit,
     onSearchScope: () -> Unit,
     onShowLog: () -> Unit,
@@ -322,7 +331,8 @@ private fun SearchTopBar(
                 groups = groups,
                 scopeNames = scopeNames,
                 isSourceScope = isSourceScope,
-                precisionSearch = precisionSearch
+                precisionSearch = precisionSearch,
+                blockSourceDialogs = blockSourceDialogs
             )
             NgExpandableActionMenu(
                 expanded = menuExpanded,
@@ -333,6 +343,7 @@ private fun SearchTopBar(
                     when (item.itemId) {
                         R.id.menu_clear_history -> onClearHistory()
                         R.id.menu_precision_search -> onTogglePrecisionSearch()
+                        R.id.menu_block_source_dialogs -> onToggleBlockSourceDialogs()
                         R.id.menu_source_manage -> onSourceManage()
                         R.id.menu_search_scope -> onSearchScope()
                         R.id.menu_log -> onShowLog()
@@ -374,7 +385,8 @@ private fun searchMenuItems(
     groups: List<String>,
     scopeNames: List<String>,
     isSourceScope: Boolean,
-    precisionSearch: Boolean
+    precisionSearch: Boolean,
+    blockSourceDialogs: Boolean
 ): List<NgExpandableActionMenuItem> = buildList {
     if (historyVisible) {
         add(
@@ -391,6 +403,14 @@ private fun searchMenuItems(
             R.string.precision_search,
             R.drawable.ic_archery_target,
             checked = precisionSearch
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            R.id.menu_block_source_dialogs,
+            R.string.block_source_dialogs,
+            R.drawable.ic_popup_blocked,
+            checked = blockSourceDialogs
         )
     )
     add(

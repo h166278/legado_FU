@@ -8,6 +8,8 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.source.SourceInteractionBlockedException
+import io.legado.app.help.source.SourceInteractionPolicy
 import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallel
@@ -41,6 +43,9 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var searchBooks = arrayListOf<SearchBook>()
     private var searchJob: Job? = null
     private var workingState = MutableStateFlow(true)
+    private val interactionPolicy = SourceInteractionPolicy(
+        blockDialogs = appCtx.getPrefBoolean(PreferKey.searchBlockSourceDialogs)
+    )
 
 
     private fun initSearchPool() {
@@ -76,7 +81,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private fun startSearch() {
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
         var hasMore = false
-        searchJob = scope.launch(searchPool!!) {
+        searchJob = scope.launch(searchPool!! + interactionPolicy) {
             flow {
                 for (bs in bookSourceParts) {
                     bs.getBookSource()?.let {
@@ -97,6 +102,10 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                                         kind?.contains(searchKey) == true
                             })
                     }
+                } catch (e: SourceInteractionBlockedException) {
+                    currentCoroutineContext().ensureActive()
+                    AppLog.putDebug("${source.bookSourceName}\n${e.localizedMessage}")
+                    emptyList()
                 } catch (e: Throwable) {
                     currentCoroutineContext().ensureActive()
                     AppLog.put("书源搜索出错\n${source.bookSourceName}\n${e.localizedMessage}", e)
@@ -124,6 +133,10 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
             }.collect()
         }
+    }
+
+    fun setBlockSourceDialogs(blockDialogs: Boolean) {
+        interactionPolicy.updateBlockDialogs(blockDialogs)
     }
 
     private suspend fun mergeItems(newDataS: List<SearchBook>, precision: Boolean) {

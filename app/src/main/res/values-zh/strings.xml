@@ -211,6 +211,7 @@
     <string name="bookshelf_backup">书单备份</string>
     <string name="diagnostics">诊断</string>
     <string name="clear_records">清除记录</string>
+    <string name="block_source_dialogs">禁止弹窗</string>
     <string name="book_source_groups">书源分组</string>
     <string name="book_source">书源</string>
     <string name="book_source_manage">书源管理</string>

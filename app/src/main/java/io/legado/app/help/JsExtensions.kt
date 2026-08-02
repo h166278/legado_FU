@@ -21,6 +21,8 @@ import io.legado.app.help.http.NetworkLog
 import io.legado.app.help.http.SSLHelper
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.SourceInteractionBlockedException
+import io.legado.app.help.source.SourceInteractionPolicy
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.help.source.getSourceType
 import io.legado.app.model.Debug
@@ -94,6 +96,20 @@ interface JsExtensions : JsEncodeUtils {
 
     private val context: CoroutineContext
         get() = rhinoContextOrNull?.coroutineContext ?: EmptyCoroutineContext
+
+    private val blockSourceDialogs: Boolean
+        get() = context[SourceInteractionPolicy]?.blockDialogs == true
+
+    private fun logBlockedSourceDialog(action: String) {
+        AppLog.putDebug("${getTag() ?: "书源"}已禁止弹窗：$action")
+    }
+
+    private fun requireSourceDialogAllowed(action: String) {
+        if (blockSourceDialogs) {
+            logBlockedSourceDialog(action)
+            throw SourceInteractionBlockedException(action)
+        }
+    }
 
     /**
      * 访问网络,返回String
@@ -326,6 +342,10 @@ interface JsExtensions : JsEncodeUtils {
 
     fun startBrowser(url: String, title: String, html: String?) {
         rhinoContext.ensureActive()
+        if (blockSourceDialogs) {
+            logBlockedSourceDialog("网页")
+            return
+        }
         SourceVerificationHelp.startBrowser(getSource(), url, title, html=html)
     }
 
@@ -342,6 +362,7 @@ interface JsExtensions : JsEncodeUtils {
 
     fun startBrowserAwait(url: String, title: String, refetchAfterSuccess: Boolean, html: String?): StrResponse {
         rhinoContext.ensureActive()
+        requireSourceDialogAllowed("验证网页")
         val pair = SourceVerificationHelp.getVerificationResult(
             getSource(), url, title, true, refetchAfterSuccess, html
         )
@@ -354,6 +375,7 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun getVerificationCode(imageUrl: String): String {
         rhinoContext.ensureActive()
+        requireSourceDialogAllowed("验证码")
         return SourceVerificationHelp.getVerificationResult(getSource(), imageUrl, "", false).second
     }
 
@@ -1180,6 +1202,10 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun toast(msg: Any?) {
         rhinoContextOrNull?.ensureActive()
+        if (blockSourceDialogs) {
+            logBlockedSourceDialog("提示")
+            return
+        }
         appCtx.toastOnUi("${getTag()}: ${msg.toString()}")
     }
 
@@ -1188,6 +1214,10 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun longToast(msg: Any?) {
         rhinoContextOrNull?.ensureActive()
+        if (blockSourceDialogs) {
+            logBlockedSourceDialog("提示")
+            return
+        }
         appCtx.longToastOnUi("${getTag()}: ${msg.toString()}")
     }
 

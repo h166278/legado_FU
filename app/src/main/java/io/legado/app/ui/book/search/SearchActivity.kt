@@ -51,11 +51,14 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     override val bindNgToolbarMenu: Boolean = false
 
     private var precisionSearch by mutableStateOf(false)
+    private var blockSourceDialogs by mutableStateOf(false)
     private var focusRequestToken by mutableLongStateOf(0L)
     private var systemBackCallback: Any? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         precisionSearch = getPrefBoolean(PreferKey.precisionSearch)
+        blockSourceDialogs = getPrefBoolean(PreferKey.searchBlockSourceDialogs)
+        viewModel.setBlockSourceDialogs(blockSourceDialogs)
         binding.root.setOnPreImeBackListener { finish() }
         receiptIntent(intent)
         binding.composeView.setViewCompositionStrategy(
@@ -87,6 +90,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                     scopeNames = scopeNames,
                     isSourceScope = scopeValue.contains("::"),
                     precisionSearch = precisionSearch,
+                    blockSourceDialogs = blockSourceDialogs,
                     focusRequestToken = focusRequestToken,
                     onQueryChange = viewModel::updateQuery,
                     onSubmitSearch = viewModel::submitSearch,
@@ -103,6 +107,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                     isInBookshelf = viewModel::isInBookShelf,
                     onClearHistory = ::alertClearHistory,
                     onTogglePrecisionSearch = ::togglePrecisionSearch,
+                    onToggleBlockSourceDialogs = ::toggleBlockSourceDialogs,
                     onSourceManage = { startActivity<BookSourceActivity>() },
                     onScopeSourceQueryChange = viewModel::updateScopeSourceQuery,
                     onApplySearchScope = { searchScope ->
@@ -201,6 +206,12 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         precisionSearch = !precisionSearch
         putPrefBoolean(PreferKey.precisionSearch, precisionSearch)
         viewModel.query.value.trim().takeIf { it.isNotEmpty() }?.let(viewModel::submitSearch)
+    }
+
+    private fun toggleBlockSourceDialogs() {
+        blockSourceDialogs = !blockSourceDialogs
+        putPrefBoolean(PreferKey.searchBlockSourceDialogs, blockSourceDialogs)
+        viewModel.setBlockSourceDialogs(blockSourceDialogs)
     }
 
     private fun restartActiveSearch() {

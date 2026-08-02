@@ -216,6 +216,10 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
         stop()
     }
 
+    fun setBlockSourceDialogs(blockDialogs: Boolean) {
+        searchModel.setBlockSourceDialogs(blockDialogs)
+    }
+
     fun loadMore() {
         val state = _uiState.value
         if (!state.isSearching && !state.manualStopped && state.hasMore && searchKey.isNotEmpty()) {
