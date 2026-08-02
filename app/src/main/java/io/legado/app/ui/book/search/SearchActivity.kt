@@ -2,6 +2,7 @@ package io.legado.app.ui.book.search
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -11,7 +12,10 @@ import android.view.View.VISIBLE
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.SearchView
 import androidx.core.os.bundleOf
@@ -38,7 +42,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.transparentNavBar
@@ -46,8 +49,8 @@ import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
-import io.legado.app.ui.widget.NgActionPopup
-import io.legado.app.ui.widget.NgActionPopupItem
+import io.legado.app.ui.widget.NgExpandableActionPopup
+import io.legado.app.ui.widget.NgExpandableActionPopupItem
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.applyNavigationBarPadding
@@ -95,7 +98,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             setHasStableIds(true)
         }
     }
-    private val searchView: SearchView by lazy {
+    private val searchView: io.legado.app.ui.widget.SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
     private val searchMoreButton: ImageButton by lazy {
@@ -106,10 +109,11 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     private var historyFlowJob: Job? = null
     private var booksFlowJob: Job? = null
     private var precisionSearchMenuItem: MenuItem? = null
+    private var hasVisibleHistory = false
     private var isManualStopSearch = false
+    private var systemBackCallback: Any? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.llInputHelp.setBackgroundColor(backgroundColor)
         initRecyclerView()
         initSearchView()
         initOtherView()
@@ -122,11 +126,27 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         receiptIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && systemBackCallback == null) {
+            systemBackCallback = Api33Back.register(this) { finish() }
+        }
+    }
+
+    override fun onStop() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            systemBackCallback?.let { Api33Back.unregister(this, it) }
+            systemBackCallback = null
+        }
+        super.onStop()
+    }
+
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.book_search, menu)
         this.menu = menu
         precisionSearchMenuItem = menu.findItem(R.id.menu_precision_search)
         precisionSearchMenuItem?.isChecked = getPrefBoolean(PreferKey.precisionSearch)
+        menu.findItem(R.id.menu_clear_history)?.isVisible = hasVisibleHistory
         binding.titleBar.toolbar.post {
             applySearchTopBarStyle()
         }
@@ -190,6 +210,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_clear_history -> alertClearHistory()
             R.id.menu_precision_search -> {
                 putPrefBoolean(
                     PreferKey.precisionSearch,
@@ -222,6 +243,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         searchView.applyTint(primaryTextColor)
         searchView.isSubmitButtonEnabled = false
         searchView.queryHint = getString(R.string.search_book_key)
+        searchView.setOnPreImeBackListener { finish() }
         searchMoreButton.setOnClickListener {
             showSearchMenu()
         }
@@ -300,41 +322,76 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         prepareSearchMenu(menu)
         val items = buildSearchPopupItems(menu)
         if (items.isEmpty()) return
-        NgActionPopup(this, items, widthDp = 180) { item ->
+        NgExpandableActionPopup(this, items, widthDp = 152) { item ->
             (item.payload as? MenuItem)?.let {
                 onCompatOptionsItemSelected(it)
             }
         }.show(searchMoreButton)
     }
 
-    private fun buildSearchPopupItems(menu: Menu): List<NgActionPopupItem> {
-        val items = arrayListOf<NgActionPopupItem>()
-        var hasDynamicDivider = false
+    private fun buildSearchPopupItems(menu: Menu): List<NgExpandableActionPopupItem> {
+        val items = arrayListOf<NgExpandableActionPopupItem>()
+        val diagnosticItems = arrayListOf<NgExpandableActionPopupItem>()
+        val sourceGroupItems = arrayListOf<NgExpandableActionPopupItem>()
+        var selectedSourceItem: NgExpandableActionPopupItem? = null
+        var allSourceItem: NgExpandableActionPopupItem? = null
         for (index in 0 until menu.size()) {
             val menuItem = menu[index]
             if (!menuItem.isVisible) continue
             val isDynamicScope = menuItem.groupId == R.id.menu_group_1 ||
                 menuItem.groupId == R.id.menu_group_2
+            val popupItem = NgExpandableActionPopupItem(
+                itemId = menuItem.itemId,
+                title = menuItem.title,
+                iconRes = searchMenuIcon(menuItem),
+                checked = menuItem.isChecked,
+                payload = menuItem
+            )
+            when {
+                menuItem.itemId == R.id.menu_log ||
+                    menuItem.itemId == R.id.menu_network_log -> diagnosticItems.add(popupItem)
+
+                menuItem.itemId == R.id.menu_1 -> allSourceItem = popupItem
+                isDynamicScope && viewModel.searchScope.isSource() &&
+                    selectedSourceItem == null -> selectedSourceItem = popupItem
+
+                isDynamicScope -> sourceGroupItems.add(popupItem)
+                else -> items.add(popupItem)
+            }
+        }
+        if (diagnosticItems.isNotEmpty()) {
             items.add(
-                NgActionPopupItem(
-                    itemId = menuItem.itemId,
-                    title = menuItem.title,
-                    iconRes = searchMenuIcon(menuItem),
-                    checked = menuItem.isChecked,
-                    dividerBefore = isDynamicScope && !hasDynamicDivider && items.isNotEmpty(),
-                    payload = menuItem
+                NgExpandableActionPopupItem(
+                    itemId = R.id.menu_diagnostics,
+                    titleRes = R.string.diagnostics,
+                    iconRes = R.drawable.ic_bug_report,
+                    children = diagnosticItems
                 )
             )
-            if (isDynamicScope) {
-                hasDynamicDivider = true
-            }
+        }
+        selectedSourceItem?.let {
+            items.add(it.copy(dividerBefore = true))
+        }
+        allSourceItem?.let {
+            items.add(it.copy(dividerBefore = selectedSourceItem == null))
+        }
+        if (sourceGroupItems.isNotEmpty()) {
+            items.add(
+                NgExpandableActionPopupItem(
+                    itemId = R.id.menu_source_groups,
+                    titleRes = R.string.book_source_groups,
+                    iconRes = R.drawable.ic_groups,
+                    children = sourceGroupItems
+                )
+            )
         }
         return items
     }
 
     private fun searchMenuIcon(menuItem: MenuItem): Int {
         return when (menuItem.itemId) {
-            R.id.menu_precision_search -> R.drawable.ic_check
+            R.id.menu_clear_history -> R.drawable.ic_clear_all
+            R.id.menu_precision_search -> R.drawable.ic_archery_target
             R.id.menu_source_manage -> R.drawable.ic_cfg_source
             R.id.menu_search_scope -> R.drawable.ic_groups
             R.id.menu_log -> R.drawable.ic_cfg_about
@@ -441,7 +498,6 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             }
         }
         binding.fbStartStop.applyNavigationBarMargin(true)
-        binding.tvClearHistory.setOnClickListener { alertClearHistory() }
     }
 
     private fun initData() {
@@ -570,11 +626,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                 AppLog.put("搜索界面获取搜索历史数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect {
                 historyKeyAdapter.setItems(it)
-                if (it.isEmpty()) {
-                    binding.tvClearHistory.invisible()
-                } else {
-                    binding.tvClearHistory.visible()
-                }
+                hasVisibleHistory = it.isNotEmpty()
+                menu?.findItem(R.id.menu_clear_history)?.isVisible = hasVisibleHistory
             }
         }
     }
@@ -709,14 +762,6 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         }
     }
 
-    override fun finish() {
-        if (searchView.hasFocus()) {
-            searchView.clearFocus()
-            return
-        }
-        super.finish()
-    }
-
     companion object {
 
         fun start(context: Context, key: String?, searchScope: String? = null) {
@@ -740,5 +785,24 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             }
         }
 
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private object Api33Back {
+
+        fun register(activity: SearchActivity, action: () -> Unit): OnBackInvokedCallback {
+            val callback = OnBackInvokedCallback(action)
+            activity.onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_OVERLAY,
+                callback
+            )
+            return callback
+        }
+
+        fun unregister(activity: SearchActivity, callback: Any) {
+            activity.onBackInvokedDispatcher.unregisterOnBackInvokedCallback(
+                callback as OnBackInvokedCallback
+            )
+        }
     }
 }

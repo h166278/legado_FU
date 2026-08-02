@@ -72,7 +72,7 @@
         android:id="@+id/ll_input_help"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/background"
+        android:background="@android:color/transparent"
         android:clickable="true"
         android:focusable="true"
         android:orientation="vertical"
@@ -93,29 +93,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/tv_history"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:padding="6dp"
-                android:text="@string/searchHistory" />
-
-            <TextView
-                android:id="@+id/tv_clear_history"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:padding="6dp"
-                android:text="@string/clear" />
-
-        </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_history_key"

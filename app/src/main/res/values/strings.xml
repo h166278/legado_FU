@@ -213,6 +213,8 @@
     <string name="ai_bookshelf_assistant">AI bookshelf assistant</string>
     <string name="bookshelf_backup">Book list backup</string>
     <string name="diagnostics">Diagnostics</string>
+    <string name="clear_records">Clear history</string>
+    <string name="book_source_groups">Source groups</string>
     <string name="book_source">Book sources</string>
     <string name="book_source_manage">Sources management</string>
     <string name="book_source_manage_desc">Create/Import/Edit/Manage Book sources</string>
