@@ -15,6 +15,17 @@
     <item name="menu_tts_engine_import_online" type="id" />
     <item name="menu_show_disabled" type="id" />
 
+    <item name="menu_ai_assistant" type="id" />
+    <item name="menu_add_books" type="id" />
+    <item name="menu_add_local" type="id" />
+    <item name="menu_remote" type="id" />
+    <item name="menu_add_url" type="id" />
+    <item name="menu_bookshelf_layout" type="id" />
+    <item name="menu_bookshelf_backup" type="id" />
+    <item name="menu_export_bookshelf" type="id" />
+    <item name="menu_import_bookshelf" type="id" />
+    <item name="menu_diagnostics" type="id" />
+
     <item name="fast_scroller" type="id" />
 
     <item name="bettermovementmethod_highlight_background_span" type="id" />

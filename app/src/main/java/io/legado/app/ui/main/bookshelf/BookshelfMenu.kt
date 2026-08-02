@@ -1,0 +1,183 @@
+package io.legado.app.ui.main.bookshelf
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import io.legado.app.R
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
+import io.legado.app.ui.design.theme.NgTheme
+
+internal fun bookshelfMenuItems(
+    includeBrowseHistory: Boolean = false
+): List<NgExpandableActionMenuItem> = buildList {
+    if (includeBrowseHistory) {
+        add(
+            NgExpandableActionMenuItem(
+                itemId = R.id.menu_read_record,
+                titleRes = R.string.browse_history,
+                iconRes = R.drawable.ic_history
+            )
+        )
+    }
+    add(
+        NgExpandableActionMenuItem(
+            itemId = R.id.menu_ai_assistant,
+            titleRes = R.string.ai_bookshelf_assistant,
+            iconRes = R.drawable.ic_ai
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            itemId = R.id.menu_add_books,
+            titleRes = R.string.add_books,
+            iconRes = R.drawable.ic_add,
+            dividerBefore = true,
+            children = listOf(
+                NgExpandableActionMenuItem(
+                    R.id.menu_add_local,
+                    R.string.book_local,
+                    R.drawable.ic_add
+                ),
+                NgExpandableActionMenuItem(
+                    R.id.menu_remote,
+                    R.string.add_remote_book,
+                    R.drawable.ic_add
+                ),
+                NgExpandableActionMenuItem(
+                    R.id.menu_add_url,
+                    R.string.add_url,
+                    R.drawable.ic_add_online
+                )
+            )
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            R.id.menu_download,
+            R.string.cache_export,
+            R.drawable.ic_download_line,
+            dividerBefore = true
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            R.id.menu_group_manage,
+            R.string.group_manage,
+            R.drawable.ic_groups
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            R.id.menu_bookshelf_layout,
+            R.string.bookshelf_layout,
+            R.drawable.ic_view_quilt
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            itemId = R.id.menu_bookshelf_backup,
+            titleRes = R.string.bookshelf_backup,
+            iconRes = R.drawable.ic_backup,
+            dividerBefore = true,
+            children = listOf(
+                NgExpandableActionMenuItem(
+                    R.id.menu_export_bookshelf,
+                    R.string.export_bookshelf,
+                    R.drawable.ic_export
+                ),
+                NgExpandableActionMenuItem(
+                    R.id.menu_import_bookshelf,
+                    R.string.import_bookshelf,
+                    R.drawable.ic_import
+                )
+            )
+        )
+    )
+    add(
+        NgExpandableActionMenuItem(
+            itemId = R.id.menu_diagnostics,
+            titleRes = R.string.diagnostics,
+            iconRes = R.drawable.ic_bug_report,
+            dividerBefore = true,
+            children = listOf(
+                NgExpandableActionMenuItem(
+                    R.id.menu_log,
+                    R.string.log,
+                    R.drawable.ic_cfg_about
+                ),
+                NgExpandableActionMenuItem(
+                    R.id.menu_network_log,
+                    R.string.network_request_log,
+                    R.drawable.ic_network_check
+                )
+            )
+        )
+    )
+}
+
+@Composable
+internal fun BookshelfMenuHost(
+    includeBrowseHistory: Boolean,
+    onMenuItemClick: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    anchor: @Composable BoxScope.((() -> Unit)) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val items = remember(includeBrowseHistory) {
+        bookshelfMenuItems(includeBrowseHistory)
+    }
+    Box(modifier = modifier) {
+        anchor { expanded = true }
+        NgExpandableActionMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            items = items,
+            onItemClick = { item ->
+                expanded = false
+                onMenuItemClick(item.itemId)
+            }
+        )
+    }
+}
+
+@Composable
+internal fun BookshelfToolbarMenuButton(
+    onMenuItemClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val menuDescription = stringResource(R.string.menu)
+    BookshelfMenuHost(
+        includeBrowseHistory = false,
+        onMenuItemClick = onMenuItemClick,
+        modifier = modifier
+    ) { openMenu ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = openMenu),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_grid_menu),
+                contentDescription = menuDescription,
+                tint = Color(NgTheme.colors.onTopBar),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}

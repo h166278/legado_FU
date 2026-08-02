@@ -49,6 +49,7 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.BookshelfDockGroup
 import io.legado.app.ui.main.bookshelf.BookshelfFloatingDock
+import io.legado.app.ui.main.bookshelf.BookshelfToolbarMenuButton
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgThemeResolver
@@ -75,66 +76,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     companion object {
         private const val SORT_MENU_ID_OFFSET = 1000
         private val sortValues = intArrayOf(4, 0, 1, 2, 3, 5)
-        private val bookshelfMenuActions = listOf(
-            NgActionPopupItem(
-                R.id.menu_ai_assistant,
-                R.string.ai_bookshelf_assistant,
-                R.drawable.ic_ai
-            ),
-            NgActionPopupItem(
-                R.id.menu_add_books,
-                R.string.add_books,
-                R.drawable.ic_add,
-                dividerBefore = true,
-                children = listOf(
-                    NgActionPopupItem(R.id.menu_add_local, R.string.book_local, R.drawable.ic_add),
-                    NgActionPopupItem(R.id.menu_remote, R.string.add_remote_book, R.drawable.ic_add),
-                    NgActionPopupItem(R.id.menu_add_url, R.string.add_url, R.drawable.ic_add_online)
-                )
-            ),
-            NgActionPopupItem(R.id.menu_download, R.string.cache_export, R.drawable.ic_download_line, dividerBefore = true),
-            NgActionPopupItem(R.id.menu_group_manage, R.string.group_manage, R.drawable.ic_groups),
-            NgActionPopupItem(R.id.menu_bookshelf_layout, R.string.bookshelf_layout, R.drawable.ic_view_quilt),
-            NgActionPopupItem(
-                R.id.menu_bookshelf_backup,
-                R.string.bookshelf_backup,
-                R.drawable.ic_backup,
-                dividerBefore = true,
-                children = listOf(
-                    NgActionPopupItem(
-                        R.id.menu_export_bookshelf,
-                        R.string.export_bookshelf,
-                        R.drawable.ic_export
-                    ),
-                    NgActionPopupItem(
-                        R.id.menu_import_bookshelf,
-                        R.string.import_bookshelf,
-                        R.drawable.ic_import
-                    )
-                )
-            ),
-            NgActionPopupItem(
-                R.id.menu_diagnostics,
-                R.string.diagnostics,
-                R.drawable.ic_bug_report,
-                dividerBefore = true,
-                children = listOf(
-                    NgActionPopupItem(R.id.menu_log, R.string.log, R.drawable.ic_cfg_about),
-                    NgActionPopupItem(
-                        R.id.menu_network_log,
-                        R.string.network_request_log,
-                        R.drawable.ic_network_check
-                    )
-                )
-            )
-        )
-        private val floatingDockMenuActions = listOf(
-            NgActionPopupItem(
-                R.id.menu_read_record,
-                R.string.browse_history,
-                R.drawable.ic_history
-            )
-        ) + bookshelfMenuActions
     }
 
     constructor(position: Int) : this() {
@@ -181,15 +122,21 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.titleBar.subtitle = ""
         animateTopBarIn()
         val searchView = binding.titleBar.findViewById<View>(R.id.tv_bookshelf_search)
-        val moreButton = binding.titleBar.findViewById<View>(R.id.btn_bookshelf_more)
+        val moreButton = binding.titleBar.findViewById<ComposeView>(R.id.btn_bookshelf_more)
         applyTopBarBackground(searchView, moreButton)
         searchView.bindSoftPress()
-        moreButton.bindSoftPress()
         searchView.setOnClickListener {
             SearchActivity.start(requireContext(), null)
         }
-        moreButton.setOnClickListener {
-            showBookshelfMenu(it)
+        moreButton.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        moreButton.setContent {
+            NgAppTheme {
+                BookshelfToolbarMenuButton(
+                    onMenuItemClick = ::onBookshelfMenuItemClick
+                )
+            }
         }
         binding.tvBookshelfSort.bindSoftPress()
         binding.tvBookshelfEdit.bindSoftPress()
@@ -241,9 +188,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                     onSearchClick = {
                         SearchActivity.start(requireContext(), null)
                     },
-                    onMoreClick = { anchor ->
-                        showBookshelfMenu(anchor, includeBrowseHistory = true)
-                    },
+                    onMenuItemClick = ::onBookshelfMenuItemClick,
                     onGroupClick = { index ->
                         tabLayout.getTabAt(index)?.select()
                     },
@@ -536,15 +481,12 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         }
     }
 
-    private fun showBookshelfMenu(anchor: View, includeBrowseHistory: Boolean = false) {
-        val actions = if (includeBrowseHistory) floatingDockMenuActions else bookshelfMenuActions
-        NgActionPopup(requireContext(), actions) { action ->
-            if (action.itemId == R.id.menu_read_record) {
-                startActivity<ReadRecordActivity>()
-            } else {
-                handleBookshelfMenuItem(action.itemId)
-            }
-        }.show(anchor)
+    private fun onBookshelfMenuItemClick(itemId: Int) {
+        if (itemId == R.id.menu_read_record) {
+            startActivity<ReadRecordActivity>()
+        } else {
+            handleBookshelfMenuItem(itemId)
+        }
     }
 
     override fun onQueryTextSubmit(query: String?): Boolean {

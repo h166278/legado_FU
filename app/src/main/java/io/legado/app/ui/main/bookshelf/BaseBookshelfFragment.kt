@@ -4,6 +4,11 @@ import android.annotation.SuppressLint
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.indices
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -30,6 +35,7 @@ import io.legado.app.ui.config.AiChatActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.checkByIndex
 import io.legado.app.utils.getCheckedIndex
@@ -40,6 +46,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
+import io.legado.app.utils.dpToPx
 
 abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfViewModel>(layoutId),
     MainFragmentInterface {
@@ -91,6 +98,23 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
 
     override fun onCompatCreateOptionsMenu(menu: Menu) {
         menuInflater.inflate(R.menu.main_bookshelf, menu)
+        menu.add(Menu.NONE, R.id.menu_more, Menu.NONE, R.string.menu).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            actionView = ComposeView(requireContext()).apply {
+                layoutParams = ViewGroup.LayoutParams(48.dpToPx(), 48.dpToPx())
+                setViewCompositionStrategy(
+                    ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+                )
+                setContent {
+                    NgAppTheme {
+                        BookshelfToolbarMenuButton(
+                            onMenuItemClick = ::handleBookshelfMenuItem,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+        }
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem) {

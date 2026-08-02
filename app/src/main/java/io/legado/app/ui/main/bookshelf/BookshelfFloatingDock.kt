@@ -1,6 +1,5 @@
 package io.legado.app.ui.main.bookshelf
 
-import android.view.View
 import android.widget.ImageView
 import androidx.annotation.DrawableRes
 import androidx.appcompat.widget.AppCompatImageView
@@ -32,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,7 +68,7 @@ internal fun BookshelfFloatingDock(
     groups: List<BookshelfDockGroup>,
     selectedIndex: Int,
     onSearchClick: () -> Unit,
-    onMoreClick: (View) -> Unit,
+    onMenuItemClick: (Int) -> Unit,
     onGroupClick: (Int) -> Unit,
     onGroupLongClick: (Int) -> Unit,
     topDistancePx: Int,
@@ -123,7 +121,7 @@ internal fun BookshelfFloatingDock(
                     onGroupLongClick = onGroupLongClick,
                     modifier = Modifier.weight(1f)
                 )
-                MoreAction(onClick = onMoreClick)
+                MoreAction(onMenuItemClick = onMenuItemClick)
             }
         }
     }
@@ -351,36 +349,24 @@ private fun GroupCoverIcon(path: String, selected: Boolean) {
 }
 
 @Composable
-private fun MoreAction(onClick: (View) -> Unit) {
+private fun MoreAction(onMenuItemClick: (Int) -> Unit) {
     val contentColor = Color(NgTheme.colors.onSurfaceVariant)
         .copy(alpha = 0.66f)
     val label = stringResource(R.string.more)
-    val popupAnchor = remember { arrayOfNulls<View>(1) }
-    Box(
+    BookshelfMenuHost(
+        includeBrowseHistory = true,
+        onMenuItemClick = onMenuItemClick,
         modifier = Modifier
             .width(48.dp)
             .fillMaxHeight()
-    ) {
-        AndroidView(
-            factory = { context ->
-                View(context).apply {
-                    isClickable = false
-                    isFocusable = false
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    popupAnchor[0] = this
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(1.dp)
-        )
+    ) { openMenu ->
         DockItemContent(
             label = label,
             contentColor = contentColor,
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(16.dp))
-                .clickable { popupAnchor[0]?.let(onClick) }
+                .clickable(onClick = openMenu)
                 .semantics(mergeDescendants = true) {
                     role = Role.Button
                     contentDescription = label

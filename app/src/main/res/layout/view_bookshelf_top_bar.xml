@@ -37,15 +37,12 @@
                 android:textColor="@color/tv_text_summary"
                 android:textSize="13sp" />
 
-            <ImageButton
+            <androidx.compose.ui.platform.ComposeView
                 android:id="@+id/btn_bookshelf_more"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:background="@drawable/bg_bookshelf_top_action"
-                android:contentDescription="@string/menu"
-                android:padding="8dp"
-                android:scaleType="center"
-                android:src="@drawable/ic_grid_menu" />
+                android:contentDescription="@string/menu" />
 
         </LinearLayout>
 

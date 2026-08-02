@@ -27,76 +27,42 @@ data class NgActionPopupItem(
     val dividerBefore: Boolean = false,
     val title: CharSequence? = null,
     val iconDrawable: Drawable? = null,
-    val payload: Any? = null,
-    val children: List<NgActionPopupItem> = emptyList()
+    val payload: Any? = null
 )
 
 class NgActionPopup(
     context: Context,
-    private val items: List<NgActionPopupItem>,
+    items: List<NgActionPopupItem>,
     private val widthDp: Int = 152,
-    private val onItemClick: (NgActionPopupItem) -> Unit
+    onItemClick: (NgActionPopupItem) -> Unit
 ) : PopupWindow(
     resolveWidth(context, items, widthDp),
     ViewGroup.LayoutParams.WRAP_CONTENT
 ) {
 
-    private val expandedItemIds = mutableSetOf<Int>()
-    private val panel = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
-        background = GradientDrawable().apply {
-            setColor(context.getCompatColor(R.color.ng_surface_soft))
-            cornerRadius = 18.dpToPx().toFloat()
-        }
-    }
-
     init {
-        renderItems(context)
+        val panel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
+            background = GradientDrawable().apply {
+                setColor(context.getCompatColor(R.color.ng_surface_soft))
+                cornerRadius = 18.dpToPx().toFloat()
+            }
+        }
+        items.forEach { item ->
+            if (item.dividerBefore) {
+                panel.addView(createDivider(context))
+            }
+            panel.addView(createActionRow(context, item) {
+                dismiss()
+                onItemClick(item)
+            })
+        }
         contentView = panel
         isFocusable = true
         isOutsideTouchable = true
         setBackgroundDrawable(ColorDrawable(0x00000000))
         elevation = 8.dpToPx().toFloat()
-    }
-
-    private fun renderItems(context: Context) {
-        panel.removeAllViews()
-        items.forEach { item ->
-            addItem(context, item)
-        }
-        if (isShowing) {
-            panel.measure(
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
-            update(width, panel.measuredHeight)
-        }
-    }
-
-    private fun addItem(context: Context, item: NgActionPopupItem) {
-        if (item.dividerBefore) {
-            panel.addView(createDivider(context))
-        }
-        val isExpanded = item.itemId in expandedItemIds
-        panel.addView(createActionRow(context, item, isExpanded) {
-            if (item.children.isEmpty()) {
-                dismiss()
-                onItemClick(item)
-            } else {
-                if (isExpanded) {
-                    expandedItemIds.remove(item.itemId)
-                } else {
-                    expandedItemIds.add(item.itemId)
-                }
-                renderItems(context)
-            }
-        })
-        if (isExpanded) {
-            item.children.forEach { child ->
-                addItem(context, child)
-            }
-        }
     }
 
     fun show(anchor: View) {
@@ -130,20 +96,17 @@ class NgActionPopup(
     private fun createActionRow(
         context: Context,
         item: NgActionPopupItem,
-        isExpanded: Boolean,
         onClick: () -> Unit
     ): View {
         val color = context.getCompatColor(R.color.ng_on_surface)
-        val horizontalStartPadding = 12.dpToPx()
-        val trailingIndicatorWidth = if (item.children.isEmpty()) 0 else 30.dpToPx()
         val textMaxWidth = (
-            width - horizontalStartPadding - 20.dpToPx() - 10.dpToPx() - 12.dpToPx() -
-                (if (item.checked) 30.dpToPx() else 0) - trailingIndicatorWidth
+            width - 12.dpToPx() - 20.dpToPx() - 10.dpToPx() - 12.dpToPx() -
+                (if (item.checked) 30.dpToPx() else 0)
             ).coerceAtLeast(0)
         return LinearLayout(context).apply {
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
-            setPadding(horizontalStartPadding, 0, 12.dpToPx(), 0)
+            setPadding(12.dpToPx(), 0, 12.dpToPx(), 0)
             minimumHeight = 44.dpToPx()
             isClickable = true
             isFocusable = true
@@ -177,19 +140,6 @@ class NgActionPopup(
                     scaleType = ImageView.ScaleType.CENTER_INSIDE
                     setPadding(2.dpToPx(), 2.dpToPx(), 2.dpToPx(), 2.dpToPx())
                     setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ng_ic_popup_selected))
-                    setColorFilter(color)
-                }, LinearLayout.LayoutParams(20.dpToPx(), 20.dpToPx()).apply {
-                    marginStart = 10.dpToPx()
-                })
-            }
-            if (item.children.isNotEmpty()) {
-                addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-                addView(ImageView(context).apply {
-                    scaleType = ImageView.ScaleType.CENTER_INSIDE
-                    setPadding(2.dpToPx(), 2.dpToPx(), 2.dpToPx(), 2.dpToPx())
-                    setImageResource(
-                        if (isExpanded) R.drawable.ic_arrow_down else R.drawable.ic_arrow_right
-                    )
                     setColorFilter(color)
                 }, LinearLayout.LayoutParams(20.dpToPx(), 20.dpToPx()).apply {
                     marginStart = 10.dpToPx()
@@ -229,29 +179,19 @@ class NgActionPopup(
             }
             val rowBaseWidth = 12.dpToPx() + 20.dpToPx() + 10.dpToPx() + 12.dpToPx()
             val selectedIndicatorWidth = 10.dpToPx() + 20.dpToPx()
-            val contentWidth = flattenItems(items).maxOfOrNull { item ->
+            val contentWidth = items.maxOfOrNull { item ->
                 textPaint.measureText(
                     item.title?.toString()
                         ?: item.titleRes.takeIf { it != 0 }?.let { context.getString(it) }
                         ?: ""
                 ).toInt() + rowBaseWidth +
-                    (if (item.checked) selectedIndicatorWidth else 0) +
-                    (if (item.children.isNotEmpty()) selectedIndicatorWidth else 0)
+                    if (item.checked) selectedIndicatorWidth else 0
             } ?: 0
             val minWidth = 152.dpToPx()
             val maxWidth = (context.resources.displayMetrics.widthPixels - 16.dpToPx())
                 .coerceAtMost(280.dpToPx())
                 .coerceAtLeast(minWidth)
             return (contentWidth + 4.dpToPx()).coerceIn(minWidth, maxWidth)
-        }
-
-        private fun flattenItems(
-            items: List<NgActionPopupItem>
-        ): List<NgActionPopupItem> = buildList {
-            items.forEach { item ->
-                add(item)
-                addAll(flattenItems(item.children))
-            }
         }
     }
 }
