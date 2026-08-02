@@ -17,6 +17,9 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfTopBarStyle
+import io.legado.app.help.config.FloatingBottomBarConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.normalizeThemeMode
 import io.legado.app.help.http.addHeaders
@@ -39,6 +42,7 @@ import io.legado.app.utils.putPrefString
 import io.legado.app.utils.readUri
 import io.legado.app.utils.removePref
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.statusBarHeight
 import io.legado.app.utils.sysConfiguration
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
@@ -83,6 +87,23 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                         onThemeModeSelected = ::selectThemeMode,
                         onLauncherIconClick = ::showLauncherIconSelection,
                         onFloatingBottomBarChanged = ::setFloatingBottomBar,
+                        onFloatingBottomBarBottomDistanceChanged =
+                            ::setFloatingBottomBarBottomDistanceDraft,
+                        onFloatingBottomBarBottomDistanceChangeFinished =
+                            ::saveFloatingBottomBarBottomDistance,
+                        onFloatingBottomBarTransparencyChanged =
+                            ::setFloatingBottomBarTransparencyDraft,
+                        onFloatingBottomBarTransparencyChangeFinished =
+                            ::saveFloatingBottomBarTransparency,
+                        onBookshelfTopBarStyleSelected = ::setBookshelfTopBarStyle,
+                        onBookshelfFloatingDockTopDistanceChanged =
+                            ::setBookshelfFloatingDockTopDistanceDraft,
+                        onBookshelfFloatingDockTopDistanceChangeFinished =
+                            ::saveBookshelfFloatingDockTopDistance,
+                        onBookshelfFloatingDockTransparencyChanged =
+                            ::setBookshelfFloatingDockTransparencyDraft,
+                        onBookshelfFloatingDockTransparencyChangeFinished =
+                            ::saveBookshelfFloatingDockTransparency,
                         onTransparentAppBarsChanged = ::setTransparentAppBars,
                         onOpenCustomColors = {
                             (activity as? ConfigActivity)?.openThemeColorConfigPage()
@@ -146,11 +167,31 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     private fun refreshContent() {
         val launcherIcon = getPrefString(PreferKey.launcherIcon, DEFAULT_LAUNCHER_ICON)
             ?: DEFAULT_LAUNCHER_ICON
+        val displayMetrics = resources.displayMetrics
+        val statusBarHeightPx = requireContext().statusBarHeight
         screenState = ThemeConfigScreenState(
             themeMode = normalizeThemeMode(AppConfig.themeMode),
             showLauncherIcon = Build.VERSION.SDK_INT >= 26,
             launcherIconRes = launcherIconResource(launcherIcon),
             floatingBottomBar = getPrefBoolean(PreferKey.useFloatingBottomBar, false),
+            floatingBottomBarBottomDistancePx =
+                FloatingBottomBarConfig.resolveBottomDistancePx(
+                    storedDistancePx = AppConfig.floatingBottomBarBottomDistancePx,
+                    density = displayMetrics.density
+                ),
+            floatingBottomBarTransparency = AppConfig.floatingBottomBarTransparency,
+            bookshelfTopBarStyle = AppConfig.bookshelfTopBarStyle,
+            bookshelfFloatingDockMinTopDistancePx =
+                BookshelfFloatingDockConfig.MIN_TOP_DISTANCE_PX,
+            bookshelfFloatingDockTopDistancePx =
+                BookshelfFloatingDockConfig.resolveTopDistancePx(
+                    storedDistancePx = AppConfig.bookshelfFloatingDockTopDistancePx,
+                    screenWidthPx = displayMetrics.widthPixels,
+                    density = displayMetrics.density,
+                    statusBarHeightPx = statusBarHeightPx
+                ),
+            bookshelfFloatingDockTransparency =
+                AppConfig.bookshelfFloatingDockTransparency,
             transparentAppBars = getPrefBoolean(PreferKey.tNavBar, false),
             fontScaleSummary = getString(
                 R.string.font_scale_summary,
@@ -207,6 +248,56 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
         if (screenState.floatingBottomBar == enabled) return
         putPrefBoolean(PreferKey.useFloatingBottomBar, enabled)
         screenState = screenState.copy(floatingBottomBar = enabled)
+    }
+
+    private fun setFloatingBottomBarBottomDistanceDraft(value: Int) {
+        val normalized = FloatingBottomBarConfig.normalizeBottomDistancePx(value)
+        if (normalized == screenState.floatingBottomBarBottomDistancePx) return
+        screenState = screenState.copy(floatingBottomBarBottomDistancePx = normalized)
+    }
+
+    private fun saveFloatingBottomBarBottomDistance() {
+        AppConfig.floatingBottomBarBottomDistancePx =
+            screenState.floatingBottomBarBottomDistancePx
+    }
+
+    private fun setFloatingBottomBarTransparencyDraft(value: Int) {
+        val normalized = FloatingBottomBarConfig.normalizeTransparencyPercent(value)
+        if (normalized == screenState.floatingBottomBarTransparency) return
+        screenState = screenState.copy(floatingBottomBarTransparency = normalized)
+    }
+
+    private fun saveFloatingBottomBarTransparency() {
+        AppConfig.floatingBottomBarTransparency =
+            screenState.floatingBottomBarTransparency
+    }
+
+    private fun setBookshelfTopBarStyle(style: BookshelfTopBarStyle) {
+        if (style == screenState.bookshelfTopBarStyle) return
+        AppConfig.bookshelfTopBarStyle = style
+        screenState = screenState.copy(bookshelfTopBarStyle = style)
+    }
+
+    private fun setBookshelfFloatingDockTopDistanceDraft(value: Int) {
+        val normalized = BookshelfFloatingDockConfig.normalizeTopDistancePx(value)
+        if (normalized == screenState.bookshelfFloatingDockTopDistancePx) return
+        screenState = screenState.copy(bookshelfFloatingDockTopDistancePx = normalized)
+    }
+
+    private fun saveBookshelfFloatingDockTopDistance() {
+        AppConfig.bookshelfFloatingDockTopDistancePx =
+            screenState.bookshelfFloatingDockTopDistancePx
+    }
+
+    private fun setBookshelfFloatingDockTransparencyDraft(value: Int) {
+        val normalized = BookshelfFloatingDockConfig.normalizeTransparencyPercent(value)
+        if (normalized == screenState.bookshelfFloatingDockTransparency) return
+        screenState = screenState.copy(bookshelfFloatingDockTransparency = normalized)
+    }
+
+    private fun saveBookshelfFloatingDockTransparency() {
+        AppConfig.bookshelfFloatingDockTransparency =
+            screenState.bookshelfFloatingDockTransparency
     }
 
     private fun setTransparentAppBars(enabled: Boolean) {

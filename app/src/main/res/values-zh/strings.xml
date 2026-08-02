@@ -715,6 +715,17 @@
     <string name="change_icon">切换图标</string>
     <string name="floating_bottom_bar">悬浮底栏</string>
     <string name="floating_bottom_bar_summary">主界面使用悬浮 Dock</string>
+    <string name="main_bottom_bar_style">主界面底栏样式</string>
+    <string name="traditional_bottom_bar">传统底栏</string>
+    <string name="floating_bottom_bar_bottom_distance">距屏幕底部</string>
+    <string name="floating_bottom_bar_transparency">Dock 透明度</string>
+    <string name="bookshelf_top_bar_style">书架顶栏样式</string>
+    <string name="bookshelf_top_bar_traditional">传统样式</string>
+    <string name="bookshelf_top_bar_floating_dock">悬浮顶栏</string>
+    <string name="bookshelf_floating_dock_top_distance">距状态栏</string>
+    <string name="bookshelf_floating_dock_top_distance_value">%1$d px</string>
+    <string name="bookshelf_floating_dock_transparency">Dock 透明度</string>
+    <string name="bookshelf_floating_dock_transparency_value">%1$d%%</string>
     <string name="transparent_app_bars">界面栏透明</string>
     <string name="transparent_app_bars_summary">标题栏、底栏与操作栏使用透明背景</string>
     <string name="remove_from_bookshelf">删除书籍</string>

@@ -31,6 +31,7 @@ import io.legado.app.help.AppWebDav
 import io.legado.app.help.ai.AiConfig
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.FloatingBottomBarConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.NgThemeNavigationIcons
 import io.legado.app.help.config.NgThemeRuntimeAssets
@@ -581,6 +582,22 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         floatingBottomNavigationContainer.visibility =
             if (useFloating) View.VISIBLE else View.GONE
         if (useFloating) {
+            val bottomDistancePx = FloatingBottomBarConfig.resolveBottomDistancePx(
+                storedDistancePx = AppConfig.floatingBottomBarBottomDistancePx,
+                density = resources.displayMetrics.density
+            )
+            (floatingBottomNavigation.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+                layoutParams ->
+                if (layoutParams.bottomMargin != bottomDistancePx) {
+                    layoutParams.bottomMargin = bottomDistancePx
+                    floatingBottomNavigation.layoutParams = layoutParams
+                }
+            }
+            floatingBottomNavigation.setSurfaceAlpha(
+                FloatingBottomBarConfig.surfaceAlpha(
+                    AppConfig.floatingBottomBarTransparency
+                )
+            )
             floatingBottomNavigation.select(pagePosition, notify = false)
         }
     }

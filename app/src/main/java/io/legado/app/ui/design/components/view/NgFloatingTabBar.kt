@@ -13,9 +13,12 @@ import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.widget.ImageViewCompat
 import io.legado.app.R
 import io.legado.app.ui.design.theme.NgThemeResolver
+import kotlin.math.roundToInt
 
 data class NgFloatingTabItem(
     val text: CharSequence? = null,
@@ -71,6 +74,20 @@ class NgFloatingTabBar @JvmOverloads constructor(
                     R.drawable.ng_bg_floating_tabs_overlay
             }
         )
+    }
+
+    /** 只调整 Dock 表面，不改变图标和文字的透明度。 */
+    fun setSurfaceAlpha(alpha: Float) {
+        val surfaceColor = ContextCompat.getColor(context, R.color.ng_floating_dock_surface)
+        background = GradientDrawable().apply {
+            cornerRadius = 12.dp.toFloat()
+            setColor(
+                ColorUtils.setAlphaComponent(
+                    surfaceColor,
+                    (alpha.coerceIn(0f, 1f) * 255).roundToInt()
+                )
+            )
+        }
     }
 
     fun setItems(

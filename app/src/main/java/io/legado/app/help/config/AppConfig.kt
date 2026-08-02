@@ -250,6 +250,29 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val useFloatingBottomBar: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.useFloatingBottomBar, false)
 
+    var floatingBottomBarBottomDistancePx: Int
+        get() = appCtx.getPrefInt(
+            PreferKey.floatingBottomBarBottomDistancePx,
+            FloatingBottomBarConfig.AUTOMATIC_BOTTOM_DISTANCE_PX
+        )
+        set(value) {
+            appCtx.putPrefInt(PreferKey.floatingBottomBarBottomDistancePx, value)
+        }
+
+    var floatingBottomBarTransparency: Int
+        get() = FloatingBottomBarConfig.normalizeTransparencyPercent(
+            appCtx.getPrefInt(
+                PreferKey.floatingBottomBarTransparency,
+                FloatingBottomBarConfig.DEFAULT_TRANSPARENCY_PERCENT
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(
+                PreferKey.floatingBottomBarTransparency,
+                FloatingBottomBarConfig.normalizeTransparencyPercent(value)
+            )
+        }
+
     val screenOrientation: String?
         get() = appCtx.getPrefString(PreferKey.screenOrientation)
 
@@ -257,6 +280,37 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefInt(PreferKey.bookGroupStyle, 0)
         set(value) {
             appCtx.putPrefInt(PreferKey.bookGroupStyle, value)
+        }
+
+    var bookshelfTopBarStyle: BookshelfTopBarStyle
+        get() = BookshelfTopBarStyle.fromValue(
+            appCtx.getPrefInt(PreferKey.bookshelfTopBarStyle, BookshelfTopBarStyle.TRADITIONAL.value)
+        )
+        set(value) {
+            appCtx.putPrefInt(PreferKey.bookshelfTopBarStyle, value.value)
+        }
+
+    var bookshelfFloatingDockTopDistancePx: Int
+        get() = appCtx.getPrefInt(
+            PreferKey.bookshelfFloatingDockTopDistancePx,
+            BookshelfFloatingDockConfig.AUTOMATIC_TOP_DISTANCE_PX
+        )
+        set(value) {
+            appCtx.putPrefInt(PreferKey.bookshelfFloatingDockTopDistancePx, value)
+        }
+
+    var bookshelfFloatingDockTransparency: Int
+        get() = BookshelfFloatingDockConfig.normalizeTransparencyPercent(
+            appCtx.getPrefInt(
+                PreferKey.bookshelfFloatingDockTransparency,
+                BookshelfFloatingDockConfig.DEFAULT_TRANSPARENCY_PERCENT
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(
+                PreferKey.bookshelfFloatingDockTransparency,
+                BookshelfFloatingDockConfig.normalizeTransparencyPercent(value)
+            )
         }
 
     var bookshelfLayout: Int

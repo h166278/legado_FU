@@ -720,6 +720,17 @@
     <string name="change_icon">Change icon</string>
     <string name="floating_bottom_bar">Floating bottom bar</string>
     <string name="floating_bottom_bar_summary">Use a floating Dock on the main screen</string>
+    <string name="main_bottom_bar_style">Main bottom bar style</string>
+    <string name="traditional_bottom_bar">Traditional bottom bar</string>
+    <string name="floating_bottom_bar_bottom_distance">Distance from screen bottom</string>
+    <string name="floating_bottom_bar_transparency">Dock transparency</string>
+    <string name="bookshelf_top_bar_style">Bookshelf top bar style</string>
+    <string name="bookshelf_top_bar_traditional">Traditional</string>
+    <string name="bookshelf_top_bar_floating_dock">Floating top bar</string>
+    <string name="bookshelf_floating_dock_top_distance">Distance below status bar</string>
+    <string name="bookshelf_floating_dock_top_distance_value">%1$d px</string>
+    <string name="bookshelf_floating_dock_transparency">Dock transparency</string>
+    <string name="bookshelf_floating_dock_transparency_value">%1$d%%</string>
     <string name="remove_from_bookshelf">Remove</string>
     <string name="start_read">Start reading</string>
     <string name="data_loading">Loading…</string>
