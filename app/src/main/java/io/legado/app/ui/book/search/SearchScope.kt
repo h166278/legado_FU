@@ -1,12 +1,13 @@
 package io.legado.app.ui.book.search
 
-import androidx.lifecycle.MutableLiveData
 import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.splitNotBlank
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import splitties.init.appCtx
 
 /**
@@ -29,11 +30,12 @@ data class SearchScope(private var scope: String) {
         return scope
     }
 
-    val stateLiveData = MutableLiveData(scope)
+    private val _stateFlow = MutableStateFlow(scope)
+    val stateFlow = _stateFlow.asStateFlow()
 
-    fun update(scope: String, postValue: Boolean = true, save: Boolean = true) {
+    fun update(scope: String, save: Boolean = true) {
         this.scope = scope
-        if (postValue) stateLiveData.postValue(scope)
+        _stateFlow.value = scope
         if (save) { //不对单书源的搜索进行缓存，防止下次依旧为单书源搜索（单书源搜索需要每次都指定）
             save()
         }
@@ -41,13 +43,13 @@ data class SearchScope(private var scope: String) {
 
     fun update(groups: List<String>) {
         scope = groups.joinToString(",")
-        stateLiveData.postValue(scope)
+        notifyChanged()
         save()
     }
 
     fun update(source: BookSource) {
         scope = "${source.bookSourceName}::${source.bookSourceUrl}"
-        stateLiveData.postValue(scope)
+        notifyChanged()
         if (!isSource()) {
             save()
         }
@@ -99,7 +101,7 @@ data class SearchScope(private var scope: String) {
             }
             this.scope = stringBuilder.toString()
         }
-        stateLiveData.postValue(this.scope)
+        notifyChanged()
     }
 
     /**
@@ -125,14 +127,13 @@ data class SearchScope(private var scope: String) {
                 }
                 if (oldScope.size != newScope.size) {
                     update(newScope)
-                    stateLiveData.postValue(scope)
                 }
             }
             if (list.isEmpty()) {
                 scope = ""
                 appDb.bookSourceDao.allEnabledPart.let {
                     if (it.isNotEmpty()) {
-                        stateLiveData.postValue(scope)
+                        notifyChanged()
                         list.addAll(it)
                     }
                 }
@@ -152,6 +153,10 @@ data class SearchScope(private var scope: String) {
         } else {
             AppConfig.searchGroup = scope
         }
+    }
+
+    private fun notifyChanged() {
+        _stateFlow.value = scope
     }
 
 }

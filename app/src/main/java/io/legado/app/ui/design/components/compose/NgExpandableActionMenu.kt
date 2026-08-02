@@ -43,7 +43,9 @@ data class NgExpandableActionMenuItem(
     @StringRes val titleRes: Int,
     @DrawableRes val iconRes: Int,
     val dividerBefore: Boolean = false,
-    val children: List<NgExpandableActionMenuItem> = emptyList()
+    val children: List<NgExpandableActionMenuItem> = emptyList(),
+    val title: String? = null,
+    val checked: Boolean = false
 )
 
 /**
@@ -156,13 +158,22 @@ private fun NgExpandableActionMenuRow(
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = stringResource(item.titleRes),
+            text = item.title ?: stringResource(item.titleRes),
             color = contentColor,
             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (item.checked) {
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                painter = painterResource(R.drawable.ng_ic_popup_selected),
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(20.dp)
+            )
+        }
         if (item.children.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
             Box(

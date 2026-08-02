@@ -15,7 +15,6 @@ import android.text.style.ImageSpan
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.KeyEvent
 import android.view.View.OnFocusChangeListener
 import android.widget.TextView
 import androidx.appcompat.widget.SearchView
@@ -32,23 +31,6 @@ class SearchView @JvmOverloads constructor(
     private var mSearchHintIcon: Drawable? = null
     private var textView: TextView? = null
     private var textViewConfigured = false
-    private var onPreImeBackListener: (() -> Unit)? = null
-
-    fun setOnPreImeBackListener(listener: (() -> Unit)?) {
-        onPreImeBackListener = listener
-    }
-
-    override fun dispatchKeyEventPreIme(event: KeyEvent): Boolean {
-        val listener = onPreImeBackListener
-        if (listener != null && event.keyCode == KeyEvent.KEYCODE_BACK) {
-            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
-                listener()
-            }
-            return true
-        }
-        return super.dispatchKeyEventPreIme(event)
-    }
-
     @SuppressLint("UseCompatLoadingForDrawables")
     override fun onLayout(
         changed: Boolean,

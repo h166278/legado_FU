@@ -1,117 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<io.legado.app.ui.widget.BackInterceptFrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".ui.book.search.SearchActivity">
+    android:layout_height="match_parent">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:contentInsetEnd="10dp"
-        app:contentInsetEndWithActions="10dp"
-        app:contentInsetLeft="0dp"
-        app:contentInsetStart="0dp"
-        app:contentInsetStartWithNavigation="0dp"
-        app:contentLayout="@layout/view_book_search"
-        app:layout_constraintTop_toTopOf="parent"
-        app:navigationIcon="@drawable/ic_chevron_left_search"
-        app:title="搜索" />
+        android:layout_height="match_parent" />
 
-    <io.legado.app.ui.widget.anima.RefreshProgressBar
-        android:id="@+id/refresh_progress_bar"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:bg_color="@android:color/transparent"
-        app:layout_constraintEnd_toEndOf="@id/tv_search_progress"
-        app:layout_constraintStart_toStartOf="@id/tv_search_progress"
-        app:second_color="?attr/colorAccent"
-        app:layout_constraintTop_toBottomOf="@id/tv_search_progress" />
-
-    <io.legado.app.ui.book.search.SearchProgressTextView
-        android:id="@+id/tv_search_progress"
-        android:layout_width="0dp"
-        android:layout_height="30dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="16dp"
-        android:ellipsize="end"
-        android:gravity="center_vertical"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:singleLine="true"
-        android:textColor="@color/secondaryText"
-        android:textSize="12sp"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/title_bar"
-        tools:text="@string/change_source_progress" />
-
-    <io.legado.app.ui.widget.dynamiclayout.DynamicFrameLayout
-        android:id="@+id/content_view"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/refresh_progress_bar">
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recycler_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingTop="2dp"
-            android:paddingBottom="10dp"
-            tools:listitem="@layout/item_search" />
-
-    </io.legado.app.ui.widget.dynamiclayout.DynamicFrameLayout>
-
-    <LinearLayout
-        android:id="@+id/ll_input_help"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:background="@android:color/transparent"
-        android:clickable="true"
-        android:focusable="true"
-        android:orientation="vertical"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/refresh_progress_bar">
-
-        <TextView
-            android:id="@+id/tv_book_show"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="6dp"
-            android:text="@string/bookshelf"
-            android:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_bookshelf_search"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rv_history_key"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-    </LinearLayout>
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fb_start_stop"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:contentDescription="@string/stop"
-        android:src="@drawable/ic_stop_black_24dp"
-        android:visibility="invisible"
-        app:fabSize="mini"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintRight_toRightOf="parent" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</io.legado.app.ui.widget.BackInterceptFrameLayout>
 

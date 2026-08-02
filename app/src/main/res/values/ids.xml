@@ -26,6 +26,9 @@
     <item name="menu_import_bookshelf" type="id" />
     <item name="menu_diagnostics" type="id" />
     <item name="menu_source_groups" type="id" />
+    <item name="menu_clear_history" type="id" />
+    <item name="menu_precision_search" type="id" />
+    <item name="menu_search_scope" type="id" />
 
     <item name="fast_scroller" type="id" />
 

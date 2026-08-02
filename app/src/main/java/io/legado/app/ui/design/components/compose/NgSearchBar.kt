@@ -17,9 +17,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.colorResource
@@ -32,7 +38,12 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.design.theme.NgTheme
 
-/** 与 View 版 NgSearchBar 对齐的 44dp 搜索框。查询状态由页面持有。 */
+enum class NgSearchBarVariant {
+    STANDARD,
+    TOOLBAR
+}
+
+/** 统一 NG 搜索框；列表页使用 44dp 标准规格，顶栏使用 36dp Toolbar 规格。 */
 @Composable
 fun NgSearchBar(
     query: String,
@@ -41,20 +52,38 @@ fun NgSearchBar(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     searchIcon: Painter = painterResource(R.drawable.ic_search),
+    variant: NgSearchBarVariant = NgSearchBarVariant.STANDARD,
+    containerColor: Color? = null,
+    hideHintOnFocus: Boolean = false,
+    onFocusChanged: (Boolean) -> Unit = {},
     onSearch: (String) -> Unit = {}
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val isToolbar = variant == NgSearchBarVariant.TOOLBAR
+    val fieldHeight = if (isToolbar) 36.dp else 44.dp
+    val shape = RoundedCornerShape(if (isToolbar) 18.dp else 22.dp)
     val contentColor = colorResource(R.color.ng_on_surface)
     val secondaryColor = colorResource(R.color.ng_on_surface_variant)
+    val resolvedContainerColor = containerColor ?: colorResource(R.color.ng_surface_card)
+    var focused by remember { mutableStateOf(false) }
     BasicTextField(
         value = query,
         onValueChange = onQueryChange,
         modifier = modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(fieldHeight)
             .clip(shape)
-            .background(colorResource(R.color.ng_surface_card))
-            .border(0.8.dp, colorResource(R.color.ng_card_stroke), shape),
+            .background(resolvedContainerColor)
+            .then(
+                if (isToolbar) {
+                    Modifier
+                } else {
+                    Modifier.border(0.8.dp, colorResource(R.color.ng_card_stroke), shape)
+                }
+            )
+            .onFocusChanged { state ->
+                focused = state.isFocused
+                onFocusChanged(state.isFocused)
+            },
         enabled = enabled,
         singleLine = true,
         textStyle = TextStyle(
@@ -69,18 +98,21 @@ fun NgSearchBar(
         keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
         decorationBox = { innerTextField ->
             Row(
-                modifier = Modifier.padding(start = 16.dp, end = 8.dp),
+                modifier = Modifier.padding(
+                    start = if (isToolbar) 14.dp else 16.dp,
+                    end = if (isToolbar) 6.dp else 8.dp
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     painter = searchIcon,
                     contentDescription = stringResource(R.string.search),
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(if (isToolbar) 20.dp else 22.dp),
                     tint = secondaryColor
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(if (isToolbar) 8.dp else 10.dp))
                 androidx.compose.foundation.layout.Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) {
+                    if (query.isEmpty() && (!hideHintOnFocus || !focused)) {
                         Text(
                             text = hint,
                             color = secondaryColor,
@@ -95,13 +127,13 @@ fun NgSearchBar(
                 if (query.isNotEmpty()) {
                     IconButton(
                         onClick = { onQueryChange("") },
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(if (isToolbar) 30.dp else 38.dp),
                         enabled = enabled
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_baseline_close),
                             contentDescription = stringResource(R.string.clear),
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(if (isToolbar) 18.dp else 20.dp),
                             tint = secondaryColor
                         )
                     }
