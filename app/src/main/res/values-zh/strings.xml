@@ -206,6 +206,10 @@
     <string name="view">视图</string>
     <string name="book_library">书城</string>
     <string name="book_local">添加本地</string>
+    <string name="add_books">添加书籍</string>
+    <string name="ai_bookshelf_assistant">AI 书架助手</string>
+    <string name="bookshelf_backup">书单备份</string>
+    <string name="diagnostics">诊断</string>
     <string name="book_source">书源</string>
     <string name="book_source_manage">书源管理</string>
     <string name="book_source_manage_desc">新建、导入、编辑或管理书源</string>

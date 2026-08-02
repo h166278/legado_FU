@@ -209,6 +209,10 @@
     <string name="view">View</string>
     <string name="book_library">Library</string>
     <string name="book_local">Import books</string>
+    <string name="add_books">Add books</string>
+    <string name="ai_bookshelf_assistant">AI bookshelf assistant</string>
+    <string name="bookshelf_backup">Book list backup</string>
+    <string name="diagnostics">Diagnostics</string>
     <string name="book_source">Book sources</string>
     <string name="book_source_manage">Sources management</string>
     <string name="book_source_manage_desc">Create/Import/Edit/Manage Book sources</string>

@@ -21,6 +21,11 @@ import io.legado.app.utils.getCompatColor
 object NgMenuPopup {
 
     private const val DEFAULT_WIDTH_DP = 0
+    private val inlineSubMenuIds = setOf(
+        R.id.menu_add_books,
+        R.id.menu_bookshelf_backup,
+        R.id.menu_diagnostics
+    )
 
     private data class NativeOverflowBinding(
         val menu: Menu,
@@ -89,7 +94,10 @@ object NgMenuPopup {
                     iconDrawable = item.icon.takeIf { iconRes == 0 },
                     checked = item.isChecked,
                     dividerBefore = groupChanged,
-                    payload = item
+                    payload = item,
+                    children = item.subMenu?.toPopupItems(
+                        includeInvisible = includeInvisible
+                    ).orEmpty()
                 )
             }
     }
@@ -135,7 +143,9 @@ object NgMenuPopup {
                 item.itemId != R.id.menu_more &&
                     item.isVisible &&
                     item.actionView == null &&
-                    item.subMenu == null &&
+                    (
+                        item.subMenu == null || item.itemId in inlineSubMenuIds
+                    ) &&
                     !item.wantsActionButton()
             }
     }

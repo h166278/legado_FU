@@ -76,18 +76,57 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         private const val SORT_MENU_ID_OFFSET = 1000
         private val sortValues = intArrayOf(4, 0, 1, 2, 3, 5)
         private val bookshelfMenuActions = listOf(
-            NgActionPopupItem(R.id.menu_update_toc, R.string.update_toc, R.drawable.ic_refresh_black_24dp),
-            NgActionPopupItem(R.id.menu_ai_assistant, R.string.bookshelf_management, R.drawable.ic_ai),
-            NgActionPopupItem(R.id.menu_add_local, R.string.book_local, R.drawable.ic_add, dividerBefore = true),
-            NgActionPopupItem(R.id.menu_remote, R.string.add_remote_book, R.drawable.ic_add),
-            NgActionPopupItem(R.id.menu_add_url, R.string.add_url, R.drawable.ic_add_online),
+            NgActionPopupItem(
+                R.id.menu_ai_assistant,
+                R.string.ai_bookshelf_assistant,
+                R.drawable.ic_ai
+            ),
+            NgActionPopupItem(
+                R.id.menu_add_books,
+                R.string.add_books,
+                R.drawable.ic_add,
+                dividerBefore = true,
+                children = listOf(
+                    NgActionPopupItem(R.id.menu_add_local, R.string.book_local, R.drawable.ic_add),
+                    NgActionPopupItem(R.id.menu_remote, R.string.add_remote_book, R.drawable.ic_add),
+                    NgActionPopupItem(R.id.menu_add_url, R.string.add_url, R.drawable.ic_add_online)
+                )
+            ),
             NgActionPopupItem(R.id.menu_download, R.string.cache_export, R.drawable.ic_download_line, dividerBefore = true),
             NgActionPopupItem(R.id.menu_group_manage, R.string.group_manage, R.drawable.ic_groups),
             NgActionPopupItem(R.id.menu_bookshelf_layout, R.string.bookshelf_layout, R.drawable.ic_view_quilt),
-            NgActionPopupItem(R.id.menu_export_bookshelf, R.string.export_bookshelf, R.drawable.ic_export, dividerBefore = true),
-            NgActionPopupItem(R.id.menu_import_bookshelf, R.string.import_bookshelf, R.drawable.ic_import),
-            NgActionPopupItem(R.id.menu_log, R.string.log, R.drawable.ic_cfg_about, dividerBefore = true),
-            NgActionPopupItem(R.id.menu_network_log, R.string.network_request_log, R.drawable.ic_network_check)
+            NgActionPopupItem(
+                R.id.menu_bookshelf_backup,
+                R.string.bookshelf_backup,
+                R.drawable.ic_backup,
+                dividerBefore = true,
+                children = listOf(
+                    NgActionPopupItem(
+                        R.id.menu_export_bookshelf,
+                        R.string.export_bookshelf,
+                        R.drawable.ic_export
+                    ),
+                    NgActionPopupItem(
+                        R.id.menu_import_bookshelf,
+                        R.string.import_bookshelf,
+                        R.drawable.ic_import
+                    )
+                )
+            ),
+            NgActionPopupItem(
+                R.id.menu_diagnostics,
+                R.string.diagnostics,
+                R.drawable.ic_bug_report,
+                dividerBefore = true,
+                children = listOf(
+                    NgActionPopupItem(R.id.menu_log, R.string.log, R.drawable.ic_cfg_about),
+                    NgActionPopupItem(
+                        R.id.menu_network_log,
+                        R.string.network_request_log,
+                        R.drawable.ic_network_check
+                    )
+                )
+            )
         )
         private val floatingDockMenuActions = listOf(
             NgActionPopupItem(
