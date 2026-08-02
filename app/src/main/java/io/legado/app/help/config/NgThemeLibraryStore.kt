@@ -71,6 +71,26 @@ internal data class NgThemeBarProfile(
     }
 }
 
+internal fun NgThemeBarProfile?.withFallback(
+    fallback: NgThemeBarProfile
+): NgThemeBarProfile {
+    val profile = this
+    return NgThemeBarProfile(
+        useFloatingBottomBar = profile?.useFloatingBottomBar
+            ?: fallback.useFloatingBottomBar,
+        floatingBottomBarBottomDistancePx = profile?.floatingBottomBarBottomDistancePx
+            ?: fallback.floatingBottomBarBottomDistancePx,
+        floatingBottomBarTransparency = profile?.floatingBottomBarTransparency
+            ?: fallback.floatingBottomBarTransparency,
+        bookshelfTopBarStyle = profile?.bookshelfTopBarStyle
+            ?: fallback.bookshelfTopBarStyle,
+        bookshelfFloatingDockTopDistancePx = profile?.bookshelfFloatingDockTopDistancePx
+            ?: fallback.bookshelfFloatingDockTopDistancePx,
+        bookshelfFloatingDockTransparency = profile?.bookshelfFloatingDockTransparency
+            ?: fallback.bookshelfFloatingDockTransparency,
+    ).normalized()
+}
+
 @Keep
 internal data class NgThemeNavigationAssets(
     @SerializedName("home") val home: String? = null,
@@ -221,25 +241,7 @@ internal object NgThemeLibraryStore {
                 blur = context.getPrefInt(PreferKey.bgImageNBlurring, 0)
             ),
             transparentAppBars = context.getPrefBoolean(PreferKey.tNavBar, false),
-            barProfile = NgThemeBarProfile(
-                useFloatingBottomBar = AppConfig.useFloatingBottomBar,
-                floatingBottomBarBottomDistancePx =
-                    FloatingBottomBarConfig.resolveBottomDistancePx(
-                        storedDistancePx = AppConfig.floatingBottomBarBottomDistancePx,
-                        density = context.resources.displayMetrics.density,
-                    ),
-                floatingBottomBarTransparency = AppConfig.floatingBottomBarTransparency,
-                bookshelfTopBarStyle = AppConfig.bookshelfTopBarStyle.value,
-                bookshelfFloatingDockTopDistancePx =
-                    BookshelfFloatingDockConfig.resolveTopDistancePx(
-                        storedDistancePx = AppConfig.bookshelfFloatingDockTopDistancePx,
-                        screenWidthPx = context.resources.displayMetrics.widthPixels,
-                        density = context.resources.displayMetrics.density,
-                        statusBarHeightPx = context.statusBarHeight,
-                    ),
-                bookshelfFloatingDockTransparency =
-                    AppConfig.bookshelfFloatingDockTransparency,
-            ),
+            barProfile = currentBarProfile(context),
             packageRootPath = active?.packageRootPath,
             resourceProfile = active?.resourceProfile ?: NgThemeResourceProfile(),
             coverProfile = NgThemeCoverProfile(
@@ -254,6 +256,11 @@ internal object NgThemeLibraryStore {
             ),
         ).normalized()
     }
+
+    fun editableBarProfile(
+        context: Context,
+        profile: NgThemeBarProfile?
+    ): NgThemeBarProfile = profile.withFallback(currentBarProfile(context))
 
     fun currentThemeName(context: Context): String {
         val state = current(context)
@@ -339,6 +346,23 @@ internal object NgThemeLibraryStore {
             mutableState.value = mutableState.value.copy(activeThemeId = previousActiveId)
         }
     }
+
+    private fun currentBarProfile(context: Context): NgThemeBarProfile = NgThemeBarProfile(
+        useFloatingBottomBar = AppConfig.useFloatingBottomBar,
+        floatingBottomBarBottomDistancePx = FloatingBottomBarConfig.resolveBottomDistancePx(
+            storedDistancePx = AppConfig.floatingBottomBarBottomDistancePx,
+            density = context.resources.displayMetrics.density,
+        ),
+        floatingBottomBarTransparency = AppConfig.floatingBottomBarTransparency,
+        bookshelfTopBarStyle = AppConfig.bookshelfTopBarStyle.value,
+        bookshelfFloatingDockTopDistancePx = BookshelfFloatingDockConfig.resolveTopDistancePx(
+            storedDistancePx = AppConfig.bookshelfFloatingDockTopDistancePx,
+            screenWidthPx = context.resources.displayMetrics.widthPixels,
+            density = context.resources.displayMetrics.density,
+            statusBarHeightPx = context.statusBarHeight,
+        ),
+        bookshelfFloatingDockTransparency = AppConfig.bookshelfFloatingDockTransparency,
+    )
 
     fun uniqueName(context: Context, requestedName: String): String {
         val base = requestedName.trim().ifEmpty { "导入主题" }
@@ -436,6 +460,7 @@ internal object NgBuiltInThemes {
         darkBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_mist.png",
         lightTopBarTextMode = NgTopBarTextMode.LIGHT,
         darkTopBarTextMode = NgTopBarTextMode.LIGHT,
+        reuseLightColorsAtNight = true,
         transparentAppBars = true
     )
 
@@ -468,6 +493,7 @@ internal object NgBuiltInThemes {
         darkBackgroundPath: String? = null,
         lightTopBarTextMode: NgTopBarTextMode = NgTopBarTextMode.AUTO,
         darkTopBarTextMode: NgTopBarTextMode = NgTopBarTextMode.AUTO,
+        reuseLightColorsAtNight: Boolean = false,
         transparentAppBars: Boolean = false
     ): NgManagedTheme {
         val light = manualColors(
@@ -476,30 +502,42 @@ internal object NgBuiltInThemes {
             background = 0xFFF5F5F5.toInt(),
             label = 0xFFEEEEEE.toInt()
         )
-        val dark = manualColors(
-            primary = darkPrimary,
-            secondary = darkSecondary,
-            background = 0xFF202124.toInt(),
-            label = 0xFF2A2B2F.toInt()
-        )
+        val dark = if (reuseLightColorsAtNight) {
+            light
+        } else {
+            manualColors(
+                primary = darkPrimary,
+                secondary = darkSecondary,
+                background = 0xFF202124.toInt(),
+                label = 0xFF2A2B2F.toInt()
+            )
+        }
         return NgManagedTheme(
             id = id,
             name = name,
             colors = NgColorSystem(
                 mode = NgColorGenerationMode.MANUAL,
                 lightSeed = lightPrimary,
-                darkSeed = darkPrimary,
+                darkSeed = if (reuseLightColorsAtNight) lightPrimary else darkPrimary,
                 paletteStyle = NgPaletteStyle.TONAL_SPOT,
                 contrast = NgContrastLevel.DEFAULT,
                 colorSpec = NgColorSpec.MATERIAL_3_2021,
                 manualLight = light,
                 manualDark = dark,
                 lightTopBarTextMode = lightTopBarTextMode,
-                darkTopBarTextMode = darkTopBarTextMode
+                darkTopBarTextMode = if (reuseLightColorsAtNight) {
+                    lightTopBarTextMode
+                } else {
+                    darkTopBarTextMode
+                }
             ),
             lightBackground = NgThemeBackground(lightBackgroundPath),
             darkBackground = NgThemeBackground(darkBackgroundPath),
-            transparentAppBars = transparentAppBars
+            transparentAppBars = transparentAppBars,
+            barProfile = NgThemeBarProfile(
+                useFloatingBottomBar = false,
+                bookshelfTopBarStyle = BookshelfTopBarStyle.TRADITIONAL.value,
+            ),
         )
     }
 

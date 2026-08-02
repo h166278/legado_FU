@@ -29,6 +29,7 @@ import io.legado.app.utils.getFile
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
+import io.legado.app.utils.isNightMode
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefInt
@@ -45,6 +46,14 @@ import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.toastOnUi
 import java.io.FileOutputStream
+
+internal fun isEffectiveNightMode(mode: Int, systemNightMode: Boolean): Boolean {
+    return when (mode) {
+        AppCompatDelegate.MODE_NIGHT_YES -> true
+        AppCompatDelegate.MODE_NIGHT_NO -> false
+        else -> systemNightMode
+    }
+}
 
 @Keep
 object ThemeConfig {
@@ -66,27 +75,39 @@ object ThemeConfig {
 
     private var needClearImg = true
 
-    fun getTheme() = when {
+    private fun resolveTheme(isNightTheme: Boolean) = when {
         AppConfig.isEInkMode -> Theme.EInk
-        AppConfig.isNightTheme -> Theme.Dark
+        isNightTheme -> Theme.Dark
         else -> Theme.Light
     }
 
-    fun isReadingNgBackgroundTheme(): Boolean {
-        val backgroundKey = if (AppConfig.isNightTheme) PreferKey.bgImageN else PreferKey.bgImage
-        return !appCtx.getPrefString(backgroundKey).isNullOrBlank()
+    fun getTheme(context: Context): Theme {
+        val isNightTheme = resolveThemeNightMode(
+            AppConfig.themeMode,
+            context.resources.configuration.isNightMode
+        )
+        return resolveTheme(isNightTheme)
     }
 
-    fun getReadingNgImageSurfaceColor(): Int {
-        return if (AppConfig.isNightTheme) {
-            appCtx.getPrefInt(
+    fun isReadingNgBackgroundTheme(context: Context): Boolean {
+        val backgroundKey = if (getTheme(context) == Theme.Dark) {
+            PreferKey.bgImageN
+        } else {
+            PreferKey.bgImage
+        }
+        return !context.getPrefString(backgroundKey).isNullOrBlank()
+    }
+
+    fun getReadingNgImageSurfaceColor(context: Context): Int {
+        return if (getTheme(context) == Theme.Dark) {
+            context.getPrefInt(
                 PreferKey.cNBBackground,
-                appCtx.getCompatColor(R.color.md_grey_850)
+                context.getCompatColor(R.color.md_grey_850)
             )
         } else {
-            appCtx.getPrefInt(
+            context.getPrefInt(
                 PreferKey.cBBackground,
-                appCtx.getCompatColor(R.color.md_grey_200)
+                context.getCompatColor(R.color.md_grey_200)
             )
         }
     }
@@ -99,15 +120,27 @@ object ThemeConfig {
         applyDayNight(context)
     }
 
-    fun isDarkTheme(): Boolean {
-        return getTheme() == Theme.Dark
+    fun isDarkTheme(context: Context): Boolean {
+        return getTheme(context) == Theme.Dark
     }
 
     fun applyDayNight(context: Context) {
         applyTheme(context)
+        val nightModeChanged = isEffectiveNightMode(
+            AppCompatDelegate.getDefaultNightMode(),
+            AppConfig.isSystemNightTheme
+        ) != AppConfig.isNightTheme
         initNightMode()
         BookCover.upDefaultCover()
-        postEvent(EventBus.RECREATE, "")
+        if (!nightModeChanged) {
+            postEvent(EventBus.RECREATE, "")
+        }
+    }
+
+    fun onSystemUiModeChanged(context: Context, systemNightMode: Boolean) {
+        val isNightTheme = resolveThemeNightMode(AppConfig.themeMode, systemNightMode)
+        applyTheme(context, isNightTheme)
+        BookCover.upDefaultCover(isNightTheme)
     }
 
     fun applyDayNightInit(context: Context) {
@@ -201,7 +234,7 @@ object ThemeConfig {
     }
 
     fun getBgImage(context: Context, metrics: DisplayMetrics): Drawable? {
-        val themeMode = getTheme()
+        val themeMode = getTheme(context)
         val preferenceKey = when (themeMode) {
             Theme.Light -> PreferKey.bgImage
             Theme.Dark -> PreferKey.bgImageN
@@ -578,7 +611,10 @@ object ThemeConfig {
     /**
      * 更新主题
      */
-    fun applyTheme(context: Context) = with(context) {
+    fun applyTheme(
+        context: Context,
+        isNightTheme: Boolean = AppConfig.isNightTheme
+    ) = with(context) {
         if (AppConfig.isEInkMode) {
                 ThemeStore.editTheme(this)
                     .primaryColor(Color.WHITE)
@@ -593,10 +629,10 @@ object ThemeConfig {
         val colors = NgThemeResolver.resolveColorScheme(
             context = this,
             colors = colorConfig,
-            isDark = AppConfig.isNightTheme
+            isDark = isNightTheme
         )
         val manual = colorConfig.takeIf { it.mode == NgColorGenerationMode.MANUAL }
-            ?.manualColors(AppConfig.isNightTheme)
+            ?.manualColors(isNightTheme)
         ThemeStore.editTheme(this)
             .primaryColor(manual?.secondary ?: colors.topBarContainer)
             .accentColor(colors.primary)

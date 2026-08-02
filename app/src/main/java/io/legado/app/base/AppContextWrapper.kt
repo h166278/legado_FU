@@ -3,7 +3,6 @@ package io.legado.app.base
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
-import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
 import io.legado.app.constant.PreferKey
@@ -18,8 +17,7 @@ object AppContextWrapper {
 
     @SuppressLint("ObsoleteSdkInt")
     fun wrap(context: Context): Context {
-        val resources: Resources = context.resources
-        val configuration: Configuration = resources.configuration
+        val configuration = Configuration()
         val targetLocale = getSetLocale(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             configuration.setLocale(targetLocale)

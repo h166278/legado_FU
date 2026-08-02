@@ -61,7 +61,7 @@ class CodeEditActivity :
     private var menuSaveBtn: MenuItem? = null
 
     private val isDark
-        get() = AppConfig.editTemeAuto && ThemeConfig.isDarkTheme()
+        get() = AppConfig.editTemeAuto && ThemeConfig.isDarkTheme(this)
     private var themeIndex = -1
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {

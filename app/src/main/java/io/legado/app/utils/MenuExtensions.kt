@@ -11,6 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.ImageButton
+import androidx.annotation.ColorInt
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.appcompat.view.menu.SubMenuBuilder
@@ -22,12 +23,15 @@ import java.lang.reflect.Method
 
 @SuppressLint("RestrictedApi")
 @Suppress("UsePropertyAccessSyntax")
-fun Menu.applyTint(context: Context, theme: Theme = Theme.Auto): Menu = this.let { menu ->
+fun Menu.applyTint(context: Context, theme: Theme = Theme.Auto): Menu =
+    applyTint(context, MenuExtensions.getMenuColor(context, theme))
+
+@SuppressLint("RestrictedApi")
+fun Menu.applyTint(context: Context, @ColorInt tintColor: Int): Menu = this.let { menu ->
     if (menu is MenuBuilder) {
         menu.setOptionalIconsVisible(true)
     }
     val defaultTextColor = context.getCompatColor(R.color.primaryText)
-    val tintColor = MenuExtensions.getMenuColor(context, theme)
     menu.forEach { item ->
         (item as MenuItemImpl).let { impl ->
             //overflow：展开的item

@@ -12,11 +12,7 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.preference.PreferenceViewHolder
 import io.legado.app.R
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
-import io.legado.app.lib.theme.getSecondaryTextColor
-import io.legado.app.utils.ColorUtils
+import io.legado.app.ui.design.theme.NgThemeResolver
 import splitties.views.onLongClick
 import kotlin.math.roundToInt
 
@@ -58,21 +54,32 @@ open class Preference(context: Context, attrs: AttributeSet) :
                 tvSummary.text = summary
                 tvSummary.isGone = summary.isNullOrEmpty()
             }
-            if (isBottomBackground && !viewHolder.itemView.isInEditMode) {
-                val isLight = ColorUtils.isColorLight(context.bottomBackground)
-                val pTextColor = context.getPrimaryTextColor(isLight)
-                tvTitle?.setTextColor(pTextColor)
-                val sTextColor = context.getSecondaryTextColor(isLight)
-                tvSummary?.setTextColor(sTextColor)
+            val colors = if (viewHolder.itemView.isInEditMode) {
+                null
+            } else {
+                NgThemeResolver.resolve(context).colors
+            }
+            colors?.let {
+                tvTitle?.setTextColor(
+                    if (isBottomBackground) colors.onSurface else colors.onBackground
+                )
+                tvSummary?.setTextColor(colors.onSurfaceVariant)
             }
             val iconView = viewHolder.findViewById(R.id.preference_icon)
             if (iconView is ImageView) {
                 iconView.isVisible = icon != null
                 iconView.setImageDrawable(icon)
-                iconView.setColorFilter(context.accentColor)
+                colors?.let { iconView.setColorFilter(it.primary) }
             }
             val arrowView = viewHolder.findViewById(R.id.preference_arrow)
             arrowView?.isVisible = weightLayoutRes == null
+            colors?.let {
+                val arrowColor = it.onSurfaceVariant
+                when (arrowView) {
+                    is TextView -> arrowView.setTextColor(arrowColor)
+                    is ImageView -> arrowView.setColorFilter(arrowColor)
+                }
+            }
 
             if (weightLayoutRes != null && weightLayoutRes != 0 && viewId != null && viewId != 0) {
                 val lay = viewHolder.findViewById(R.id.preference_widget)

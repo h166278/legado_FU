@@ -98,7 +98,7 @@ class ReadMenu @JvmOverloads constructor(
     private val immersiveMenu: Boolean
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
     private val useGradientThemeMenu: Boolean
-        get() = !AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme()
+        get() = !AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme(context)
     private var bgColor: Int = if (useGradientThemeMenu) {
         context.bottomBackground
     } else if (immersiveMenu) {
@@ -125,7 +125,7 @@ class ReadMenu @JvmOverloads constructor(
         )
     private fun createFloatingButtonBackgroundList(): ColorStateList {
         val defaultColor = if (useGradientThemeMenu) {
-            ThemeConfig.getReadingNgImageSurfaceColor()
+            ThemeConfig.getReadingNgImageSurfaceColor(context)
         } else {
             bgColor
         }

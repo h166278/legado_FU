@@ -12,8 +12,8 @@ import androidx.appcompat.view.SupportMenuInflater
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import io.legado.app.R
-import io.legado.app.constant.Theme
 import io.legado.app.lib.theme.transparentNavBar
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.applyTint
@@ -59,10 +59,14 @@ abstract class BaseFragment(@LayoutRes layoutID: Int) : Fragment(layoutID) {
         supportToolbar?.let {
             it.menu.apply {
                 onCompatCreateOptionsMenu(this)
-                applyTint(
-                    requireContext(),
-                    if (requireContext().transparentNavBar) Theme.Light else Theme.Auto
-                )
+                if (requireContext().transparentNavBar) {
+                    applyTint(
+                        requireContext(),
+                        NgThemeResolver.resolve(requireContext()).colors.onTopBar,
+                    )
+                } else {
+                    applyTint(requireContext())
+                }
                 NgMenuPopup.bindToolbarMenu(
                     context = requireContext(),
                     toolbar = it,

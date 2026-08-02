@@ -220,8 +220,12 @@ class ThemeManagerFragment : BaseFragment(R.layout.fragment_theme_manager) {
     }
 
     private fun editTheme(theme: NgManagedTheme) {
+        val editableBarProfile = NgThemeLibraryStore.editableBarProfile(
+            requireContext(),
+            theme.barProfile,
+        )
         originalEditTheme = theme
-        draftEditTheme = theme
+        draftEditTheme = theme.copy(barProfile = editableBarProfile)
     }
 
     private fun dismissThemeEditor() {

@@ -29,6 +29,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.ColorUtils
@@ -133,7 +134,11 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     final override fun onCreateOptionsMenu(menu: Menu): Boolean {
         val bool = onCompatCreateOptionsMenu(menu)
-        menu.applyTint(this, if (transparentNavBar) Theme.Light else toolBarTheme)
+        if (transparentNavBar) {
+            menu.applyTint(this, NgThemeResolver.resolve(this).colors.onTopBar)
+        } else {
+            menu.applyTint(this, toolBarTheme)
+        }
         if (bindNgToolbarMenu) {
             NgMenuPopup.bindToolbarMenu(
                 context = this,

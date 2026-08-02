@@ -106,7 +106,7 @@ class ReadAloudPlayerActivity : BaseActivity<ActivityReadAloudPlayerBinding>(
     private val lyricsAdapter by lazy { LyricsAdapter() }
 
     override fun upBackgroundImage() {
-        window.decorView.setBackgroundColor(ThemeConfig.getReadingNgImageSurfaceColor())
+        window.decorView.setBackgroundColor(ThemeConfig.getReadingNgImageSurfaceColor(this))
         super.upBackgroundImage()
     }
 

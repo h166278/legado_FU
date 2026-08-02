@@ -11,7 +11,6 @@ import androidx.preference.PreferenceGroup
 import androidx.preference.Preference
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
-import io.legado.app.constant.Theme
 import io.legado.app.databinding.FragmentMyConfigBinding
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
@@ -23,13 +22,12 @@ import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.utils.LogUtils
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.removePref
@@ -62,9 +60,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
 
     override fun onCompatCreateOptionsMenu(menu: Menu) {
         menuInflater.inflate(R.menu.main_my, menu)
-        if (requireContext().transparentNavBar) {
-            menu.applyTint(requireContext(), Theme.Light)
-        }
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem) {
@@ -75,7 +70,9 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
 
     private fun applyTransparentModeUi() {
         if (requireContext().transparentNavBar) {
-            binding.titleBar.setTitleTextColor(requireContext().getCompatColor(R.color.primaryText))
+            binding.titleBar.setTitleTextColor(
+                NgThemeResolver.resolve(requireContext()).colors.onTopBar
+            )
         }
         binding.preFragment.setBackgroundResource(R.color.transparent)
     }

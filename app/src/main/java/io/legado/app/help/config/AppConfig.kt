@@ -36,6 +36,14 @@ internal fun normalizeThemeMode(value: String?): String {
     }
 }
 
+internal fun resolveThemeNightMode(themeMode: String, systemNightMode: Boolean): Boolean {
+    return when (themeMode) {
+        "2" -> true
+        "1", "3" -> false
+        else -> systemNightMode
+    }
+}
+
 @Suppress("MemberVisibilityCanBePrivate", "ConstPropertyName")
 object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val isCronet = appCtx.getPrefBoolean(PreferKey.cronet)
@@ -178,13 +186,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var isNightTheme: Boolean
-        get() = when (themeMode) {
-            "2" -> true
-            "0" -> isSystemNightTheme
-            "1" -> false
-            "3" -> false
-            else -> sysConfiguration.isNightMode
-        }
+        get() = resolveThemeNightMode(themeMode, isSystemNightTheme)
         set(value) {
             if (isNightTheme != value) {
                 if (value) {

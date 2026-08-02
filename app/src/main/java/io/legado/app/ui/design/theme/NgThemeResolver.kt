@@ -55,7 +55,7 @@ object NgThemeResolver {
         return resolve(
             context = context,
             colors = NgColorConfigStore.current(context),
-            isDark = ThemeConfig.isDarkTheme()
+            isDark = ThemeConfig.isDarkTheme(context)
         )
     }
 

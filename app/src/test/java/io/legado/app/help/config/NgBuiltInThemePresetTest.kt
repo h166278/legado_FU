@@ -35,6 +35,27 @@ class NgBuiltInThemePresetTest {
             NgTopBarTextMode.LIGHT,
             NgBuiltInThemes.mist.colors.darkTopBarTextMode,
         )
+        assertEquals(
+            NgBuiltInThemes.mist.colors.manualLight,
+            NgBuiltInThemes.mist.colors.manualDark,
+        )
+        assertEquals(
+            NgBuiltInThemes.mist.colors.lightSeed,
+            NgBuiltInThemes.mist.colors.darkSeed,
+        )
+    }
+
+    @Test
+    fun `built in themes except autumn use traditional bars`() {
+        val expected = NgThemeBarProfile(
+            useFloatingBottomBar = false,
+            bookshelfTopBarStyle = BookshelfTopBarStyle.TRADITIONAL.value,
+        )
+
+        assertEquals(
+            listOf(expected, expected, expected, expected),
+            NgBuiltInThemes.all.dropLast(1).map { it.barProfile },
+        )
     }
 
     @Test
@@ -60,5 +81,30 @@ class NgBuiltInThemePresetTest {
             autumn.barProfile,
         )
         assertEquals(autumn, NgBuiltInThemes.all.last())
+    }
+
+    @Test
+    fun `legacy bar profile uses current settings as editor fallback`() {
+        val current = NgThemeBarProfile(
+            useFloatingBottomBar = true,
+            floatingBottomBarBottomDistancePx = 40,
+            floatingBottomBarTransparency = 40,
+            bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
+            bookshelfFloatingDockTopDistancePx = 360,
+            bookshelfFloatingDockTransparency = 40,
+        )
+        val legacy: NgThemeBarProfile? = null
+
+        assertEquals(current, legacy.withFallback(current))
+        assertEquals(
+            current.copy(
+                useFloatingBottomBar = false,
+                bookshelfFloatingDockTransparency = 75,
+            ),
+            NgThemeBarProfile(
+                useFloatingBottomBar = false,
+                bookshelfFloatingDockTransparency = 75,
+            ).withFallback(current),
+        )
     }
 }

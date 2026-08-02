@@ -26,7 +26,7 @@ object ReadDrawerStyle {
     }
 
     fun createTopRoundedBackground(context: Context, fallbackColor: Int = context.bottomBackground): Drawable {
-        val source = if (!AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme()) {
+        val source = if (!AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme(context)) {
             ThemeConfig.getBgImage(context, context.windowManager.windowSize)
         } else {
             null

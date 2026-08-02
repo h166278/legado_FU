@@ -24,7 +24,7 @@ class ChangeThemeDialog() : BaseDialogFragment(R.layout.dialog_edit_change_theme
     private var isClick = false
     private var editTemeAuto = AppConfig.editTemeAuto
     private val isDark
-        get() = editTemeAuto && ThemeConfig.isDarkTheme()
+        get() = editTemeAuto && ThemeConfig.isDarkTheme(requireContext())
     private var themeIndex = -1
 
     override fun onAttach(context: Context) {

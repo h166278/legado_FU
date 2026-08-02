@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
@@ -26,6 +27,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.NgColorConfigStore
 import io.legado.app.help.config.NgThemeRuntimeAssets
+import io.legado.app.help.config.resolveThemeNightMode
+import io.legado.app.utils.isNightMode
 
 private val LocalNgThemeSnapshot = staticCompositionLocalOf<NgThemeSnapshot> {
     error("NgThemeSnapshot is not available outside NgAppTheme")
@@ -98,19 +101,20 @@ fun NgAppTheme(
 @Composable
 private fun rememberNgThemeSnapshot(): NgThemeSnapshot {
     val context = LocalContext.current
-    val uiMode = context.resources.configuration.uiMode
+    val systemNightMode = LocalConfiguration.current.isNightMode
     val themeMode = AppConfig.themeMode
+    val isDark = resolveThemeNightMode(themeMode, systemNightMode)
     val colorFlow = remember(context) { NgColorConfigStore.observe(context) }
     val observedColors by colorFlow.collectAsState()
     val colors = observedColors ?: NgColorConfigStore.current(context)
-    return remember(context, uiMode, themeMode, colors) {
+    return remember(context, themeMode, isDark, colors) {
         if (AppConfig.isEInkMode) {
             NgThemeResolver.resolve(context)
         } else {
             NgThemeResolver.resolve(
                 context = context,
                 colors = colors,
-                isDark = AppConfig.isNightTheme
+                isDark = isDark
             )
         }
     }
