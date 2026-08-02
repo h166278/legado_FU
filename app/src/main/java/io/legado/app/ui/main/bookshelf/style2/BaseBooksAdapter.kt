@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
+import io.legado.app.help.book.isUpError
 
 abstract class BaseBooksAdapter<VH : RecyclerView.ViewHolder>(
     val context: Context,
@@ -51,7 +52,8 @@ abstract class BaseBooksAdapter<VH : RecyclerView.ViewHolder>(
                             oldItem.latestChapterTitle == newItem.latestChapterTitle &&
                             oldItem.lastCheckCount == newItem.lastCheckCount &&
                             oldItem.getDisplayCover() == newItem.getDisplayCover() &&
-                            oldItem.getUnreadChapterNum() == newItem.getUnreadChapterNum()
+                            oldItem.getUnreadChapterNum() == newItem.getUnreadChapterNum() &&
+                            oldItem.isUpError == newItem.isUpError
                 }
 
                 oldItem is BookGroup && newItem is BookGroup -> {
@@ -87,6 +89,7 @@ abstract class BaseBooksAdapter<VH : RecyclerView.ViewHolder>(
                     if (oldItem.lastCheckCount != newItem.lastCheckCount
                         || oldItem.durChapterTime != newItem.durChapterTime
                         || oldItem.getUnreadChapterNum() != newItem.getUnreadChapterNum()
+                        || oldItem.isUpError != newItem.isUpError
                     ) {
                         bundle.putBoolean("refresh", true)
                     }

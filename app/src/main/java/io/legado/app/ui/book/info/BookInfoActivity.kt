@@ -1295,11 +1295,7 @@ class BookInfoActivity :
     private fun upGroup(groupId: Long) {
         viewModel.loadGroup(groupId) {
             if (it.isNullOrEmpty()) {
-                binding.tvGroup.text = if (book?.isLocal == true) {
-                    getString(R.string.group_s, getString(R.string.local_no_group))
-                } else {
-                    getString(R.string.group_s, getString(R.string.no_group))
-                }
+                binding.tvGroup.text = getString(R.string.group_s, getString(R.string.no_group))
             } else {
                 binding.tvGroup.text = getString(R.string.group_s, it)
             }

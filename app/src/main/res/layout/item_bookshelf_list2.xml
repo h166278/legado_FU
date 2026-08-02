@@ -200,6 +200,19 @@
         app:layout_constraintTop_toBottomOf="@+id/tv_read"
         tools:ignore="TextContrastCheck" />
 
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/iv_update_error"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginEnd="5dp"
+        android:layout_marginBottom="5dp"
+        android:contentDescription="@string/update_book_fail"
+        android:src="@drawable/ic_book_update_error"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:visibility="visible" />
+
     <View
         android:id="@+id/vw_foreground"
         android:layout_width="match_parent"

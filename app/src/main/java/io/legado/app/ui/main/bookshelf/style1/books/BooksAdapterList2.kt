@@ -9,10 +9,12 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ItemBookshelfList2Binding
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.isUpError
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.bookshelf.bookshelfAuthorText
 import io.legado.app.utils.gone
 import io.legado.app.utils.toTimeAgo
+import io.legado.app.utils.visible
 import splitties.views.onLongClick
 
 /**
@@ -71,6 +73,7 @@ class BooksAdapterList2(
     }
 
     private fun upRefresh(binding: ItemBookshelfList2Binding, item: Book) {
+        binding.ivUpdateError.visible(item.isUpError)
         if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
             binding.bvUnread.gone()
             binding.rlLoading.visible()

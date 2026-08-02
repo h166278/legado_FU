@@ -1596,8 +1596,6 @@
     <string name="ignore_audio_focus_summary">Play with other apps</string>
     <string name="refresh_sort">Refresh sort</string>
     <string name="cover_decode_js">Decode Cover Js(coverDecodeJs)</string>
-    <string name="net_no_group">Network ungrouped</string>
-    <string name="local_no_group">Local ungrouped</string>
     <string name="parallel_export_book">Multithreaded export</string>
     <string name="progress_bar_behavior">Progress bar behavior</string>
     <string name="source_edit_text_max_line">Maximum number of rows in the source edit box</string>

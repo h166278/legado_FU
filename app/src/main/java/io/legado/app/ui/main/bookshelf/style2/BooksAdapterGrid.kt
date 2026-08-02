@@ -11,6 +11,7 @@ import io.legado.app.databinding.ItemBookshelfGridBinding
 import io.legado.app.databinding.ItemBookshelfGridGroup2Binding
 import io.legado.app.databinding.ItemBookshelfGridGroupBinding
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.isUpError
 import io.legado.app.help.config.AppConfig
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
@@ -115,6 +116,7 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
         }
 
         private fun upRefresh(binding: ItemBookshelfGridBinding, item: Book) {
+            binding.ivUpdateError.visible(item.isUpError)
             if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
                 binding.bvUnread.invisible()
                 binding.rlLoading.visible()
@@ -171,6 +173,7 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
         }
 
         private fun upRefresh(binding: ItemBookshelfGrid2Binding, item: Book) {
+            binding.ivUpdateError.visible(item.isUpError)
             if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
                 binding.bvUnread.invisible()
                 binding.rlLoading.visible()

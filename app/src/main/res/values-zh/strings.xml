@@ -1589,8 +1589,6 @@
     <string name="ignore_audio_focus_summary">与其他应用同时播放</string>
     <string name="refresh_sort">刷新分类</string>
     <string name="cover_decode_js">封面解密（coverDecodeJs）</string>
-    <string name="net_no_group">网络未分组</string>
-    <string name="local_no_group">本地未分组</string>
     <string name="parallel_export_book">多线程导出</string>
     <string name="progress_bar_behavior">进度条行为</string>
     <string name="source_edit_text_max_line">源编辑框最大行数</string>

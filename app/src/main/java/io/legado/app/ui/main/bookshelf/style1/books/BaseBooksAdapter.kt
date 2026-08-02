@@ -7,6 +7,7 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.base.adapter.DiffRecyclerAdapter
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.Book
+import io.legado.app.help.book.isUpError
 
 abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
     DiffRecyclerAdapter<Book, VB>(context) {
@@ -31,6 +32,7 @@ abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
                     oldItem.lastCheckCount != newItem.lastCheckCount -> false
                     oldItem.getDisplayCover() != newItem.getDisplayCover() -> false
                     oldItem.getUnreadChapterNum() != newItem.getUnreadChapterNum() -> false
+                    oldItem.isUpError != newItem.isUpError -> false
                     else -> true
                 }
             }
@@ -56,6 +58,7 @@ abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
                     || oldItem.durChapterTime != newItem.durChapterTime
                     || oldItem.getUnreadChapterNum() != newItem.getUnreadChapterNum()
                     || oldItem.lastCheckCount != newItem.lastCheckCount
+                    || oldItem.isUpError != newItem.isUpError
                 ) {
                     bundle.putBoolean("refresh", true)
                 }

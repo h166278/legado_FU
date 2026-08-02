@@ -10,6 +10,7 @@ import io.legado.app.databinding.ItemBookshelfList2Binding
 import io.legado.app.databinding.ItemBookshelfListBinding
 import io.legado.app.databinding.ItemBookshelfListGroupBinding
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.isUpError
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.bookshelf.bookshelfAuthorText
 import io.legado.app.utils.gone
@@ -110,6 +111,7 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
         }
 
         private fun upRefresh(binding: ItemBookshelfListBinding, item: Book) {
+            binding.ivUpdateError.visible(item.isUpError)
             if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
                 binding.bvUnread.gone()
                 binding.rlLoading.visible()
@@ -179,6 +181,7 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
         }
 
         private fun upRefresh(binding: ItemBookshelfList2Binding, item: Book) {
+            binding.ivUpdateError.visible(item.isUpError)
             if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
                 binding.bvUnread.gone()
                 binding.rlLoading.visible()

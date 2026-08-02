@@ -64,6 +64,19 @@
                 app:loading_width="2dp"
                 tools:ignore="RtlHardcoded" />
 
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_update_error"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="6dp"
+                android:layout_marginBottom="6dp"
+                android:contentDescription="@string/update_book_fail"
+                android:src="@drawable/ic_book_update_error"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="@id/iv_cover"
+                app:layout_constraintEnd_toEndOf="@id/iv_cover"
+                tools:visibility="visible" />
+
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView

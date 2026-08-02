@@ -1834,11 +1834,6 @@ object BookshelfMcpTools {
                 BookGroup.IdLocal -> book.isLocal
                 BookGroup.IdAudio -> book.isAudio
                 BookGroup.IdVideo -> book.isVideo
-                BookGroup.IdError -> book.isUpError
-                BookGroup.IdNetNone -> !book.isLocal && !book.isAudio && !book.isVideo &&
-                        (customGroupSum == 0L || (customGroupSum and book.group) == 0L)
-                BookGroup.IdLocalNone -> book.isLocal && !book.isAudio && !book.isVideo &&
-                        (customGroupSum == 0L || (customGroupSum and book.group) == 0L)
                 else -> groupId > 0 && (book.group and groupId) > 0
             }
         }

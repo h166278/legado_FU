@@ -129,7 +129,13 @@ object Restore {
             appDb.bookmarkDao.insert(*it.toTypedArray())
         }
         fileToListT<BookGroup>(path, "bookGroup.json")?.let {
-            appDb.bookGroupDao.insert(*it.toTypedArray())
+            val supportedGroups = it.filter { group ->
+                group.groupId >= 0 || group.groupId == BookGroup.IdAll ||
+                        group.groupId == BookGroup.IdLocal ||
+                        group.groupId == BookGroup.IdAudio ||
+                        group.groupId == BookGroup.IdVideo
+            }
+            appDb.bookGroupDao.insert(*supportedGroups.toTypedArray())
         }
         fileToListT<BookSource>(path, "bookSource.json")?.let {
             appDb.bookSourceDao.insert(*it.toTypedArray())
