@@ -1,5 +1,6 @@
 package io.legado.app.help.config
 
+import android.content.res.Configuration
 import androidx.appcompat.app.AppCompatDelegate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,5 +45,15 @@ class ThemeModeConfigTest {
         assertFalse(resolveThemeNightMode("1", true))
         assertTrue(resolveThemeNightMode("2", false))
         assertFalse(resolveThemeNightMode("3", true))
+    }
+
+    @Test
+    fun followModeUsesEveryDeliveredConfigurationInsteadOfCachedGlobalState() {
+        val day = Configuration.UI_MODE_TYPE_NORMAL or Configuration.UI_MODE_NIGHT_NO
+        val night = Configuration.UI_MODE_TYPE_NORMAL or Configuration.UI_MODE_NIGHT_YES
+
+        assertFalse(resolveThemeNightModeFromUiMode("0", day))
+        assertTrue(resolveThemeNightModeFromUiMode("0", night))
+        assertFalse(resolveThemeNightModeFromUiMode("0", day))
     }
 }

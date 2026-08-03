@@ -84,7 +84,7 @@ object ThemeConfig {
     fun getTheme(context: Context): Theme {
         val isNightTheme = resolveThemeNightMode(
             AppConfig.themeMode,
-            context.resources.configuration.isNightMode
+            context.resources.configuration
         )
         return resolveTheme(isNightTheme)
     }
@@ -125,11 +125,13 @@ object ThemeConfig {
     }
 
     fun applyDayNight(context: Context) {
-        applyTheme(context)
+        val configuration = context.resources.configuration
+        val isNightTheme = resolveThemeNightMode(AppConfig.themeMode, configuration)
+        applyTheme(context, isNightTheme)
         val nightModeChanged = isEffectiveNightMode(
             AppCompatDelegate.getDefaultNightMode(),
-            AppConfig.isSystemNightTheme
-        ) != AppConfig.isNightTheme
+            configuration.isNightMode
+        ) != isNightTheme
         initNightMode()
         BookCover.upDefaultCover()
         if (!nightModeChanged) {
@@ -437,7 +439,11 @@ object ThemeConfig {
                 context.putPrefInt(PreferKey.bgImageBlurring, backgroundBlur)
             }
             NgColorConfigStore.adoptLegacyVariant(context, isNightTheme)
-            if (!AppConfig.isEInkMode && AppConfig.isNightTheme == isNightTheme) {
+            val activeIsNightTheme = resolveThemeNightMode(
+                AppConfig.themeMode,
+                context.resources.configuration
+            )
+            if (!AppConfig.isEInkMode && activeIsNightTheme == isNightTheme) {
                 applyDayNight(context)
             }
         } catch (e: Exception) {
@@ -533,7 +539,10 @@ object ThemeConfig {
     }
 
     fun getDurConfig(context: Context): Config {
-        val isNight = AppConfig.isNightTheme
+        val isNight = resolveThemeNightMode(
+            AppConfig.themeMode,
+            context.resources.configuration
+        )
         val name = if (isNight) {
             context.getPrefString(PreferKey.dNThemeName) ?: ""
         } else {
@@ -624,7 +633,10 @@ object ThemeConfig {
      */
     fun applyTheme(
         context: Context,
-        isNightTheme: Boolean = AppConfig.isNightTheme
+        isNightTheme: Boolean = resolveThemeNightMode(
+            AppConfig.themeMode,
+            context.resources.configuration
+        )
     ) = with(context) {
         if (AppConfig.isEInkMode) {
                 ThemeStore.editTheme(this)

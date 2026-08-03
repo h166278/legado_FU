@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.os.Build
 import io.legado.app.BuildConfig
 import io.legado.app.constant.PreferKey
@@ -19,7 +20,6 @@ import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.putPrefLong
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.removePref
-import io.legado.app.utils.sysConfiguration
 import io.legado.app.utils.toastOnUi
 import splitties.init.appCtx
 import java.net.InetAddress
@@ -42,6 +42,17 @@ internal fun resolveThemeNightMode(themeMode: String, systemNightMode: Boolean):
         "1", "3" -> false
         else -> systemNightMode
     }
+}
+
+internal fun resolveThemeNightMode(
+    themeMode: String,
+    configuration: Configuration
+): Boolean = resolveThemeNightModeFromUiMode(themeMode, configuration.uiMode)
+
+internal fun resolveThemeNightModeFromUiMode(themeMode: String, uiMode: Int): Boolean {
+    val systemNightMode = uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+        Configuration.UI_MODE_NIGHT_YES
+    return resolveThemeNightMode(themeMode, systemNightMode)
 }
 
 @Suppress("MemberVisibilityCanBePrivate", "ConstPropertyName")
@@ -197,7 +208,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             }
         }
     val isSystemNightTheme: Boolean
-        get() = sysConfiguration.isNightMode
+        get() = appCtx.resources.configuration.isNightMode
 
     var showBookname: Int
         get() = appCtx.getPrefInt(PreferKey.showBooknameLayout, 0)

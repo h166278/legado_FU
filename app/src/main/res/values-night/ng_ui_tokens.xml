@@ -3,6 +3,8 @@
     <color name="ng_background">@color/background</color>
     <color name="ng_surface">@color/background_card</color>
     <color name="ng_surface_card">#D81F1F1F</color>
+    <color name="ng_book_detail_card_surface">@color/ng_surface_card</color>
+    <color name="ng_book_detail_card_stroke">@color/ng_card_stroke</color>
     <color name="ng_surface_soft">@color/background_menu</color>
     <color name="ng_surface_panel">#E6222222</color>
     <color name="ng_floating_dock_surface">#991F1F1F</color>
