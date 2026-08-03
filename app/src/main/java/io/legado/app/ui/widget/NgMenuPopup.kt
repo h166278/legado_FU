@@ -15,8 +15,8 @@ import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import io.legado.app.R
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.getCompatColor
 
 object NgMenuPopup {
 
@@ -150,7 +150,7 @@ object NgMenuPopup {
         return ImageButton(context).apply {
             val drawable = icon ?: iconRes?.let { ContextCompat.getDrawable(context, it) }
             setImageDrawable(drawable?.mutate())
-            setColorFilter(context.getCompatColor(R.color.primaryText))
+            setColorFilter(NgThemeResolver.resolve(context).colors.onTopBar)
             this.contentDescription = contentDescription
             background = toolbarItemBackground(context)
             scaleType = ImageView.ScaleType.CENTER

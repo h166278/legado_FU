@@ -8,6 +8,18 @@ import org.junit.Test
 class NgBuiltInThemePresetTest {
 
     @Test
+    fun `classic dark preset matches legacy native night palette`() {
+        val colors = NgBuiltInThemes.classic.colors.manualDark
+
+        assertEquals(0xFFD84315.toInt(), colors.primary)
+        assertEquals(0xFF546E7A.toInt(), colors.secondary)
+        assertEquals(0xFFFFFFFF.toInt(), colors.primaryText)
+        assertEquals(0xB3FFFFFF.toInt(), colors.secondaryText)
+        assertEquals(0xFF212121.toInt(), colors.background)
+        assertEquals(0xFF303030.toInt(), colors.labelContainer)
+    }
+
+    @Test
     fun `warm and bamboo presets only provide light backgrounds`() {
         assertEquals(
             "asset://defaultData/theme/reading_ng_warm.png",

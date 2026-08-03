@@ -15,7 +15,6 @@ import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.Theme
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
@@ -25,13 +24,13 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.transparentNavBar
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.book.explore.ExploreShowActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.transaction
@@ -85,9 +84,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     override fun onCompatCreateOptionsMenu(menu: Menu) {
         super.onCompatCreateOptionsMenu(menu)
         menuInflater.inflate(R.menu.main_explore, menu)
-        if (requireContext().transparentNavBar) {
-            menu.applyTint(requireContext(), Theme.Light)
-        }
         groupsMenu = menu.findItem(R.id.menu_group)?.subMenu
         upGroupsMenu()
     }
@@ -95,7 +91,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private fun initSearchView() {
         searchView.applyTint(
             if (requireContext().transparentNavBar) {
-                requireContext().getCompatColor(R.color.primaryText)
+                NgThemeResolver.resolve(requireContext()).colors.onTopBar
             } else {
                 primaryTextColor
             }
@@ -194,11 +190,14 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         super.onPause()
     }
 
-    private fun upGroupsMenu() = groupsMenu?.transaction { subMenu ->
-        subMenu.removeGroup(R.id.menu_group_text)
-        groups.forEach {
-            subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
+    private fun upGroupsMenu() {
+        groupsMenu?.transaction { subMenu ->
+            subMenu.removeGroup(R.id.menu_group_text)
+            groups.forEach {
+                subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
+            }
         }
+        refreshSupportToolbarTint()
     }
 
     override val scope: CoroutineScope

@@ -59,14 +59,7 @@ abstract class BaseFragment(@LayoutRes layoutID: Int) : Fragment(layoutID) {
         supportToolbar?.let {
             it.menu.apply {
                 onCompatCreateOptionsMenu(this)
-                if (requireContext().transparentNavBar) {
-                    applyTint(
-                        requireContext(),
-                        NgThemeResolver.resolve(requireContext()).colors.onTopBar,
-                    )
-                } else {
-                    applyTint(requireContext())
-                }
+                refreshSupportToolbarTint()
                 NgMenuPopup.bindToolbarMenu(
                     context = requireContext(),
                     toolbar = it,
@@ -78,6 +71,17 @@ abstract class BaseFragment(@LayoutRes layoutID: Int) : Fragment(layoutID) {
             it.setOnMenuItemClickListener { item ->
                 onCompatOptionsItemSelected(item)
                 true
+            }
+        }
+    }
+
+    protected fun refreshSupportToolbarTint() {
+        val context = context ?: return
+        supportToolbar?.menu?.apply {
+            if (context.transparentNavBar) {
+                applyTint(context, NgThemeResolver.resolve(context).colors.onTopBar)
+            } else {
+                applyTint(context)
             }
         }
     }

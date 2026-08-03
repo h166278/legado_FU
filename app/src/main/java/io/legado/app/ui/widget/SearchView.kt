@@ -17,9 +17,11 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View.OnFocusChangeListener
 import android.widget.TextView
+import androidx.annotation.ColorInt
 import androidx.appcompat.widget.SearchView
 import androidx.core.graphics.drawable.DrawableCompat
 import io.legado.app.R
+import io.legado.app.utils.applyTint
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.printOnDebug
 
@@ -31,6 +33,14 @@ class SearchView @JvmOverloads constructor(
     private var mSearchHintIcon: Drawable? = null
     private var textView: TextView? = null
     private var textViewConfigured = false
+    private var contentColor: Int? = null
+
+    fun setContentColor(@ColorInt color: Int) {
+        contentColor = color
+        applyContentColor()
+        invalidate()
+    }
+
     @SuppressLint("UseCompatLoadingForDrawables")
     override fun onLayout(
         changed: Boolean,
@@ -41,30 +51,37 @@ class SearchView @JvmOverloads constructor(
     ) {
         super.onLayout(changed, left, top, right, bottom)
         try {
-            if (textView == null) {
-                textView = findViewById(androidx.appcompat.R.id.search_src_text)
-            }
-            val hintColor = context.getCompatColor(R.color.tv_text_summary)
-            mSearchHintIcon = this.context.getDrawable(R.drawable.ic_search_hint)
-                ?.mutate()
-                ?.let { drawable ->
-                    DrawableCompat.wrap(drawable).apply {
-                        DrawableCompat.setTint(this, hintColor)
-                    }
-                }
-            // 改变字体
-            textView!!.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            textView!!.gravity = Gravity.CENTER_VERTICAL
-            textView!!.setTextColor(hintColor)
-            textView!!.setHintTextColor(hintColor)
-            configureSearchTextView(textView!!)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                textView!!.isLocalePreferredLineHeightForMinimumUsed = false
-            }
-            updateQueryHint()
+            applyContentColor()
         } catch (e: Exception) {
             e.printOnDebug()
         }
+    }
+
+    @SuppressLint("UseCompatLoadingForDrawables")
+    private fun applyContentColor() {
+        val searchTextView = textView
+            ?: findViewById<TextView>(androidx.appcompat.R.id.search_src_text)?.also {
+                textView = it
+            }
+            ?: return
+        val resolvedColor = contentColor ?: context.getCompatColor(R.color.tv_text_summary)
+        mSearchHintIcon = context.getDrawable(R.drawable.ic_search_hint)
+            ?.mutate()
+            ?.let { drawable ->
+                DrawableCompat.wrap(drawable).apply {
+                    DrawableCompat.setTint(this, resolvedColor)
+                }
+            }
+        applyTint(resolvedColor)
+        searchTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        searchTextView.gravity = Gravity.CENTER_VERTICAL
+        searchTextView.setTextColor(resolvedColor)
+        searchTextView.setHintTextColor(resolvedColor)
+        configureSearchTextView(searchTextView)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            searchTextView.isLocalePreferredLineHeightForMinimumUsed = false
+        }
+        updateQueryHint()
     }
 
     private fun configureSearchTextView(view: TextView) {

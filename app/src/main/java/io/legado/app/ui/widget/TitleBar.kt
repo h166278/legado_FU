@@ -18,6 +18,7 @@ import androidx.core.graphics.alpha
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.children
 import com.google.android.material.appbar.AppBarLayout
+import com.google.android.material.tabs.TabLayout
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.elevation
@@ -191,9 +192,7 @@ class TitleBar @JvmOverloads constructor(
                 setBackgroundColor(context.primaryColor)
                 elevation = context.elevation
             }
-            val topBarContentColor = NgThemeResolver.resolve(context).colors.onTopBar
-            setTextColor(topBarContentColor)
-            setColorFilter(topBarContentColor)
+            applyTopBarContentColor()
 
             stateListAnimator = null
         }
@@ -203,6 +202,18 @@ class TitleBar @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         attachToActivity()
+        if (!isInEditMode) {
+            // ActionBar 会在 attachToActivity() 时才创建返回图标，因此需在挂载后重新应用。
+            applyTopBarContentColor()
+        }
+    }
+
+    private fun applyTopBarContentColor() {
+        val color = NgThemeResolver.resolve(context).colors.onTopBar
+        setTextColor(color)
+        setColorFilter(color)
+        toolbar.findViewById<SearchView>(R.id.search_view)?.setContentColor(color)
+        toolbar.findViewById<TabLayout>(R.id.tab_layout)?.setTabTextColors(color, color)
     }
 
     fun setNavigationOnClickListener(clickListener: ((View) -> Unit)) {

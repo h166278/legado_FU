@@ -426,8 +426,12 @@ internal object NgBuiltInThemes {
         name = "经典主题",
         lightPrimary = 0xFFE53935.toInt(),
         lightSecondary = 0xFF795548.toInt(),
-        darkPrimary = 0xFFE0E0E0.toInt(),
-        darkSecondary = 0xFF303030.toInt()
+        darkPrimary = 0xFFD84315.toInt(),
+        darkSecondary = 0xFF546E7A.toInt(),
+        darkPrimaryText = 0xFFFFFFFF.toInt(),
+        darkSecondaryText = 0xB3FFFFFF.toInt(),
+        darkBackgroundColor = 0xFF212121.toInt(),
+        darkLabelContainer = 0xFF303030.toInt(),
     )
     val warm = theme(
         id = "builtin.ng.warm",
@@ -489,6 +493,10 @@ internal object NgBuiltInThemes {
         lightSecondary: Int,
         darkPrimary: Int,
         darkSecondary: Int,
+        darkPrimaryText: Int? = null,
+        darkSecondaryText: Int? = null,
+        darkBackgroundColor: Int = 0xFF202124.toInt(),
+        darkLabelContainer: Int = 0xFF2A2B2F.toInt(),
         lightBackgroundPath: String? = null,
         darkBackgroundPath: String? = null,
         lightTopBarTextMode: NgTopBarTextMode = NgTopBarTextMode.AUTO,
@@ -508,8 +516,10 @@ internal object NgBuiltInThemes {
             manualColors(
                 primary = darkPrimary,
                 secondary = darkSecondary,
-                background = 0xFF202124.toInt(),
-                label = 0xFF2A2B2F.toInt()
+                background = darkBackgroundColor,
+                label = darkLabelContainer,
+                primaryText = darkPrimaryText,
+                secondaryText = darkSecondaryText,
             )
         }
         return NgManagedTheme(
@@ -545,12 +555,14 @@ internal object NgBuiltInThemes {
         primary: Int,
         secondary: Int,
         background: Int,
-        label: Int
+        label: Int,
+        primaryText: Int? = null,
+        secondaryText: Int? = null,
     ) = NgManualColorSet(
         primary = primary,
         secondary = secondary,
-        primaryText = NgColorMath.contentColorFor(background),
-        secondaryText = NgColorMath.contentColorFor(label),
+        primaryText = primaryText ?: NgColorMath.contentColorFor(background),
+        secondaryText = secondaryText ?: NgColorMath.contentColorFor(label),
         background = background,
         labelContainer = label
     )
