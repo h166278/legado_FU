@@ -38,8 +38,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
@@ -75,6 +78,7 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.design.components.view.NgFloatingTabItem
 import io.legado.app.ui.design.components.compose.NgListState
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.ui.widget.TitleBar
@@ -229,6 +233,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         binding.buttonSaveConfig.setOnClickListener { saveCurrentEngine() }
         binding.buttonVoiceParams.setOnClickListener { toggleVoiceParamPanel() }
         binding.buttonToggleAllVoices.setOnClickListener { toggleAllVoicesEnabled() }
+        applyVoiceToggleActionStyle()
         binding.refreshVoices.setColorSchemeColors(accentColor)
         binding.refreshVoices.setOnRefreshListener { fetchVoices() }
         setupVoiceSearch()
@@ -1101,8 +1106,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private fun showVoiceParamPopup() {
         val engine = currentDisplayedEngine() ?: return
         val popupBinding = LayoutTtsVoiceParamsPopupBinding.inflate(layoutInflater)
-        setupVoiceParamSeekBars(popupBinding)
-        bindVoiceParamPopup(popupBinding, engine)
+        attachVoiceParamPopupOwners(popupBinding.root)
         val popup = PopupWindow(
             popupBinding.root,
             binding.layoutVoiceSearch.width,
@@ -1122,64 +1126,49 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         voiceParamPopup = popup
         voiceParamPopupBinding = popupBinding
         popup.showAsDropDown(binding.layoutVoiceSearch, 0, 8.dpToPx())
+        (popupBinding.root.parent as? View)?.let(::attachVoiceParamPopupOwners)
+        attachVoiceParamPopupOwners(popupBinding.root.rootView)
+        bindVoiceParamPopup(popupBinding, engine)
+        popup.update(binding.layoutVoiceSearch.width, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+    private fun attachVoiceParamPopupOwners(view: View) {
+        view.setViewTreeLifecycleOwner(viewLifecycleOwner)
+        view.setViewTreeViewModelStoreOwner(this@TtsEngineConfigFragment)
+        view.setViewTreeSavedStateRegistryOwner(this@TtsEngineConfigFragment)
     }
 
     private fun bindVoiceParamPopup(
         popupBinding: LayoutTtsVoiceParamsPopupBinding,
         engine: TtsEngineSetting
     ) = popupBinding.run {
-        seekSpeed.progress = engine.effectiveSpeed()
-        seekVolume.progress = engine.effectiveVolume()
-        seekPitch.progress = engine.effectivePitch()
-        updateVoiceParamTexts(this)
-        bindVoiceFilterChips(this)
-    }
-
-    private fun setupVoiceParamSeekBars(popupBinding: LayoutTtsVoiceParamsPopupBinding) {
-        tintVoiceParamSeekBars(popupBinding)
-        val listener = object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    updateVoiceParamTexts(popupBinding)
-                }
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                currentEngineId?.let { engineId ->
-                    TtsEngineStore.saveRuntimeParams(
-                        engineId = engineId,
-                        speed = popupBinding.seekSpeed.progress,
-                        volume = popupBinding.seekVolume.progress,
-                        pitch = popupBinding.seekPitch.progress
+        var speed by mutableStateOf(engine.effectiveSpeed())
+        var volume by mutableStateOf(engine.effectiveVolume())
+        var pitch by mutableStateOf(engine.effectivePitch())
+        composeVoiceParams.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme {
+                    TtsVoiceParamsSliderPanel(
+                        speed = speed,
+                        volume = volume,
+                        pitch = pitch,
+                        onSpeedChange = { speed = it },
+                        onVolumeChange = { volume = it },
+                        onPitchChange = { pitch = it },
+                        onValueChangeFinished = {
+                            TtsEngineStore.saveRuntimeParams(
+                                engineId = engine.id,
+                                speed = speed,
+                                volume = volume,
+                                pitch = pitch
+                            )
+                        }
                     )
                 }
             }
         }
-        popupBinding.seekSpeed.setOnSeekBarChangeListener(listener)
-        popupBinding.seekVolume.setOnSeekBarChangeListener(listener)
-        popupBinding.seekPitch.setOnSeekBarChangeListener(listener)
-    }
-
-    private fun tintVoiceParamSeekBars(popupBinding: LayoutTtsVoiceParamsPopupBinding) {
-        val accent = accentColor
-        val trackTint = ColorStateList.valueOf(ColorUtils.adjustAlpha(accent, 0.35f))
-        val thumbTint = ColorStateList.valueOf(accent)
-        listOf(
-            popupBinding.seekSpeed,
-            popupBinding.seekVolume,
-            popupBinding.seekPitch
-        ).forEach { seekBar ->
-            seekBar.progressTintList = trackTint
-            seekBar.progressBackgroundTintList = trackTint
-            seekBar.secondaryProgressTintList = trackTint
-            seekBar.thumbTintList = thumbTint
-        }
-    }
-
-    private fun updateVoiceParamTexts(popupBinding: LayoutTtsVoiceParamsPopupBinding) = popupBinding.run {
-        textSpeedValue.text = seekSpeed.progress.toString()
-        textVolumeValue.text = seekVolume.progress.toString()
-        textPitchValue.text = seekPitch.progress.toString()
+        bindVoiceFilterChips(this)
     }
 
     private fun bindVoiceFilterChips(popupBinding: LayoutTtsVoiceParamsPopupBinding) {
@@ -1255,7 +1244,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                     24.dpToPx()
                 ).apply {
                     rightMargin = 6.dpToPx()
-                    bottomMargin = 6.dpToPx()
+                    topMargin = 3.dpToPx()
+                    bottomMargin = 3.dpToPx()
                 }
             } else {
                 LinearLayout.LayoutParams(
@@ -1422,6 +1412,19 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         val allEnabled = allVoices.all { engine.isVoiceEnabled(it) }
         binding.buttonToggleAllVoices.setText(
             if (allEnabled) R.string.tts_disable_all_voices else R.string.tts_enable_all_voices
+        )
+        applyVoiceToggleActionStyle()
+    }
+
+    private fun applyVoiceToggleActionStyle() {
+        val snapshot = NgThemeResolver.resolve(requireContext())
+        binding.buttonToggleAllVoices.background = null
+        binding.buttonToggleAllVoices.setTextColor(
+            if (snapshot.isDark) {
+                snapshot.colors.onSurface
+            } else {
+                snapshot.colors.primary
+            }
         )
     }
 

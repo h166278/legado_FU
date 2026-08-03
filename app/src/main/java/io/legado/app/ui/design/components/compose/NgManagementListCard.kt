@@ -224,13 +224,14 @@ fun NgManagementLeadingIcon(
     painter: Painter,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    tint: Color = Color.Unspecified
+    tint: Color = Color.Unspecified,
+    containerColor: Color? = null
 ) {
     Box(
         modifier = modifier
             .size(38.dp)
             .clip(CircleShape)
-            .background(colorResource(R.color.ng_icon_container))
+            .background(containerColor ?: colorResource(R.color.ng_icon_container))
             .padding(7.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -248,13 +249,15 @@ fun NgManagementLeadingIcon(
     @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    tint: Color = Color.Unspecified
+    tint: Color = Color.Unspecified,
+    containerColor: Color? = null
 ) {
     NgManagementLeadingIcon(
         painter = painterResource(iconRes),
         modifier = modifier,
         contentDescription = contentDescription,
-        tint = tint
+        tint = tint,
+        containerColor = containerColor
     )
 }
 

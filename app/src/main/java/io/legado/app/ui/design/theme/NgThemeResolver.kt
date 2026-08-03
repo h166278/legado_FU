@@ -264,7 +264,7 @@ object NgThemeResolver {
             background = background,
             onBackground = manual.primaryText,
             surface = surface,
-            onSurface = manual.secondaryText,
+            onSurface = manual.primaryText,
             surfaceVariant = surfaceVariant,
             onSurfaceVariant = manual.secondaryText,
             surfaceContainerLow = NgColorMath.blend(surface, manual.secondaryText, 0.02f),

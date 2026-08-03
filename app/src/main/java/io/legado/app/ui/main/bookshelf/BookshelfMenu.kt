@@ -1,11 +1,19 @@
 package io.legado.app.ui.main.bookshelf
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,7 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
@@ -135,6 +147,7 @@ internal fun BookshelfMenuHost(
     includeBrowseHistory: Boolean,
     onMenuItemClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    menuOffset: DpOffset = DpOffset.Zero,
     anchor: @Composable BoxScope.((() -> Unit)) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -147,6 +160,7 @@ internal fun BookshelfMenuHost(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             items = items,
+            offset = menuOffset,
             onItemClick = { item ->
                 expanded = false
                 onMenuItemClick(item.itemId)
@@ -179,5 +193,85 @@ internal fun BookshelfToolbarMenuButton(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+@Composable
+internal fun BookshelfContentToolbarMenuButton(
+    onMenuItemClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BookshelfMenuHost(
+        includeBrowseHistory = true,
+        onMenuItemClick = onMenuItemClick,
+        modifier = modifier,
+        menuOffset = DpOffset(0.dp, (-6).dp)
+    ) { openMenu ->
+        BookshelfContentToolbarActionContent(
+            iconRes = R.drawable.ic_bookshelf_dock_more,
+            labelRes = R.string.more,
+            onClick = openMenu,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+internal fun BookshelfContentToolbarActionButton(
+    @DrawableRes iconRes: Int,
+    @StringRes labelRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BookshelfContentToolbarActionContent(
+        iconRes = iconRes,
+        labelRes = labelRes,
+        onClick = onClick,
+        modifier = modifier.fillMaxHeight(),
+        horizontalPadding = 6.dp
+    )
+}
+
+@Composable
+private fun BookshelfContentToolbarActionContent(
+    @DrawableRes iconRes: Int,
+    @StringRes labelRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 0.dp
+) {
+    val contentColor = bookshelfContentToolbarActionColor()
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = horizontalPadding),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.size(2.dp))
+        Text(
+            text = stringResource(labelRes),
+            color = contentColor,
+            fontSize = 11.sp,
+            lineHeight = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun bookshelfContentToolbarActionColor(): Color {
+    val snapshot = NgTheme.snapshot
+    return if (snapshot.isDark) {
+        Color(snapshot.colors.onSurface)
+    } else {
+        Color(snapshot.colors.onSurfaceVariant).copy(alpha = 184f / 255f)
     }
 }

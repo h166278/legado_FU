@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
@@ -184,6 +185,17 @@ private fun TtsEngineListCard(
     modifier: Modifier = Modifier
 ) {
     val dragDescription = item.actionContentDescription ?: stringResource(R.string.menu)
+    val themeSnapshot = NgTheme.snapshot
+    val iconContainerColor = if (themeSnapshot.isDark) {
+        Color(themeSnapshot.colors.selectedContainer)
+    } else {
+        colorResource(R.color.ng_settings_icon_bg)
+    }
+    val iconContentColor = if (themeSnapshot.isDark) {
+        Color(themeSnapshot.colors.onPrimaryContainer)
+    } else {
+        Color(themeSnapshot.colors.primary)
+    }
     NgSwipeToDelete(
         deletable = item.deletable,
         reordering = reorderState.isDragging,
@@ -219,7 +231,8 @@ private fun TtsEngineListCard(
                 NgManagementLeadingIcon(
                     iconRes = item.iconRes,
                     contentDescription = null,
-                    tint = Color(NgTheme.colors.primary)
+                    tint = iconContentColor,
+                    containerColor = iconContainerColor
                 )
             }
         )

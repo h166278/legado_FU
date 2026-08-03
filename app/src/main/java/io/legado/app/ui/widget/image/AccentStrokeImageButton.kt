@@ -17,7 +17,15 @@ class AccentStrokeImageButton @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : AppCompatImageButton(context, attrs, defStyleAttr) {
 
+    private val useSurfaceBackground: Boolean
+
     init {
+        val typedArray = context.obtainStyledAttributes(
+            attrs,
+            intArrayOf(R.attr.useSurfaceBackground)
+        )
+        useSurfaceBackground = typedArray.getBoolean(0, false)
+        typedArray.recycle()
         upStyle()
     }
 
@@ -28,11 +36,18 @@ class AccentStrokeImageButton @JvmOverloads constructor(
             ThemeStore.accentColor(context)
         }
         imageTintList = ColorStateList.valueOf(accentColor)
-        background = Selector.shapeBuild()
+        val backgroundBuilder = Selector.shapeBuild()
             .setCornerRadius(12.dpToPx())
             .setStrokeWidth(1.dpToPx())
             .setDefaultStrokeColor(accentColor)
-            .setPressedBgColor(ColorUtils.setAlphaComponent(accentColor, 24))
-            .create()
+        if (useSurfaceBackground) {
+            val white = context.getCompatColor(R.color.white)
+            backgroundBuilder
+                .setDefaultBgColor(ColorUtils.setAlphaComponent(white, 219))
+                .setPressedBgColor(ColorUtils.setAlphaComponent(white, 245))
+        } else {
+            backgroundBuilder.setPressedBgColor(ColorUtils.setAlphaComponent(accentColor, 24))
+        }
+        background = backgroundBuilder.create()
     }
 }

@@ -227,6 +227,7 @@ import io.legado.app.ui.widget.compose.toggleNgExpandedKey
 import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.openUrl
@@ -3355,6 +3356,36 @@ private fun DrawerBottomActionButton(
 }
 
 @Composable
+private fun drawerPrimaryContentColor(): Color {
+    val snapshot = NgTheme.snapshot
+    return if (snapshot.isDark) {
+        Color(snapshot.colors.onSurface)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+}
+
+@Composable
+private fun drawerSecondaryContentColor(): Color {
+    val snapshot = NgTheme.snapshot
+    return if (snapshot.isDark) {
+        Color(snapshot.colors.onSurfaceVariant)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+}
+
+@Composable
+private fun drawerAccentContentColor(enabled: Boolean = true): Color {
+    val snapshot = NgTheme.snapshot
+    return when {
+        !enabled -> Color(snapshot.colors.onSurfaceVariant).copy(alpha = 0.45f)
+        snapshot.isDark -> Color(snapshot.colors.onSurface)
+        else -> Color(snapshot.colors.primary)
+    }
+}
+
+@Composable
 private fun DrawerHistoryContent(
     groups: List<DrawerHistoryGroup>,
     historyLoaded: Boolean,
@@ -3427,7 +3458,7 @@ private fun DrawerHistoryContent(
             item(key = "history_loading") {
                 Text(
                     text = "正在加载聊天历史",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = drawerSecondaryContentColor(),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                 )
@@ -3493,6 +3524,8 @@ private fun DrawerHistoryGroupHeader(
     onPinGroup: () -> Unit,
     onDeleteGroup: () -> Unit
 ) {
+    val primaryContentColor = drawerPrimaryContentColor()
+    val secondaryContentColor = drawerSecondaryContentColor()
     Surface(
         onClick = onToggle,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.22f),
@@ -3511,12 +3544,12 @@ private fun DrawerHistoryGroupHeader(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = primaryContentColor
             )
             Text(
                 text = group.title,
                 modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = primaryContentColor,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
@@ -3524,7 +3557,7 @@ private fun DrawerHistoryGroupHeader(
             )
             Text(
                 text = group.items.size.toString(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = secondaryContentColor,
                 style = MaterialTheme.typography.bodySmall
             )
             DrawerGroupMoreMenu(
@@ -3541,17 +3574,14 @@ private fun DrawerPlainTextButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val textColor = drawerAccentContentColor(enabled)
     Text(
         text = text,
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 3.dp),
-        color = if (enabled) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-        },
+        color = textColor,
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.bodySmall,
         maxLines = 1,
@@ -3578,7 +3608,7 @@ private fun DrawerFavoriteContent(
             item(key = "favorite_empty") {
                 Text(
                     text = "暂无收藏内容",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = drawerSecondaryContentColor(),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                 )
@@ -3603,13 +3633,14 @@ private fun DrawerFavoriteContent(
                                 text = item.title,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = drawerAccentContentColor(),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = item.preview,
                                 style = MaterialTheme.typography.bodySmall,
+                                color = drawerSecondaryContentColor(),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -3632,7 +3663,7 @@ private fun DrawerSectionTitle(
 ) {
     Text(
         text = text,
-        color = MaterialTheme.colorScheme.primary,
+        color = drawerAccentContentColor(),
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.bodySmall,
         modifier = modifier.padding(horizontal = 6.dp, vertical = 3.dp)
@@ -3646,6 +3677,7 @@ private fun DrawerActionRow(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val contentColor = drawerPrimaryContentColor()
     Surface(
         onClick = onClick,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent,
@@ -3657,10 +3689,16 @@ private fun DrawerActionRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = contentColor
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
+                color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -3679,6 +3717,8 @@ private fun DrawerConversationRow(
     onPin: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null
 ) {
+    val primaryContentColor = drawerPrimaryContentColor()
+    val secondaryContentColor = drawerSecondaryContentColor()
     Surface(
         onClick = onClick,
         color = when {
@@ -3709,6 +3749,7 @@ private fun DrawerConversationRow(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = primaryContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -3716,7 +3757,7 @@ private fun DrawerConversationRow(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = secondaryContentColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -3738,6 +3779,7 @@ private fun DrawerMoreMenu(
     onDelete: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val contentColor = drawerPrimaryContentColor()
     Box {
         IconButton(
             onClick = { expanded = true },
@@ -3746,7 +3788,8 @@ private fun DrawerMoreMenu(
             Icon(
                 imageVector = Icons.Rounded.MoreHoriz,
                 contentDescription = "更多",
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.dp),
+                tint = contentColor
             )
         }
         NgFunctionMenu(
@@ -3782,6 +3825,7 @@ private fun DrawerGroupMoreMenu(
     onDeleteGroup: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val contentColor = drawerPrimaryContentColor()
     Box {
         IconButton(
             onClick = { expanded = true },
@@ -3790,7 +3834,8 @@ private fun DrawerGroupMoreMenu(
             Icon(
                 imageVector = Icons.Rounded.MoreHoriz,
                 contentDescription = "分组操作",
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.dp),
+                tint = contentColor
             )
         }
         NgFunctionMenu(

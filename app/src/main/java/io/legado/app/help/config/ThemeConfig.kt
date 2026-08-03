@@ -203,12 +203,13 @@ object ThemeConfig {
     private fun copyAssetBackgroundIfNeed(
         context: Context,
         preferenceKey: String,
-        backgroundPath: String
+        backgroundPath: String,
+        forceRefresh: Boolean = false,
     ): String {
         val assetPath = backgroundPath.removePrefix(ASSET_BACKGROUND_PREFIX)
         val filePath = cachedBackgroundPath(context, backgroundPath, preferenceKey)
         val file = File(filePath)
-        if (!file.exists() || file.length() == 0L) {
+        if (forceRefresh || !file.exists() || file.length() == 0L) {
             FileUtils.createFileIfNotExist(filePath)
             context.assets.open(assetPath).use { inputStream ->
                 FileOutputStream(file).use { outputStream ->
@@ -407,7 +408,12 @@ object ThemeConfig {
             }
             val savedBackgroundPath = when {
                 backgroundPath?.startsWith(ASSET_BACKGROUND_PREFIX) == true -> {
-                    copyAssetBackgroundIfNeed(context, preferenceKey, backgroundPath)
+                    copyAssetBackgroundIfNeed(
+                        context = context,
+                        preferenceKey = preferenceKey,
+                        backgroundPath = backgroundPath,
+                        forceRefresh = true,
+                    )
                 }
 
                 else -> backgroundPath
@@ -447,7 +453,12 @@ object ThemeConfig {
             fun materialize(background: NgThemeBackground, preferenceKey: String): String? {
                 val path = background.path?.takeIf(String::isNotBlank) ?: return null
                 return if (path.startsWith(ASSET_BACKGROUND_PREFIX)) {
-                    copyAssetBackgroundIfNeed(context, preferenceKey, path)
+                    copyAssetBackgroundIfNeed(
+                        context = context,
+                        preferenceKey = preferenceKey,
+                        backgroundPath = path,
+                        forceRefresh = true,
+                    )
                 } else {
                     path
                 }

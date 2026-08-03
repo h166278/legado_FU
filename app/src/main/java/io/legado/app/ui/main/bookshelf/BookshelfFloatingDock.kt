@@ -68,7 +68,6 @@ internal fun BookshelfFloatingDock(
     groups: List<BookshelfDockGroup>,
     selectedIndex: Int,
     onSearchClick: () -> Unit,
-    onMenuItemClick: (Int) -> Unit,
     onGroupClick: (Int) -> Unit,
     onGroupLongClick: (Int) -> Unit,
     topDistancePx: Int,
@@ -121,7 +120,6 @@ internal fun BookshelfFloatingDock(
                     onGroupLongClick = onGroupLongClick,
                     modifier = Modifier.weight(1f)
                 )
-                MoreAction(onMenuItemClick = onMenuItemClick)
             }
         }
     }
@@ -133,7 +131,7 @@ private fun DockAction(
     label: String,
     onClick: () -> Unit
 ) {
-    val contentColor = Color(NgTheme.colors.onSurfaceVariant).copy(alpha = 0.66f)
+    val contentColor = floatingDockInactiveContentColor()
     DockItemContent(
         label = label,
         contentColor = contentColor,
@@ -214,11 +212,10 @@ private fun GroupItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val colors = NgTheme.colors
     val contentColor = if (selected) {
-        Color(colors.primary)
+        floatingDockActiveContentColor()
     } else {
-        Color(colors.onSurfaceVariant).copy(alpha = 0.66f)
+        floatingDockInactiveContentColor()
     }
     DockItemContent(
         label = group.name,
@@ -289,16 +286,16 @@ private fun DockVectorIcon(@DrawableRes iconRes: Int, tint: Color) {
 
 @Composable
 private fun GroupIcon(group: BookshelfDockGroup, selected: Boolean) {
-    val colors = NgTheme.colors
+    val iconTint = if (selected) {
+        floatingDockActiveContentColor()
+    } else {
+        floatingDockInactiveContentColor()
+    }
     val builtInIconRes = group.builtInIconRes()
     when {
         builtInIconRes != null -> DockVectorIcon(
             iconRes = builtInIconRes,
-            tint = if (selected) {
-                Color(colors.primary)
-            } else {
-                Color(colors.onSurfaceVariant).copy(alpha = 0.66f)
-            }
+            tint = iconTint
         )
 
         !group.cover.isNullOrBlank() -> GroupCoverIcon(
@@ -308,11 +305,7 @@ private fun GroupIcon(group: BookshelfDockGroup, selected: Boolean) {
 
         else -> Text(
             text = group.name.firstOrNull()?.toString().orEmpty(),
-            color = if (selected) {
-                Color(colors.primary)
-            } else {
-                Color(colors.onSurfaceVariant).copy(alpha = 0.66f)
-            },
+            color = iconTint,
             fontSize = 18.sp,
             lineHeight = 22.sp,
             fontWeight = FontWeight.Medium,
@@ -349,34 +342,17 @@ private fun GroupCoverIcon(path: String, selected: Boolean) {
 }
 
 @Composable
-private fun MoreAction(onMenuItemClick: (Int) -> Unit) {
-    val contentColor = Color(NgTheme.colors.onSurfaceVariant)
-        .copy(alpha = 0.66f)
-    val label = stringResource(R.string.more)
-    BookshelfMenuHost(
-        includeBrowseHistory = true,
-        onMenuItemClick = onMenuItemClick,
-        modifier = Modifier
-            .width(48.dp)
-            .fillMaxHeight()
-    ) { openMenu ->
-        DockItemContent(
-            label = label,
-            contentColor = contentColor,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .clickable(onClick = openMenu)
-                .semantics(mergeDescendants = true) {
-                    role = Role.Button
-                    contentDescription = label
-                }
-        ) {
-            DockVectorIcon(
-                iconRes = R.drawable.ic_bookshelf_dock_more,
-                tint = contentColor
-            )
-        }
+private fun floatingDockActiveContentColor(): Color {
+    return Color(NgTheme.colors.primary)
+}
+
+@Composable
+private fun floatingDockInactiveContentColor(): Color {
+    val snapshot = NgTheme.snapshot
+    return if (snapshot.isDark) {
+        Color(snapshot.colors.onSurface)
+    } else {
+        Color(snapshot.colors.onSurfaceVariant).copy(alpha = 0.66f)
     }
 }
 

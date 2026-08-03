@@ -18,10 +18,10 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.databinding.DialogImageBlurringBinding
-import io.legado.app.help.config.NgBuiltInThemes
 import io.legado.app.help.config.NgManagedTheme
 import io.legado.app.help.config.NgThemeLibraryStore
 import io.legado.app.help.config.NgThemePackageManager
+import io.legado.app.help.config.isBuiltIn
 import io.legado.app.help.config.md3.Md3ThemeImportDraft
 import io.legado.app.help.config.md3.Md3ThemeImportManager
 import io.legado.app.help.config.md3.Md3ThemePackageNotRecognizedException
@@ -141,7 +141,7 @@ class ThemeManagerFragment : BaseFragment(R.layout.fragment_theme_manager) {
                 val state by NgThemeLibraryStore.observe(requireContext()).collectAsState()
                 NgAppTheme {
                     ThemeManagerScreen(
-                        builtInThemes = NgBuiltInThemes.all,
+                        builtInThemes = NgThemeLibraryStore.builtInThemes(requireContext()),
                         savedThemes = state.savedThemes,
                         activeThemeId = state.activeThemeId,
                         onThemeSelected = { NgThemeLibraryStore.apply(requireContext(), it) },
@@ -242,7 +242,7 @@ class ThemeManagerFragment : BaseFragment(R.layout.fragment_theme_manager) {
             toastOnUi(R.string.ng_theme_name_required)
             return
         }
-        val builtIn = NgBuiltInThemes.all.any { it.id == original.id }
+        val builtIn = original.isBuiltIn
         val targetName = if (builtIn && draft.name.equals(original.name, true)) {
             NgThemeLibraryStore.uniqueName(
                 context,

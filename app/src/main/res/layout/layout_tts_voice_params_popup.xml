@@ -10,104 +10,11 @@
     android:paddingEnd="18dp"
     android:paddingBottom="14dp">
 
-    <LinearLayout
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_voice_params"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            style="@style/Ng.Label"
-            android:layout_width="40dp"
-            android:text="@string/tts_speed" />
-
-        <androidx.appcompat.widget.AppCompatSeekBar
-            android:id="@+id/seek_speed"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:max="100"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:progressDrawable="@drawable/ng_tts_param_seek_progress"
-            android:splitTrack="false"
-            android:thumb="@drawable/ng_tts_param_seek_thumb"
-            android:thumbTint="@color/white" />
-
-        <TextView
-            android:id="@+id/text_speed_value"
-            style="@style/Ng.SettingsSummary"
-            android:layout_width="36dp"
-            android:layout_marginStart="0dp"
-            android:gravity="end" />
-
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            style="@style/Ng.Label"
-            android:layout_width="40dp"
-            android:text="@string/tts_volume" />
-
-        <androidx.appcompat.widget.AppCompatSeekBar
-            android:id="@+id/seek_volume"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:max="100"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:progressDrawable="@drawable/ng_tts_param_seek_progress"
-            android:splitTrack="false"
-            android:thumb="@drawable/ng_tts_param_seek_thumb"
-            android:thumbTint="@color/white" />
-
-        <TextView
-            android:id="@+id/text_volume_value"
-            style="@style/Ng.SettingsSummary"
-            android:layout_width="36dp"
-            android:layout_marginStart="0dp"
-            android:gravity="end" />
-
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            style="@style/Ng.Label"
-            android:layout_width="40dp"
-            android:text="@string/tts_pitch" />
-
-        <androidx.appcompat.widget.AppCompatSeekBar
-            android:id="@+id/seek_pitch"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:max="100"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:progressDrawable="@drawable/ng_tts_param_seek_progress"
-            android:splitTrack="false"
-            android:thumb="@drawable/ng_tts_param_seek_thumb"
-            android:thumbTint="@color/white" />
-
-        <TextView
-            android:id="@+id/text_pitch_value"
-            style="@style/Ng.SettingsSummary"
-            android:layout_width="36dp"
-            android:layout_marginStart="0dp"
-            android:gravity="end" />
-
-    </LinearLayout>
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent" />
 
     <LinearLayout
         android:id="@+id/layout_language_filter_section"
@@ -129,8 +36,9 @@
             android:id="@+id/layout_voice_language_filters"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:minHeight="30dp"
             android:layout_weight="1"
+            android:minHeight="30dp"
+            android:paddingStart="10dp"
             app:alignItems="center"
             app:flexDirection="row"
             app:flexWrap="wrap" />
@@ -157,6 +65,7 @@
             android:layout_weight="1"
             android:fadingEdgeLength="12dp"
             android:overScrollMode="never"
+            android:paddingStart="10dp"
             android:requiresFadingEdge="horizontal"
             android:scrollbars="none">
 

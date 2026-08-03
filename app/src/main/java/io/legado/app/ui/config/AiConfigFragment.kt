@@ -85,6 +85,7 @@ import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.design.components.view.NgFloatingTabItem
 import io.legado.app.ui.design.components.compose.NgListState
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.ui.widget.dialog.NgLongListBottomSheet
@@ -992,7 +993,15 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     }
 
     private fun refreshAccentControls() {
-        binding.buttonToggleModelSelection.setTextColor(accentColor)
+        val snapshot = NgThemeResolver.resolve(requireContext())
+        binding.buttonToggleModelSelection.background = null
+        binding.buttonToggleModelSelection.setTextColor(
+            if (snapshot.isDark) {
+                snapshot.colors.onSurface
+            } else {
+                snapshot.colors.primary
+            }
+        )
     }
 
     private fun createNgChoiceDialogRoot(

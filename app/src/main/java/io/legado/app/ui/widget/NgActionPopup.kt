@@ -65,8 +65,13 @@ class NgActionPopup(
         elevation = 8.dpToPx().toFloat()
     }
 
-    fun show(anchor: View) {
-        val margin = 8.dpToPx()
+    fun show(
+        anchor: View,
+        marginDp: Int = 8,
+        verticalAnchorInsetDp: Int = 0
+    ) {
+        val margin = marginDp.dpToPx()
+        val verticalAnchorInset = verticalAnchorInsetDp.dpToPx()
         val location = IntArray(2)
         val rootLocation = IntArray(2)
         anchor.getLocationOnScreen(location)
@@ -81,8 +86,10 @@ class NgActionPopup(
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         )
         val popupHeight = contentView.measuredHeight
-        val belowY = location[1] + anchor.height + margin
-        val aboveY = location[1] - popupHeight - margin
+        val visibleTop = location[1] + verticalAnchorInset
+        val visibleBottom = location[1] + anchor.height - verticalAnchorInset
+        val belowY = visibleBottom + margin
+        val aboveY = visibleTop - popupHeight - margin
         val y = if (belowY + popupHeight > rootBottom - margin && aboveY >= rootTop + margin) {
             aboveY
         } else {

@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.NgManagedTheme
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.help.config.isBuiltIn
 import io.legado.app.help.config.md3.Md3ThemeImportDraft
 import io.legado.app.help.config.md3.Md3ThemePackageFormat
 import io.legado.app.ui.design.components.NgButtonVariant
@@ -152,7 +153,7 @@ internal fun ThemeManagerScreen(
     if (editingTheme != null && draftTheme != null) {
         NgThemeEditorSheet(
             draftTheme = draftTheme,
-            copyOnSave = builtInThemes.any { it.id == editingTheme.id },
+            copyOnSave = editingTheme.isBuiltIn,
             onDismissRequest = onDismissThemeEditor,
             onThemeChanged = onDraftThemeChanged,
             onEditBackground = onEditBackground,

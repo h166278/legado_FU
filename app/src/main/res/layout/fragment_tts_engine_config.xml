@@ -164,7 +164,8 @@
                     android:layout_marginStart="8dp"
                     android:contentDescription="@string/tts_voice_params"
                     android:padding="11dp"
-                    android:src="@drawable/ic_tts_params_grid" />
+                    android:src="@drawable/ic_tts_params_grid"
+                    app:useSurfaceBackground="true" />
 
             </LinearLayout>
 

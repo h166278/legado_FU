@@ -28,12 +28,41 @@ private data class NgThemePackageManifest(
 internal object NgThemePackageManager {
 
     const val PACKAGE_DIR = "ng_theme_packages"
+    private const val BUILT_IN_DIR = "built-in"
+    private const val BUILT_IN_STAMP = ".app-update"
     private const val MANIFEST_NAME = "manifest.json"
     private const val FORMAT = "reading-ng-theme"
     private const val VERSION = 1
     private const val MAX_ENTRY_COUNT = 32
     private const val MAX_ENTRY_BYTES = 32L * 1024 * 1024
     private const val MAX_TOTAL_BYTES = 64L * 1024 * 1024
+
+    /**
+     * 内置主题和导入主题使用同一种已安装目录结构。
+     * APK 更新后重建内置包，运行期间只读取私有目录里的清单和资源。
+     */
+    fun installBuiltInThemes(
+        context: Context,
+        definitions: List<NgManagedTheme>,
+    ): List<NgManagedTheme> {
+        val root = File(File(context.filesDir, PACKAGE_DIR), BUILT_IN_DIR).apply { mkdirs() }
+        val updateToken = context.packageManager
+            .getPackageInfo(context.packageName, 0)
+            .lastUpdateTime
+            .toString()
+        val stamp = File(root, BUILT_IN_STAMP)
+        if (stamp.takeIf(File::isFile)?.readText() != updateToken) {
+            definitions.forEach { installBuiltInTheme(context, root, it) }
+            stamp.writeText(updateToken)
+        }
+        return definitions.map { definition ->
+            runCatching { readInstalledBuiltInTheme(root, definition.id) }
+                .getOrElse {
+                    installBuiltInTheme(context, root, definition)
+                    readInstalledBuiltInTheme(root, definition.id)
+                }
+        }
+    }
 
     suspend fun exportTheme(
         context: Context,
@@ -126,6 +155,91 @@ internal object NgThemePackageManager {
                 }
             }
         }
+
+    private fun installBuiltInTheme(
+        context: Context,
+        builtInRoot: File,
+        definition: NgManagedTheme,
+    ) {
+        require(definition.isBuiltIn) { "内置主题 ID 非法" }
+        val directoryName = definition.id.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val installedRoot = File(builtInRoot, directoryName)
+        val stagingRoot = File(builtInRoot, ".$directoryName-${UUID.randomUUID()}")
+        try {
+            val backgroundEntries = linkedMapOf<String, ThemeAsset>()
+            fun registerBackground(path: String?, role: String): String? {
+                path?.takeIf(String::isNotBlank) ?: return null
+                backgroundEntries.values.firstOrNull { it.source == path }?.let {
+                    return it.entryName
+                }
+                val entryName = "assets/background-$role.${backgroundExtension(path)}"
+                backgroundEntries[entryName] = ThemeAsset(path, entryName)
+                return entryName
+            }
+
+            val lightAsset = registerBackground(definition.lightBackground.path, "light")
+            val darkAsset = registerBackground(definition.darkBackground.path, "dark")
+            val manifest = NgThemePackageManifest(
+                format = FORMAT,
+                version = VERSION,
+                theme = definition.copy(
+                    packageRootPath = null,
+                    lightBackground = definition.lightBackground.copy(path = null),
+                    darkBackground = definition.darkBackground.copy(path = null),
+                ),
+                lightBackgroundAsset = lightAsset,
+                darkBackgroundAsset = darkAsset,
+            )
+            stagingRoot.mkdirs()
+            File(stagingRoot, MANIFEST_NAME).writeText(GSON.toJson(manifest))
+            backgroundEntries.values.forEach { asset ->
+                val target = File(stagingRoot, asset.entryName)
+                target.parentFile?.mkdirs()
+                openThemeAsset(context, asset.source).use { input ->
+                    target.outputStream().buffered().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            if (installedRoot.exists()) {
+                check(installedRoot.deleteRecursively()) { "无法更新内置主题包" }
+            }
+            if (!stagingRoot.renameTo(installedRoot)) {
+                check(stagingRoot.copyRecursively(installedRoot, overwrite = false)) {
+                    "无法安装内置主题包"
+                }
+                stagingRoot.deleteRecursively()
+            }
+        } finally {
+            stagingRoot.deleteRecursively()
+        }
+    }
+
+    private fun readInstalledBuiltInTheme(root: File, themeId: String): NgManagedTheme {
+        val directoryName = themeId.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val installedRoot = File(root, directoryName)
+        val manifestFile = File(installedRoot, MANIFEST_NAME)
+        require(manifestFile.isFile) { "内置主题包缺少 manifest.json" }
+        val manifest = GSON.fromJson(
+            manifestFile.readText(),
+            NgThemePackageManifest::class.java,
+        ) ?: error("内置主题包清单为空")
+        require(
+            manifest.format == FORMAT &&
+                manifest.version == VERSION &&
+                manifest.theme.id == themeId &&
+                manifest.theme.isBuiltIn
+        ) { "内置主题包清单无效" }
+        return manifest.theme.copy(
+            lightBackground = manifest.theme.lightBackground.copy(
+                path = resolveInstalledAsset(installedRoot, manifest.lightBackgroundAsset),
+            ),
+            darkBackground = manifest.theme.darkBackground.copy(
+                path = resolveInstalledAsset(installedRoot, manifest.darkBackgroundAsset),
+            ),
+            packageRootPath = installedRoot.absolutePath,
+        ).normalized()
+    }
 
     private fun extract(context: Context, uri: Uri, root: File) {
         root.mkdirs()

@@ -4,12 +4,9 @@ package io.legado.app.ui.main.bookshelf.style1
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.drawable.InsetDrawable
 import android.graphics.Typeface
+import android.graphics.drawable.InsetDrawable
 import android.os.Bundle
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -48,6 +45,8 @@ import io.legado.app.ui.book.manage.BookshelfManageActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.BookshelfDockGroup
+import io.legado.app.ui.main.bookshelf.BookshelfContentToolbarActionButton
+import io.legado.app.ui.main.bookshelf.BookshelfContentToolbarMenuButton
 import io.legado.app.ui.main.bookshelf.BookshelfFloatingDock
 import io.legado.app.ui.main.bookshelf.BookshelfToolbarMenuButton
 import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
@@ -90,7 +89,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.titleBar.findViewById(R.id.tab_layout)
     }
     private val bookGroups = mutableListOf<BookGroup>()
-    private val bookCounts = mutableMapOf<Long, Int>()
     private val fragmentMap = hashMapOf<Long, BooksFragment>()
     private var dockGroups by mutableStateOf<List<BookshelfDockGroup>>(emptyList())
     private var dockSelectedIndex by mutableIntStateOf(0)
@@ -145,9 +143,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             showSortMenu(it)
         }
         binding.tvBookshelfEdit.setOnClickListener {
-            startActivity<BookshelfManageActivity> {
-                putExtra("groupId", groupId)
-            }
+            openBookshelfManage()
         }
         binding.tvBookshelfViewHistory.setOnClickListener {
             startActivity<ReadRecordActivity>()
@@ -171,6 +167,17 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         if (configuredTopBarStyle == BookshelfTopBarStyle.TRADITIONAL) {
             legacyTopBar.visibility = View.VISIBLE
             floatingDock.visibility = View.GONE
+            binding.btnBookshelfContentManage.visibility = View.GONE
+            binding.btnBookshelfContentSort.visibility = View.GONE
+            binding.btnBookshelfContentMore.visibility = View.GONE
+            binding.tvBookshelfViewBooks.visibility = View.VISIBLE
+            binding.tvBookshelfSort.visibility = View.VISIBLE
+            binding.tvBookshelfEdit.visibility = View.VISIBLE
+            binding.tvBookshelfViewBooks.setOnClickListener(null)
+            binding.tvBookshelfViewBooks.setOnTouchListener(null)
+            binding.tvBookshelfViewBooks.isClickable = false
+            binding.tvBookshelfViewBooks.isFocusable = false
+            binding.tvBookshelfViewBooks.setCompoundDrawablesRelative(null, null, null, null)
             return
         }
         legacyTopBar.visibility = View.GONE
@@ -188,7 +195,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                     onSearchClick = {
                         SearchActivity.start(requireContext(), null)
                     },
-                    onMenuItemClick = ::onBookshelfMenuItemClick,
                     onGroupClick = { index ->
                         tabLayout.getTabAt(index)?.select()
                     },
@@ -241,16 +247,17 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             binding.bookshelfContentToolbar.layoutParams.apply {
                 height = 40.dpToPx()
         }
-        binding.tvBookshelfViewBooks.apply {
-            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
         val actionBackgroundInset = 8.dpToPx()
-        listOf(binding.tvBookshelfSort, binding.tvBookshelfEdit).forEach { action ->
-            action.layoutParams = action.layoutParams.apply {
+        binding.tvBookshelfViewBooks.visibility = View.GONE
+        binding.tvBookshelfSort.visibility = View.GONE
+        binding.tvBookshelfEdit.visibility = View.GONE
+        binding.btnBookshelfContentManage.apply {
+            visibility = View.VISIBLE
+            layoutParams = (layoutParams as LinearLayout.LayoutParams).apply {
+                width = ViewGroup.LayoutParams.WRAP_CONTENT
                 height = 40.dpToPx()
             }
-            action.background = AppCompatResources.getDrawable(
+            background = AppCompatResources.getDrawable(
                 requireContext(),
                 R.drawable.bg_bookshelf_compact_action
             )?.let { background ->
@@ -262,44 +269,81 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                     actionBackgroundInset
                 )
             }
-            action.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11f)
-            action.setPadding(6.dpToPx(), 0, 6.dpToPx(), 0)
-        }
-        binding.tvBookshelfEdit.layoutParams =
-            (binding.tvBookshelfEdit.layoutParams as LinearLayout.LayoutParams).apply {
-                marginStart = 6.dpToPx()
-        }
-        val actionIconSize = 16.dpToPx()
-        binding.tvBookshelfSort.setCompoundDrawablesRelative(
-            AppCompatResources.getDrawable(
-                requireContext(),
-                R.drawable.ic_swap_vert
-            )?.mutate()?.apply {
-                setBounds(0, 0, actionIconSize, actionIconSize)
-            },
-            null,
-            AppCompatResources.getDrawable(
-                requireContext(),
-                R.drawable.ic_arrow_drop_down_summary
-            )?.mutate()?.apply {
-                setBounds(0, 0, actionIconSize, actionIconSize)
-            },
-            null
-        )
-        binding.tvBookshelfSort.compoundDrawablePadding = 2.dpToPx()
-        binding.tvBookshelfEdit.apply {
-            setCompoundDrawablesRelative(
-                AppCompatResources.getDrawable(
-                    requireContext(),
-                    R.drawable.ic_grid_menu
-                )?.mutate()?.apply {
-                    setBounds(0, 0, actionIconSize, actionIconSize)
-                },
-                null,
-                null,
-                null
+            bindSoftPress()
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
             )
-            compoundDrawablePadding = 2.dpToPx()
+            setContent {
+                NgAppTheme {
+                    BookshelfContentToolbarActionButton(
+                        iconRes = R.drawable.ic_settings,
+                        labelRes = R.string.manage,
+                        onClick = ::openBookshelfManage
+                    )
+                }
+            }
+        }
+        binding.btnBookshelfContentSort.apply {
+            visibility = View.VISIBLE
+            layoutParams = (layoutParams as LinearLayout.LayoutParams).apply {
+                width = ViewGroup.LayoutParams.WRAP_CONTENT
+                height = 40.dpToPx()
+            }
+            background = AppCompatResources.getDrawable(
+                requireContext(),
+                R.drawable.bg_bookshelf_compact_action
+            )?.let { background ->
+                InsetDrawable(
+                    background,
+                    0,
+                    actionBackgroundInset,
+                    0,
+                    actionBackgroundInset
+                )
+            }
+            bindSoftPress()
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    BookshelfContentToolbarActionButton(
+                        iconRes = R.drawable.ic_swap_vert,
+                        labelRes = R.string.sort,
+                        onClick = { showSortMenu(this@apply) }
+                    )
+                }
+            }
+        }
+        binding.btnBookshelfContentMore.apply {
+            visibility = View.VISIBLE
+            layoutParams = (layoutParams as LinearLayout.LayoutParams).apply {
+                height = 40.dpToPx()
+                marginStart = 6.dpToPx()
+            }
+            background = AppCompatResources.getDrawable(
+                requireContext(),
+                R.drawable.bg_bookshelf_compact_action
+            )?.let { background ->
+                InsetDrawable(
+                    background,
+                    0,
+                    actionBackgroundInset,
+                    0,
+                    actionBackgroundInset
+                )
+            }
+            bindSoftPress()
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme {
+                    BookshelfContentToolbarMenuButton(
+                        onMenuItemClick = ::onBookshelfMenuItemClick
+                    )
+                }
+            }
         }
         updateBookCountLabel()
     }
@@ -319,7 +363,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         val topBarTextColor = if (
             AppConfig.bookshelfTopBarStyle == BookshelfTopBarStyle.FLOATING_DOCK
         ) {
-            ColorUtils.setAlphaComponent(snapshot.colors.onSurfaceVariant, 184)
+            if (snapshot.isDark) {
+                snapshot.colors.onSurface
+            } else {
+                ColorUtils.setAlphaComponent(snapshot.colors.onSurfaceVariant, 184)
+            }
         } else {
             snapshot.colors.onTopBar
         }
@@ -327,6 +375,10 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.tvBookshelfViewHistory.setTextColor(topBarTextColor)
         binding.tvBookshelfSort.setTextColor(topBarTextColor)
         binding.tvBookshelfEdit.setTextColor(topBarTextColor)
+        TextViewCompat.setCompoundDrawableTintList(
+            binding.tvBookshelfViewBooks,
+            ColorStateList.valueOf(topBarTextColor)
+        )
         TextViewCompat.setCompoundDrawableTintList(
             binding.tvBookshelfSort,
             ColorStateList.valueOf(topBarTextColor)
@@ -337,8 +389,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         )
     }
 
-    internal fun onBookCountChanged(groupId: Long, count: Int) {
-        bookCounts[groupId] = count
+    internal fun onBookCountChanged(groupId: Long, _count: Int) {
         if (selectedGroup?.groupId == groupId) {
             updateBookCountLabel()
         }
@@ -349,23 +400,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             binding.tvBookshelfViewBooks.setText(R.string.bookshelf)
             return
         }
-        val currentGroupId = selectedGroup?.groupId ?: return
-        val count = bookCounts[currentGroupId]
-            ?: fragmentMap[currentGroupId]?.getBooksCount()
-            ?: return
-        val label = getString(R.string.bookshelf_book_total, count)
-        val countText = count.toString()
-        binding.tvBookshelfViewBooks.text = SpannableString(label).apply {
-            val start = label.indexOf(countText)
-            if (start >= 0) {
-                setSpan(
-                    ForegroundColorSpan(requireContext().accentColor),
-                    start,
-                    start + countText.length,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
-        }
+        binding.tvBookshelfViewBooks.setText(R.string.manage)
     }
 
     private fun isTransparentTopBar(): Boolean {
@@ -411,6 +446,12 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         }
     }
 
+    private fun openBookshelfManage() {
+        startActivity<BookshelfManageActivity> {
+            putExtra("groupId", groupId)
+        }
+    }
+
     private fun showSortMenu(anchor: View) {
         val currentSort = currentBookSort()
         NgActionPopup(
@@ -427,7 +468,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             widthDp = 164
         ) { item ->
             (item.payload as? Int)?.let(::updateBookSort)
-        }.show(anchor)
+        }.show(
+            anchor = anchor,
+            marginDp = 2,
+            verticalAnchorInsetDp = 8
+        )
     }
 
     private fun updateBookSort(sort: Int) {

@@ -32,6 +32,7 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
@@ -60,6 +61,7 @@ fun NgExpandableActionMenu(
     items: List<NgExpandableActionMenuItem>,
     onItemClick: (NgExpandableActionMenuItem) -> Unit,
     modifier: Modifier = Modifier,
+    offset: DpOffset = DpOffset.Zero,
     width: Dp = 152.dp
 ) {
     var expandedItemIds by remember(items) { mutableStateOf(emptySet<Int>()) }
@@ -73,6 +75,7 @@ fun NgExpandableActionMenu(
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
+        offset = offset,
         modifier = modifier.width(width),
         shape = shape,
         containerColor = containerColor,

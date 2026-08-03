@@ -1,8 +1,10 @@
 package io.legado.app.help.config
 
+import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgTopBarTextMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NgBuiltInThemePresetTest {
@@ -71,16 +73,33 @@ class NgBuiltInThemePresetTest {
     }
 
     @Test
-    fun `autumn preset reuses warm palette and configures both floating docks`() {
+    fun `autumn preset provides a paired night theme and configures both floating docks`() {
         val autumn = NgBuiltInThemes.autumn
+        val dark = autumn.colors.manualDark
 
         assertEquals("秋山书意", autumn.name)
-        assertEquals(NgBuiltInThemes.warm.colors, autumn.colors)
+        assertTrue(autumn.isBuiltIn)
+        assertEquals(NgBuiltInThemes.warm.colors.manualLight, autumn.colors.manualLight)
+        assertEquals(NgBuiltInThemes.mist.colors.darkSeed, autumn.colors.darkSeed)
+        assertEquals(0xFF758DB4.toInt(), dark.primary)
+        assertEquals(0xFF2F3B4B.toInt(), dark.secondary)
+        assertEquals(0xFFF2F5F8.toInt(), dark.primaryText)
+        assertEquals(0xFFB8C2CC.toInt(), dark.secondaryText)
+        assertEquals(0xFF192633.toInt(), dark.background)
+        assertEquals(0xFF263440.toInt(), dark.labelContainer)
+        val settingsIconContainer = NgColorMath.blend(dark.background, dark.primary, 0.34f)
+        assertTrue(
+            NgColorMath.contrastRatio(settingsIconContainer, dark.primaryText) >= 4.5
+        )
+        assertEquals(NgTopBarTextMode.LIGHT, autumn.colors.darkTopBarTextMode)
         assertEquals(
             "asset://defaultData/theme/reading_ng_autumn_mountains.png",
             autumn.lightBackground.path,
         )
-        assertNull(autumn.darkBackground.path)
+        assertEquals(
+            "asset://defaultData/theme/reading_ng_autumn_mountains_dark.png",
+            autumn.darkBackground.path,
+        )
         assertEquals(
             NgThemeBarProfile(
                 useFloatingBottomBar = true,

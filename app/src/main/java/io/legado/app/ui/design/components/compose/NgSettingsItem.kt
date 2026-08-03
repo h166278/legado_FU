@@ -77,11 +77,22 @@ fun NgSettingsIcon(
     modifier: Modifier = Modifier,
     contentDescription: String? = null
 ) {
+    val themeSnapshot = NgTheme.snapshot
+    val containerColor = if (themeSnapshot.isDark) {
+        Color(themeSnapshot.colors.selectedContainer)
+    } else {
+        colorResource(R.color.ng_settings_icon_bg)
+    }
+    val contentColor = if (themeSnapshot.isDark) {
+        Color(themeSnapshot.colors.onPrimaryContainer)
+    } else {
+        Color(themeSnapshot.colors.primary)
+    }
     Box(
         modifier = modifier
             .size(36.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(colorResource(R.color.ng_settings_icon_bg))
+            .background(containerColor)
             .padding(7.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -89,7 +100,7 @@ fun NgSettingsIcon(
             painter = painter,
             contentDescription = contentDescription,
             modifier = Modifier.fillMaxSize(),
-            tint = Color(NgTheme.colors.primary)
+            tint = contentColor
         )
     }
 }

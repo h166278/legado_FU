@@ -25,6 +25,7 @@ import java.io.File
 import java.util.UUID
 
 internal const val NG_MANAGED_THEME_SCHEMA_VERSION = 1
+internal const val NG_BUILT_IN_THEME_ID_PREFIX = "builtin."
 
 @Keep
 internal data class NgThemeBackground(
@@ -180,6 +181,9 @@ internal data class NgManagedTheme(
     }
 }
 
+internal val NgManagedTheme.isBuiltIn: Boolean
+    get() = id.startsWith(NG_BUILT_IN_THEME_ID_PREFIX)
+
 private fun String?.normalizedPackageRelativePath(): String? {
     val normalized = this?.trim()?.replace('\\', '/')
         ?.takeIf { it.isNotEmpty() && !it.startsWith('/') }
@@ -204,6 +208,7 @@ internal object NgThemeLibraryStore {
     private const val ACTIVE_THEME_KEY = "ngActiveManagedThemeId.v1"
     private val lock = Any()
     private var initialized = false
+    private var installedBuiltInThemes: List<NgManagedTheme> = emptyList()
     private val mutableState = MutableStateFlow(NgThemeLibraryState())
 
     fun observe(context: Context): StateFlow<NgThemeLibraryState> {
@@ -216,8 +221,13 @@ internal object NgThemeLibraryStore {
         return mutableState.value
     }
 
+    fun builtInThemes(context: Context): List<NgManagedTheme> {
+        ensureInitialized(context)
+        return installedBuiltInThemes
+    }
+
     fun allThemes(context: Context): List<NgManagedTheme> =
-        NgBuiltInThemes.all + current(context).savedThemes
+        builtInThemes(context) + current(context).savedThemes
 
     fun activeTheme(context: Context): NgManagedTheme? {
         val state = current(context)
@@ -286,6 +296,7 @@ internal object NgThemeLibraryStore {
         ensureInitialized(context)
         val normalized = theme.normalized()
         require(normalized.id.isNotEmpty() && normalized.name.isNotEmpty()) { "主题数据不完整" }
+        require(!normalized.isBuiltIn) { "内置主题不能被覆盖" }
         val current = mutableState.value
         val replacedIds = current.savedThemes
             .filter { it.id == normalized.id || it.name.equals(normalized.name, true) }
@@ -301,6 +312,7 @@ internal object NgThemeLibraryStore {
 
     fun rename(context: Context, themeId: String, newName: String): Boolean = synchronized(lock) {
         ensureInitialized(context)
+        if (themeId.startsWith(NG_BUILT_IN_THEME_ID_PREFIX)) return@synchronized false
         val trimmed = newName.trim()
         if (trimmed.isEmpty()) return@synchronized false
         val current = mutableState.value
@@ -318,6 +330,7 @@ internal object NgThemeLibraryStore {
 
     fun remove(context: Context, themeId: String): NgManagedTheme? = synchronized(lock) {
         ensureInitialized(context)
+        if (themeId.startsWith(NG_BUILT_IN_THEME_ID_PREFIX)) return@synchronized null
         val current = mutableState.value
         val removed = current.savedThemes.firstOrNull { it.id == themeId }
             ?: return@synchronized null
@@ -378,13 +391,19 @@ internal object NgThemeLibraryStore {
         synchronized(lock) {
             if (initialized) return
             val prefs = context.defaultSharedPreferences
+            installedBuiltInThemes = NgThemePackageManager.installBuiltInThemes(
+                context = context,
+                definitions = NgBuiltInThemes.all,
+            )
             val saved = prefs.getString(THEMES_KEY, null)?.let { raw ->
                 runCatching {
                     GSON.fromJson(raw, Array<NgManagedTheme>::class.java)
                         .orEmpty()
                         .filter { it.schemaVersion == NG_MANAGED_THEME_SCHEMA_VERSION }
                         .map(NgManagedTheme::normalized)
-                        .filter { it.id.isNotEmpty() && it.name.isNotEmpty() }
+                        .filter {
+                            it.id.isNotEmpty() && it.name.isNotEmpty() && !it.isBuiltIn
+                        }
                 }.getOrDefault(emptyList())
             }.orEmpty()
             mutableState.value = NgThemeLibraryState(
@@ -471,8 +490,23 @@ internal object NgBuiltInThemes {
     val autumn = warm.copy(
         id = "builtin.ng.autumn_mountains",
         name = "秋山书意",
+        colors = warm.colors.copy(
+            darkSeed = 0xFF758DB4.toInt(),
+            manualDark = NgManualColorSet(
+                primary = 0xFF758DB4.toInt(),
+                secondary = 0xFF2F3B4B.toInt(),
+                primaryText = 0xFFF2F5F8.toInt(),
+                secondaryText = 0xFFB8C2CC.toInt(),
+                background = 0xFF192633.toInt(),
+                labelContainer = 0xFF263440.toInt(),
+            ),
+            darkTopBarTextMode = NgTopBarTextMode.LIGHT,
+        ),
         lightBackground = NgThemeBackground(
             path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains.png"
+        ),
+        darkBackground = NgThemeBackground(
+            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains_dark.png"
         ),
         barProfile = NgThemeBarProfile(
             useFloatingBottomBar = true,

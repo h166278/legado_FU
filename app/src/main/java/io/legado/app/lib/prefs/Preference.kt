@@ -2,12 +2,14 @@ package io.legado.app.lib.prefs
 
 import android.content.Context
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.preference.PreferenceViewHolder
@@ -54,11 +56,12 @@ open class Preference(context: Context, attrs: AttributeSet) :
                 tvSummary.text = summary
                 tvSummary.isGone = summary.isNullOrEmpty()
             }
-            val colors = if (viewHolder.itemView.isInEditMode) {
+            val themeSnapshot = if (viewHolder.itemView.isInEditMode) {
                 null
             } else {
-                NgThemeResolver.resolve(context).colors
+                NgThemeResolver.resolve(context)
             }
+            val colors = themeSnapshot?.colors
             colors?.let {
                 tvTitle?.setTextColor(
                     if (isBottomBackground) colors.onSurface else colors.onBackground
@@ -69,7 +72,20 @@ open class Preference(context: Context, attrs: AttributeSet) :
             if (iconView is ImageView) {
                 iconView.isVisible = icon != null
                 iconView.setImageDrawable(icon)
-                colors?.let { iconView.setColorFilter(it.primary) }
+                colors?.let {
+                    val iconContainer = iconView.background?.mutate()
+                    if (themeSnapshot.isDark && iconContainer is GradientDrawable) {
+                        iconContainer.setColor(it.selectedContainer)
+                        iconView.setColorFilter(it.onPrimaryContainer)
+                    } else {
+                        if (iconContainer is GradientDrawable) {
+                            iconContainer.setColor(
+                                ContextCompat.getColor(context, R.color.ng_settings_icon_bg)
+                            )
+                        }
+                        iconView.setColorFilter(it.primary)
+                    }
+                }
             }
             val arrowView = viewHolder.findViewById(R.id.preference_arrow)
             arrowView?.isVisible = weightLayoutRes == null
