@@ -19,6 +19,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +33,11 @@ import java.util.concurrent.ConcurrentHashMap
 class SearchViewModel(application: Application) : BaseViewModel(application) {
     val handler = Handler(Looper.getMainLooper())
     val bookshelf: MutableSet<String> = ConcurrentHashMap.newKeySet()
-    val searchScope: SearchScope = SearchScope(AppConfig.searchScope)
+    val searchScope: SearchScope = AppConfig.searchScope.let { savedScope ->
+        SearchScope(SearchGroupVisibility.visibleScope(savedScope)).also {
+            if (it.toString() != savedScope) it.save()
+        }
+    }
     var searchKey: String = ""
     var hasMore = true
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -60,6 +65,7 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
         emit(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val groups = appDb.bookSourceDao.flowEnabledGroups()
+        .map(SearchGroupVisibility::visibleGroups)
         .catch {
             AppLog.put("搜索界面获取书源分组失败\n${it.localizedMessage}", it)
             emit(emptyList())
