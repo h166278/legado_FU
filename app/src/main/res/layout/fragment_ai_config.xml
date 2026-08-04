@@ -408,7 +408,7 @@
                 style="@style/Ng.SettingsSectionLabel"
                 android:text="@string/ai_purify" />
 
-            <io.legado.app.ui.widget.NgGlassLayout style="@style/Ng.SettingsGroup">
+            <LinearLayout style="@style/Ng.SettingsGroup">
 
                 <View style="@style/Ng.SettingsGroupEdgeSpace" />
 
@@ -535,7 +535,7 @@
 
                 <View style="@style/Ng.SettingsGroupEdgeSpace" />
 
-            </io.legado.app.ui.widget.NgGlassLayout>
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -562,7 +562,7 @@
                 style="@style/Ng.SettingsSectionLabel"
                 android:text="@string/ai_read_aloud" />
 
-            <io.legado.app.ui.widget.NgGlassLayout style="@style/Ng.SettingsGroup">
+            <LinearLayout style="@style/Ng.SettingsGroup">
 
                 <View style="@style/Ng.SettingsGroupEdgeSpace" />
 
@@ -689,7 +689,7 @@
 
                 <View style="@style/Ng.SettingsGroupEdgeSpace" />
 
-            </io.legado.app.ui.widget.NgGlassLayout>
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -716,7 +716,7 @@
                 style="@style/Ng.SettingsSectionLabel"
                 android:text="@string/ai_assistant" />
 
-            <io.legado.app.ui.widget.NgGlassLayout style="@style/Ng.SettingsGroup">
+            <LinearLayout style="@style/Ng.SettingsGroup">
 
                 <View style="@style/Ng.SettingsGroupEdgeSpace" />
 
@@ -1047,7 +1047,7 @@
 
                 <View style="@style/Ng.SettingsGroupEdgeSpace" />
 
-            </io.legado.app.ui.widget.NgGlassLayout>
+            </LinearLayout>
 
         </LinearLayout>
 

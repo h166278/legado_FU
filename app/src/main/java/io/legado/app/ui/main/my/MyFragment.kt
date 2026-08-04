@@ -3,8 +3,6 @@ package io.legado.app.ui.main.my
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
@@ -32,7 +30,6 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.removePref
 import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -56,16 +53,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
         if (preferenceFragment == null) preferenceFragment = MyPreferenceFragment()
         childFragmentManager.beginTransaction()
             .replace(R.id.pre_fragment, preferenceFragment, fragmentTag).commit()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.main_my, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_help -> showHelp("appHelp")
-        }
     }
 
     private fun applyTransparentModeUi() {

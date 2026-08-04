@@ -112,6 +112,7 @@ class NgBuiltInThemePresetTest {
             autumn.barProfile,
         )
         assertEquals(autumn, NgBuiltInThemes.all.last())
+        assertEquals(autumn, NgBuiltInThemes.defaultTheme)
     }
 
     @Test

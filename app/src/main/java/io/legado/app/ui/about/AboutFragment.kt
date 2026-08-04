@@ -1,20 +1,23 @@
 package io.legado.app.ui.about
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import androidx.annotation.StringRes
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
+import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceGroup
 import io.legado.app.R
-import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.constant.AppLog
 import io.legado.app.help.CrashHandler
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.update.AppUpdate
+import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.FileDoc
@@ -30,6 +33,7 @@ import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendMail
 import io.legado.app.utils.sendToClip
+import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.delay
@@ -44,19 +48,40 @@ class AboutFragment : PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.about)
-        findPreference<Preference>("update_log")?.summary =
-            "${getString(R.string.version)} ${appInfo.versionName}"
+        preferenceScreen?.let(::applyNgMenuLayout)
+    }
+
+    private fun applyNgMenuLayout(group: PreferenceGroup) {
+        for (index in 0 until group.preferenceCount) {
+            val preference = group.getPreference(index)
+            preference.layoutResource = if (preference is PreferenceCategory) {
+                R.layout.view_my_preference_category
+            } else {
+                R.layout.view_my_preference
+            }
+            if (preference is PreferenceGroup) {
+                applyNgMenuLayout(preference)
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        view.setBackgroundColor(Color.TRANSPARENT)
+        listView.setBackgroundColor(Color.TRANSPARENT)
+        listView.setPadding(
+            0,
+            resources.getDimensionPixelSize(R.dimen.ng_space_l),
+            0,
+            listView.paddingBottom
+        )
         listView.overScrollMode = View.OVER_SCROLL_NEVER
+        listView.setEdgeEffectColor(primaryColor)
     }
 
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
             "contributors" -> openUrl(R.string.contributors_url)
-            "update_log" -> showMdFile(getString(R.string.update_log), "updateLog.md")
             "check_update" -> checkUpdate()
             "mail" -> requireContext().sendMail(getString(R.string.email))
             "license" -> showMdFile(getString(R.string.license), "LICENSE.md")

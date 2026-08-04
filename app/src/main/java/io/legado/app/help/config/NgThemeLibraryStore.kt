@@ -234,6 +234,15 @@ internal object NgThemeLibraryStore {
         return allThemes(context).firstOrNull { it.id == state.activeThemeId }
     }
 
+    /** 只在尚未选择过 NG 主题时应用发布默认主题，已有选择保持不变。 */
+    fun applyDefaultThemeIfNeeded(context: Context) {
+        if (context.defaultSharedPreferences.contains(ACTIVE_THEME_KEY)) return
+        val defaultTheme = builtInThemes(context)
+            .firstOrNull { it.id == NgBuiltInThemes.defaultTheme.id }
+            ?: return
+        apply(context, defaultTheme)
+    }
+
     fun snapshotCurrent(context: Context, name: String): NgManagedTheme {
         val state = current(context)
         val active = allThemes(context).firstOrNull { it.id == state.activeThemeId }
@@ -517,6 +526,8 @@ internal object NgBuiltInThemes {
             bookshelfFloatingDockTransparency = 40,
         ),
     )
+
+    val defaultTheme = autumn
 
     val all = listOf(classic, warm, bamboo, mist, autumn)
 

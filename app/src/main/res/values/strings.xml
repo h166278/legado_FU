@@ -1857,7 +1857,7 @@
     <string name="video_setting_summary">自动播放、全屏播放等配置</string>
     <string name="history">历史记录</string>
     <string name="app_name_ng">阅读NG</string>
-    <string name="about_description_ng">　　阅读NG（Next Generation Legado），致力于打造下一代的阅读体验。</string>
+    <string name="about_description_ng">致力于打造下一代阅读体验</string>
     <string name="contributors_summary_ng">详情请在 GitHub 中查看</string>
     <string name="app_share_description_ng">
         阅读NG 下载地址：\nhttps://github.com/joestar817/legado_NG/releases
