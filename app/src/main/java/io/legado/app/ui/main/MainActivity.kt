@@ -3,6 +3,7 @@
 package io.legado.app.ui.main
 
 import android.content.res.ColorStateList
+import android.graphics.Rect
 import android.os.Bundle
 import android.text.format.DateUtils
 import android.view.MenuItem
@@ -206,7 +207,9 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 aiChatSwipeStartX = event.rawX
                 aiChatSwipeStartY = event.rawY
                 val startLimit = window.decorView.width * AI_CHAT_SWIPE_START_RATIO
-                aiChatSwipeStartedOnBookshelf = pagePosition == 0 && event.rawX <= startLimit
+                aiChatSwipeStartedOnBookshelf = pagePosition == 0 &&
+                        event.rawX <= startLimit &&
+                        !isTouchInsideBookshelfFloatingDock(event)
             }
 
             MotionEvent.ACTION_UP -> {
@@ -224,6 +227,15 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
             MotionEvent.ACTION_CANCEL -> resetAiChatSwipe()
         }
+    }
+
+    private fun isTouchInsideBookshelfFloatingDock(event: MotionEvent): Boolean {
+        val floatingDock = binding.root.findViewById<View>(R.id.bookshelf_floating_dock)
+            ?.takeIf { it.isShown }
+            ?: return false
+        val bounds = Rect()
+        return floatingDock.getGlobalVisibleRect(bounds) &&
+                bounds.contains(event.rawX.toInt(), event.rawY.toInt())
     }
 
     private fun resetAiChatSwipe() {

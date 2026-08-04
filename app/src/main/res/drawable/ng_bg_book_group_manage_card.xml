@@ -8,7 +8,7 @@
     </item>
     <item>
         <shape>
-            <solid android:color="#F4F4F4" />
+            <solid android:color="@color/ng_surface_card" />
             <corners android:radius="@dimen/ng_radius_m" />
         </shape>
     </item>

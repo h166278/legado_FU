@@ -19,9 +19,7 @@
 - 对外分发版：`io.legado.app.ng.release`
 - 调试版：`io.legado.app.ng.debug`
 
-## 交流反馈
 
-- [legado_NG·交流反馈](https://t.me/+lYttMZGrQ1RkOTE1)
 
 ## 功能特性
 
@@ -40,6 +38,11 @@
 | 🔌 | MCP 服务 | 内置 MCP 服务，提供书架、书籍、章节、缓存及 AI 上下文等能力 |
 | 🛠️ | 调试与日志 | 支持书源步骤调试、代码高亮、调试日志、网络日志、凭据脱敏与日志导出 |
 | ☁️ | 备份与导入 | 支持 WebDAV 备份恢复，以及书源、订阅源、主题、阅读排版和朗读引擎配置导入 |
+
+
+## 交流反馈
+
+- [交流反馈群组](https://t.me/+lYttMZGrQ1RkOTE1)
 
 ## 致谢
 

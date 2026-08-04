@@ -9,6 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.snapping.SnapPosition
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -160,30 +163,28 @@ private fun GroupTrack(
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxHeight()) {
         if (groups.isEmpty()) return@BoxWithConstraints
-        val evenlyDistributed = groups.size <= MAX_VISIBLE_GROUPS
-        val itemWidth = if (evenlyDistributed) {
-            maxWidth / groups.size.toFloat()
+        val visibleItemCount = (maxWidth.value / MIN_GROUP_ITEM_WIDTH.value)
+            .toInt()
+            .coerceAtLeast(1)
+        val scrollable = groups.size > visibleItemCount
+        val itemWidth = if (scrollable) {
+            maxWidth / visibleItemCount.toFloat()
         } else {
-            GROUP_ITEM_WIDTH
+            minOf(MIN_GROUP_ITEM_WIDTH, maxWidth)
         }
         val listState = rememberLazyListState()
-        val density = LocalDensity.current
+        val snapFlingBehavior = rememberSnapFlingBehavior(listState, SnapPosition.Start)
         LaunchedEffect(selectedIndex, groups.size, itemWidth, maxWidth) {
-            if (!evenlyDistributed && selectedIndex in groups.indices) {
-                val viewportWidth = listState.layoutInfo.viewportSize.width
-                val itemWidthPx = with(density) { itemWidth.roundToPx() }
-                val centeredOffset = if (viewportWidth > itemWidthPx) {
-                    -((viewportWidth - itemWidthPx) / 2)
-                } else {
-                    0
-                }
-                listState.animateScrollToItem(selectedIndex, centeredOffset)
+            if (scrollable && selectedIndex in groups.indices) {
+                listState.animateScrollToItem(selectedIndex)
             }
         }
         CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
             LazyRow(
                 state = listState,
-                userScrollEnabled = !evenlyDistributed,
+                horizontalArrangement = Arrangement.Start,
+                flingBehavior = snapFlingBehavior,
+                userScrollEnabled = scrollable,
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(
@@ -367,5 +368,4 @@ private fun BookshelfDockGroup.builtInIconRes(): Int? {
     }
 }
 
-private const val MAX_VISIBLE_GROUPS = 4
-private val GROUP_ITEM_WIDTH = 52.dp
+private val MIN_GROUP_ITEM_WIDTH = 64.dp
