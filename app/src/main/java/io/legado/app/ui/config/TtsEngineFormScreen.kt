@@ -69,6 +69,11 @@ sealed interface TtsEngineFormScreenAction {
         val value: String
     ) : TtsEngineFormScreenAction
 
+    data class FieldEditFinished(
+        val engineId: String,
+        val key: String
+    ) : TtsEngineFormScreenAction
+
     data class RandomNumberRegenerateRequested(
         val engineId: String,
         val key: String
@@ -142,7 +147,13 @@ private fun TtsEngineFormField(
     val fieldChanged: (String) -> Unit = {
         onAction(TtsEngineFormScreenAction.FieldChanged(engineId, field.key, it))
     }
-    val doneActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+    val editFinished = {
+        onAction(TtsEngineFormScreenAction.FieldEditFinished(engineId, field.key))
+    }
+    val doneActions = KeyboardActions(onDone = {
+        focusManager.clearFocus()
+        editFinished()
+    })
     when (field.type) {
         TtsEngineFormFieldType.TEXT -> NgFormField(
             label = field.label,
@@ -150,7 +161,8 @@ private fun TtsEngineFormField(
             onValueChange = fieldChanged,
             enabled = enabled,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = doneActions
+            keyboardActions = doneActions,
+            onFocusLost = editFinished
         )
 
         TtsEngineFormFieldType.PASSWORD -> NgPasswordField(
@@ -163,7 +175,8 @@ private fun TtsEngineFormField(
             hidePasswordDescription = stringResource(R.string.tts_hide_password),
             visibilityResetKey = "$engineId:${field.key}",
             enabled = enabled,
-            keyboardActions = doneActions
+            keyboardActions = doneActions,
+            onFocusLost = editFinished
         )
 
         TtsEngineFormFieldType.NUMBER -> NgFormField(
@@ -177,7 +190,8 @@ private fun TtsEngineFormField(
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Done
             ),
-            keyboardActions = doneActions
+            keyboardActions = doneActions,
+            onFocusLost = editFinished
         )
 
         TtsEngineFormFieldType.SELECT -> NgFormSelectField(

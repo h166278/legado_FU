@@ -2,6 +2,7 @@ package io.legado.app.ui.config
 
 import io.legado.app.help.tts.generateTtsRandomNumber
 import io.legado.app.help.tts.isValidTtsRandomNumber
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 internal fun String.toTtsEngineFormFieldType(): TtsEngineFormFieldType {
     return when (this) {
@@ -55,4 +56,23 @@ internal fun buildTtsEngineFormOptions(
         }
         addAll(options)
     }.distinctBy { it.value }
+}
+
+internal fun shouldSaveTtsEngineFieldImmediately(type: TtsEngineFormFieldType): Boolean {
+    return type == TtsEngineFormFieldType.SELECT || type == TtsEngineFormFieldType.BOOLEAN
+}
+
+internal fun ttsLatencyProbeUrl(requestUrl: String): String? {
+    val httpUrl = when {
+        requestUrl.startsWith("ws://", ignoreCase = true) ->
+            "http://${requestUrl.substring(5)}"
+        requestUrl.startsWith("wss://", ignoreCase = true) ->
+            "https://${requestUrl.substring(6)}"
+        else -> requestUrl
+    }.toHttpUrlOrNull() ?: return null
+    return httpUrl.newBuilder()
+        .query(null)
+        .fragment(null)
+        .build()
+        .toString()
 }

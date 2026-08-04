@@ -98,6 +98,7 @@
                             android:layout_marginStart="12dp"
                             android:layout_weight="1"
                             android:text="@string/save"
+                            android:visibility="gone"
                             app:useSurfaceBackground="true" />
 
                     </LinearLayout>

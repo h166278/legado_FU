@@ -32,6 +32,7 @@ import io.legado.app.help.tts.ReadAloudTtsRouter
 import io.legado.app.help.tts.ReadAloudAudioTask
 import io.legado.app.help.tts.ReadAloudPreparedItemRange
 import io.legado.app.help.tts.ReadAloudPreparedPlaybackTarget
+import io.legado.app.help.tts.canReusePreparedReadAloudPlaylist
 import io.legado.app.help.tts.preparedReadAloudChapterPosition
 import io.legado.app.help.tts.preparedReadAloudPlaybackTarget
 import io.legado.app.help.tts.readAloudSeekPositionMs
@@ -182,8 +183,14 @@ class HttpReadAloudService : BaseReadAloudService(),
         playIndexJob?.cancel()
     }
 
-    override fun tryReusePreparedPlayback(play: Boolean): Boolean {
-        if (playlistChapterIndex != ReadBook.durChapterIndex || speakItems.isEmpty()) {
+    override fun tryReusePreparedPlayback(play: Boolean, forceRebuild: Boolean): Boolean {
+        if (!canReusePreparedReadAloudPlaylist(
+                forceRebuild = forceRebuild,
+                playlistChapterIndex = playlistChapterIndex,
+                currentChapterIndex = ReadBook.durChapterIndex,
+                hasSpeakItems = speakItems.isNotEmpty()
+            )
+        ) {
             return false
         }
         val target = preparedReadAloudPlaybackTarget(

@@ -16,6 +16,15 @@ internal data class ReadAloudPreparedPlaybackTarget(
     val itemOffset: Int
 )
 
+internal fun canReusePreparedReadAloudPlaylist(
+    forceRebuild: Boolean,
+    playlistChapterIndex: Int,
+    currentChapterIndex: Int,
+    hasSpeakItems: Boolean
+): Boolean = !forceRebuild &&
+        playlistChapterIndex == currentChapterIndex &&
+        hasSpeakItems
+
 internal fun preparedReadAloudChapterPosition(
     paragraphStarts: List<Int>,
     paragraphIndex: Int,

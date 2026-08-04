@@ -7,6 +7,32 @@ import org.junit.Test
 class ReadAloudProgressTest {
 
     @Test
+    fun preparedPlaylist_reusesMatchingChapterForNormalPlayback() {
+        assertEquals(
+            true,
+            canReusePreparedReadAloudPlaylist(
+                forceRebuild = false,
+                playlistChapterIndex = 3,
+                currentChapterIndex = 3,
+                hasSpeakItems = true
+            )
+        )
+    }
+
+    @Test
+    fun preparedPlaylist_rejectsReuseWhenVoiceSwitchForcesRebuild() {
+        assertEquals(
+            false,
+            canReusePreparedReadAloudPlaylist(
+                forceRebuild = true,
+                playlistChapterIndex = 3,
+                currentChapterIndex = 3,
+                hasSpeakItems = true
+            )
+        )
+    }
+
+    @Test
     fun preparedPosition_usesParagraphStartAndSegmentEnd() {
         assertEquals(
             145,

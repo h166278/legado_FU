@@ -117,6 +117,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private var configOptionsJob: Job? = null
     private var configOptionsLoadedScript: String? = null
     private var scriptCodeLoadedEngineId: String? = null
+    private var formDirty = false
     private var detailTab = DetailTab.CONFIG
     private var sourceMode = false
     private var allVoices: List<TtsVoice> = emptyList()
@@ -131,6 +132,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private var engineFormScreenState by mutableStateOf(TtsEngineFormScreenState())
     private var engineSettingsSnapshot: List<TtsEngineSetting> = emptyList()
     private var engineOrderSaveJob: Job? = null
+    private var engineConfigSaveJob: Job? = null
+    private var engineConfigSaveRevision = 0L
     private var engineRefreshJob: Job? = null
     private val engineSnapshotGate = TtsEngineSnapshotGate()
     private val autoFetchedVoiceEngineIds = hashSetOf<String>()
@@ -230,7 +233,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         }
         binding.buttonConfigSource.setOnClickListener { showConfigSourceMode(!sourceMode) }
         binding.buttonTestConfig.setOnClickListener { measureCurrentEngineLatency() }
-        binding.buttonSaveConfig.setOnClickListener { saveCurrentEngine() }
+        binding.buttonSaveConfig.setOnClickListener { saveSourceEngine() }
         binding.buttonVoiceParams.setOnClickListener { toggleVoiceParamPanel() }
         binding.buttonToggleAllVoices.setOnClickListener { toggleAllVoicesEnabled() }
         applyVoiceToggleActionStyle()
@@ -247,6 +250,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     }
 
     override fun onDestroyView() {
+        saveFormChangesIfNeeded()
         configOptionsJob?.cancel()
         configOptionsJob = null
         removeEngineListMenu()
@@ -497,6 +501,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     }
 
     private fun showEngineList() {
+        saveFormChangesIfNeeded()
         clearEngineFormFocus()
         configOptionsJob?.cancel()
         configOptionsJob = null
@@ -504,6 +509,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         currentEngineId = null
         detailEngineSnapshot = null
         draftEngine = null
+        formDirty = false
         scriptCodeLoadedEngineId = null
         binding.editScriptCode.setText("")
         activity?.setTitle(R.string.tts_engine_settings)
@@ -521,6 +527,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         configOptionsLoadedScript = null
         currentEngineId = engine.id
         detailEngineSnapshot = engine
+        formDirty = false
         if (draftEngine?.id != engine.id) {
             draftEngine = null
         }
@@ -767,6 +774,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
 
     private fun showDetailTab(tab: DetailTab) {
         if (tab != DetailTab.CONFIG) {
+            saveFormChangesIfNeeded()
             clearEngineFormFocus()
         }
         detailTab = tab
@@ -805,6 +813,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private fun handleEngineFormAction(action: TtsEngineFormScreenAction) {
         val actionEngineId = when (action) {
             is TtsEngineFormScreenAction.FieldChanged -> action.engineId
+            is TtsEngineFormScreenAction.FieldEditFinished -> action.engineId
             is TtsEngineFormScreenAction.RandomNumberRegenerateRequested -> action.engineId
             is TtsEngineFormScreenAction.EngineEnabledChanged -> action.engineId
         }
@@ -821,6 +830,17 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                     action.key,
                     action.value
                 )
+                formDirty = true
+                val fieldType = engineFormScreenState.fields
+                    .firstOrNull { it.key == action.key }
+                    ?.type
+                if (fieldType?.let(::shouldSaveTtsEngineFieldImmediately) == true) {
+                    saveFormChangesIfNeeded()
+                }
+            }
+
+            is TtsEngineFormScreenAction.FieldEditFinished -> {
+                saveFormChangesIfNeeded()
             }
 
             is TtsEngineFormScreenAction.RandomNumberRegenerateRequested -> {
@@ -836,6 +856,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                     action.key,
                     randomNumber
                 )
+                formDirty = true
+                saveFormChangesIfNeeded()
                 requireContext().toastOnUi(R.string.tts_random_number_regenerated)
             }
 
@@ -843,7 +865,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                 engineFormScreenState = engineFormScreenState.copy(
                     engineEnabled = action.checked
                 )
-                saveEnabledState(action.checked)
+                formDirty = true
+                saveFormChangesIfNeeded()
             }
         }
     }
@@ -862,26 +885,25 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private fun showConfigSourceMode(enabled: Boolean) {
         if (enabled) {
             clearEngineFormFocus()
+            saveFormChangesIfNeeded()
         }
-        val source = currentDisplayedEngine()
         if (enabled && !sourceMode) {
-            source?.let {
-                ensureScriptCodeLoaded(engineFromForm(it))
-            }
+            currentDisplayedEngine()?.let(::ensureScriptCodeLoaded)
         } else if (!enabled && sourceMode) {
-            val updated = source?.let { engineFromForm(it) } ?: return
-            detailEngineSnapshot = updated
-            bindConfigEntities(updated)
+            val source = currentDisplayedEngine() ?: return
+            bindConfigEntities(source)
             engineFormScreenState = engineFormScreenState.copy(
-                engineEnabled = updated.enabled
+                engineEnabled = source.enabled
             )
-            activity?.setTitle(updated.name)
+            activity?.setTitle(source.name)
+            formDirty = false
         }
         sourceMode = enabled
         moveConfigActions(sourceMode = enabled)
         binding.scrollConfigForm.isVisible = !enabled
         binding.layoutScriptEditor.isVisible = enabled
         binding.layoutEngineDetailTabs.isVisible = !enabled
+        binding.buttonSaveConfig.isVisible = enabled
         binding.buttonConfigSource.setText(
             if (enabled) R.string.tts_form_mode else R.string.tts_source_mode
         )
@@ -985,30 +1007,106 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         )
     }
 
-    private fun saveCurrentEngine(
-        showToast: Boolean = true,
+    private fun saveFormChangesIfNeeded(
         restartReadAloud: Boolean = true
     ): TtsEngineSetting? {
         val source = currentDisplayedEngine()
             ?: draftEngine?.takeIf { it.id == currentEngineId }
             ?: return null
-        val updated = engineFromForm(source)
-        TtsEngineStore.saveEngine(updated, restartReadAloud)
-        val effective = TtsEngineStore.engine(updated.id) ?: updated
-        detailEngineSnapshot = effective
-        draftEngine = null
-        activity?.setTitle(effective.name)
-        bindVoiceParams(effective)
-        refreshEngines()
-        if (showToast) {
-            requireContext().toastOnUi("保存成功")
+        if (sourceMode || !formDirty) {
+            return source
         }
+        val effective = enqueueEngineSave(
+            updated = engineFromForm(source),
+            restartReadAloud = restartReadAloud,
+            showToast = false
+        )
+        formDirty = false
         return effective
     }
 
-    private fun engineFromForm(source: TtsEngineSetting): TtsEngineSetting {
+    private fun saveSourceEngine(): TtsEngineSetting? {
+        val source = currentDisplayedEngine()
+            ?: draftEngine?.takeIf { it.id == currentEngineId }
+            ?: return null
         val script = binding.editScriptCode.text?.toString()?.takeIf { it.isNotBlank() }
-            ?: source.script
+        if (script == null) {
+            requireContext().toastOnUi("源码不能为空")
+            return null
+        }
+        val effective = enqueueEngineSave(
+            updated = engineFromState(source, script),
+            restartReadAloud = true,
+            showToast = true
+        )
+        scriptCodeLoadedEngineId = effective.id
+        bindConfigEntities(effective)
+        formDirty = false
+        return effective
+    }
+
+    private fun enqueueEngineSave(
+        updated: TtsEngineSetting,
+        restartReadAloud: Boolean,
+        showToast: Boolean
+    ): TtsEngineSetting {
+        detailEngineSnapshot = updated
+        activity?.setTitle(updated.name)
+        bindVoiceParams(updated)
+
+        val revision = ++engineConfigSaveRevision
+        val previousSave = engineConfigSaveJob
+        engineConfigSaveJob = lifecycleScope.launch {
+            try {
+                previousSave?.join()
+                val effective = withContext(Dispatchers.IO) {
+                    TtsEngineStore.saveEngine(updated, restartReadAloud)
+                    TtsEngineStore.engine(updated.id) ?: updated
+                }
+                if (revision == engineConfigSaveRevision) {
+                    if (currentEngineId == updated.id) {
+                        detailEngineSnapshot = effective
+                        draftEngine = null
+                        activity?.setTitle(effective.name)
+                        bindVoiceParams(effective)
+                    }
+                    refreshEngines()
+                    if (showToast) {
+                        context?.toastOnUi("保存成功")
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (revision == engineConfigSaveRevision) {
+                    if (currentEngineId == updated.id && !sourceMode) {
+                        formDirty = true
+                    }
+                    context?.toastOnUi(
+                        "保存失败：${error.localizedMessage ?: error.javaClass.simpleName}"
+                    )
+                }
+            }
+        }
+        return updated
+    }
+
+    private suspend fun awaitEngineConfigSaves() {
+        while (true) {
+            val pendingSave = engineConfigSaveJob ?: return
+            pendingSave.join()
+            if (pendingSave === engineConfigSaveJob) return
+        }
+    }
+
+    private fun engineFromForm(source: TtsEngineSetting): TtsEngineSetting {
+        return engineFromState(source, source.script)
+    }
+
+    private fun engineFromState(
+        source: TtsEngineSetting,
+        script: String
+    ): TtsEngineSetting {
         val metadata = TtsEngineStore.parseScriptMetadata(script)
         val displayedOptionValues = configEntities
             .filter { it.isOption }
@@ -1024,13 +1122,14 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             script = script,
             sampleText = metadata["sampletext"]?.takeIf { it.isNotBlank() },
             optionValues = optionValues,
-            enabledCookieJar = cookieJarFromScript(source)
+            enabledCookieJar = cookieJarFromScript(source, script)
         )
     }
 
-    private fun cookieJarFromScript(source: TtsEngineSetting): Boolean? {
-        val script = binding.editScriptCode.text?.toString()?.takeIf { it.isNotBlank() }
-            ?: source.script
+    private fun cookieJarFromScript(
+        source: TtsEngineSetting,
+        script: String
+    ): Boolean? {
         return when (
             TtsEngineStore.parseScriptMetadata(script)["cookiejar"]
                 ?.trim()
@@ -1594,20 +1693,32 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     }
 
     private fun measureCurrentEngineLatency() {
-        val engine = saveCurrentEngine(
-            showToast = false,
-            restartReadAloud = false
-        )?.takeIf { it.isScriptEngine } ?: return
+        val source = currentDisplayedEngine() ?: return
+        val engine = if (sourceMode) {
+            val script = binding.editScriptCode.text?.toString()?.takeIf { it.isNotBlank() }
+                ?: source.script
+            engineFromState(source, script)
+        } else {
+            saveFormChangesIfNeeded() ?: source
+        }.takeIf { it.isScriptEngine } ?: return
+        val useSourceDraft = sourceMode
         val context = context ?: return
-        val targetUrl = engine.baseUrl.trim().takeIf { it.isAbsUrl() }
-        if (targetUrl == null) {
-            context.toastOnUi("脚本未声明测速地址")
-            return
-        }
         context.toastOnUi("正在测速...")
         lifecycleScope.launch {
             val result = runCatching {
+                awaitEngineConfigSaves()
                 withContext(Dispatchers.IO) {
+                    val effectiveEngine = if (useSourceDraft) {
+                        engine
+                    } else {
+                        TtsEngineStore.engine(engine.id) ?: engine
+                    }
+                    val request = TtsScriptEngineClient.buildSynthesisRequest(
+                        engine = effectiveEngine,
+                        text = TtsScriptEngineClient.sampleText(effectiveEngine, null)
+                    )
+                    val targetUrl = ttsLatencyProbeUrl(request.url)
+                        ?: error("脚本未生成可测速的接口")
                     val started = SystemClock.elapsedRealtime()
                     okHttpClient.newBuilder()
                         .callTimeout(15, TimeUnit.SECONDS)

@@ -211,7 +211,8 @@ abstract class BaseReadAloudService : BaseService(),
             val play = it.getBoolean("play")
             val pageIndex = it.getInt("pageIndex")
             val startPos = it.getInt("startPos")
-            newReadAloud(play, pageIndex, startPos)
+            val forceRebuild = it.getBoolean("forceRebuild")
+            newReadAloud(play, pageIndex, startPos, forceRebuild)
         }
         observeSharedPreferences { _, key ->
             when (key) {
@@ -260,7 +261,8 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.play -> newReadAloud(
                 intent.getBooleanExtra("play", true),
                 intent.getIntExtra("pageIndex", ReadBook.durPageIndex),
-                intent.getIntExtra("startPos", 0)
+                intent.getIntExtra("startPos", 0),
+                intent.getBooleanExtra("forceRebuild", false)
             )
 
             IntentAction.pause -> pauseReadAloud()
@@ -279,7 +281,12 @@ abstract class BaseReadAloudService : BaseService(),
         return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
+    private fun newReadAloud(
+        play: Boolean,
+        pageIndex: Int,
+        startPos: Int,
+        forceRebuild: Boolean = false
+    ) {
         onNewReadAloudRequest()
         execute(executeContext = IO) {
             this@BaseReadAloudService.pageIndex = pageIndex
@@ -320,7 +327,7 @@ abstract class BaseReadAloudService : BaseService(),
             paragraphStartPos = pos
             upTtsBufferProgress(readAloudNumber + 1)
             launch(Main) {
-                if (tryReusePreparedPlayback(play)) {
+                if (tryReusePreparedPlayback(play, forceRebuild)) {
                     return@launch
                 }
                 if (play) {
@@ -470,7 +477,10 @@ abstract class BaseReadAloudService : BaseService(),
 
     abstract fun playStop()
 
-    protected open fun tryReusePreparedPlayback(play: Boolean): Boolean = false
+    protected open fun tryReusePreparedPlayback(
+        play: Boolean,
+        forceRebuild: Boolean
+    ): Boolean = false
 
     /**
      * 新位置请求进入服务时立即终止旧位置生产者，避免异步初始化期间继续回写旧进度。

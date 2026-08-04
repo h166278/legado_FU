@@ -149,6 +149,66 @@ object TtsScriptEngineClient {
         coroutineContext: CoroutineContext,
         aggregateResponse: Boolean
     ): SynthesisExecution {
+        val prepared = prepareSynthesisRequest(
+            engine = engine,
+            text = text,
+            voiceId = voiceId,
+            styleId = styleId,
+            speed = speed,
+            volume = volume,
+            pitch = pitch,
+            synthesisContext = synthesisContext
+        )
+        val request = prepared.request
+        return SynthesisExecution(
+            response = executeWithRetry(
+                request = request,
+                engine = engine,
+                text = text,
+                speed = speed,
+                volume = volume,
+                pitch = pitch,
+                voiceId = prepared.voiceId,
+                voiceName = prepared.voiceName,
+                coroutineContext = coroutineContext,
+                aggregateResponse = aggregateResponse
+            ),
+            audioContentType = request.audioContentType ?: engine.contentType
+        )
+    }
+
+    internal fun buildSynthesisRequest(
+        engine: TtsEngineSetting,
+        text: String,
+        voiceId: String? = engine.activeVoiceId,
+        styleId: String? = null,
+        speed: Int = engine.effectiveSpeed(),
+        volume: Int = engine.effectiveVolume(),
+        pitch: Int = engine.effectivePitch(),
+        synthesisContext: TtsSynthesisContext? = null
+    ): TtsScriptRequest {
+        return prepareSynthesisRequest(
+            engine = engine,
+            text = text,
+            voiceId = voiceId,
+            styleId = styleId,
+            speed = speed,
+            volume = volume,
+            pitch = pitch,
+            synthesisContext = synthesisContext
+        ).request
+    }
+
+    private fun prepareSynthesisRequest(
+        engine: TtsEngineSetting,
+        text: String,
+        voiceId: String?,
+        styleId: String?,
+        speed: Int,
+        volume: Int,
+        pitch: Int,
+        synthesisContext: TtsSynthesisContext?
+    ): PreparedSynthesisRequest {
         val voice = TtsEngineStore.voice(engine.id, voiceId)
             ?: engine.effectiveVoices().firstOrNull { it.id == voiceId }
         val options = engine.effectiveOptionValues(loadOptions(engine))
@@ -169,20 +229,10 @@ object TtsScriptEngineClient {
             )
         ) ?: throw NoStackTraceException("脚本未实现 synthesize(text, voice, params, options, ctx)")
         val request = parseSynthesisRequest(synthesis, engine)
-        return SynthesisExecution(
-            response = executeWithRetry(
-                request = request,
-                engine = engine,
-                text = text,
-                speed = speed,
-                volume = volume,
-                pitch = pitch,
-                voiceId = voice?.id ?: voiceId,
-                voiceName = voice?.name,
-                coroutineContext = coroutineContext,
-                aggregateResponse = aggregateResponse
-            ),
-            audioContentType = request.audioContentType ?: engine.contentType
+        return PreparedSynthesisRequest(
+            request = request,
+            voiceId = voice?.id ?: voiceId,
+            voiceName = voice?.name
         )
     }
 
@@ -741,5 +791,11 @@ object TtsScriptEngineClient {
     private data class SynthesisExecution(
         val response: Response,
         val audioContentType: String?
+    )
+
+    private data class PreparedSynthesisRequest(
+        val request: TtsScriptRequest,
+        val voiceId: String?,
+        val voiceName: String?
     )
 }

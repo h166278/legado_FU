@@ -878,7 +878,13 @@ class ReadAloudVoiceSheet(
             )
             if (selected != null) {
                 if (wasRun) {
-                    ReadAloud.play(activity, play = true, pageIndex = pageIndex, startPos = startPos)
+                    ReadAloud.play(
+                        activity,
+                        play = true,
+                        pageIndex = pageIndex,
+                        startPos = startPos,
+                        forceRebuild = true
+                    )
                 }
                 voiceSheet.dismiss()
             }

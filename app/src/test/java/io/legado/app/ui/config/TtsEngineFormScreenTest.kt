@@ -94,6 +94,28 @@ class TtsEngineFormScreenTest {
         )
     }
 
+    @Test
+    fun discreteFields_autoSaveImmediatelyWhileTextWaitsForEditFinish() {
+        assertTrue(shouldSaveTtsEngineFieldImmediately(TtsEngineFormFieldType.SELECT))
+        assertTrue(shouldSaveTtsEngineFieldImmediately(TtsEngineFormFieldType.BOOLEAN))
+        assertFalse(shouldSaveTtsEngineFieldImmediately(TtsEngineFormFieldType.TEXT))
+        assertFalse(shouldSaveTtsEngineFieldImmediately(TtsEngineFormFieldType.PASSWORD))
+        assertFalse(shouldSaveTtsEngineFieldImmediately(TtsEngineFormFieldType.NUMBER))
+    }
+
+    @Test
+    fun latencyProbe_usesActualRequestEndpointWithoutSynthesisQuery() {
+        assertEquals(
+            "http://5.45.99.149:8075/tts",
+            ttsLatencyProbeUrl("http://5.45.99.149:8075/tts?t=preview&v=voice")
+        )
+        assertEquals(
+            "https://example.com/socket",
+            ttsLatencyProbeUrl("wss://example.com/socket?token=secret")
+        )
+        assertEquals(null, ttsLatencyProbeUrl("not-a-url"))
+    }
+
     private fun field(key: String, value: String): TtsEngineFormFieldState {
         return TtsEngineFormFieldState(
             key = key,

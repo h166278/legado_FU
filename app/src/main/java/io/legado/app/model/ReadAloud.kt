@@ -61,7 +61,8 @@ object ReadAloud {
         context: Context,
         play: Boolean = true,
         pageIndex: Int = ReadBook.durPageIndex,
-        startPos: Int = 0
+        startPos: Int = 0,
+        forceRebuild: Boolean = false
     ) {
         if (!TtsEngineStore.hasEnabledEngine()) {
             context.toastOnUi("未启用朗读引擎")
@@ -72,6 +73,7 @@ object ReadAloud {
         intent.putExtra("play", play)
         intent.putExtra("pageIndex", pageIndex)
         intent.putExtra("startPos", startPos)
+        intent.putExtra("forceRebuild", forceRebuild)
         LogUtils.d("ReadAloud", intent.toString())
         try {
             context.startForegroundServiceCompat(intent)
@@ -85,12 +87,14 @@ object ReadAloud {
     fun playByEventBus(
         play: Boolean = true,
         pageIndex: Int = ReadBook.durPageIndex,
-        startPos: Int = 0
+        startPos: Int = 0,
+        forceRebuild: Boolean = false
     ) {
         val bundle = Bundle().apply {
             putBoolean("play", play)
             putInt("pageIndex", pageIndex)
             putInt("startPos", startPos)
+            putBoolean("forceRebuild", forceRebuild)
         }
         postEvent(EventBus.READ_ALOUD_PLAY, bundle)
     }

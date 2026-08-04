@@ -31,6 +31,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,12 +89,22 @@ fun NgFormField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    onFocusLost: () -> Unit = {},
     trailingContent: (@Composable () -> Unit)? = null
 ) {
     val colors = NgTheme.colors
     val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
+    var wasFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(focused) {
+        if (focused) {
+            wasFocused = true
+        } else if (wasFocused) {
+            wasFocused = false
+            onFocusLost()
+        }
+    }
     val borderColor = when {
         isError -> Color(colors.error)
         focused -> Color(colors.primary)
@@ -200,7 +211,8 @@ fun NgPasswordField(
     modifier: Modifier = Modifier,
     visibilityResetKey: Any? = null,
     enabled: Boolean = true,
-    keyboardActions: KeyboardActions = KeyboardActions.Default
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    onFocusLost: () -> Unit = {}
 ) {
     var passwordVisible by rememberSaveable(visibilityResetKey) { mutableStateOf(false) }
     val colors = NgTheme.colors
@@ -215,6 +227,7 @@ fun NgPasswordField(
             imeAction = ImeAction.Done
         ),
         keyboardActions = keyboardActions,
+        onFocusLost = onFocusLost,
         visualTransformation = if (passwordVisible) {
             VisualTransformation.None
         } else {
