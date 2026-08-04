@@ -15,158 +15,222 @@
         tools:layout_editor_absoluteX="0dp"
         tools:layout_editor_absoluteY="0dp" />
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
-        android:layout_width="match_parent"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/title_bar_container"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:theme="?attr/actionBarStyle"
-        app:layout_constraintTop_toTopOf="parent"
-        app:opaque="true" >
-
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/title_bar_addition"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <TextView
-                android:id="@+id/tv_chapter_name"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:paddingLeft="10dp"
-                android:paddingRight="10dp"
-                android:singleLine="true"
-                android:visibility="gone"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintRight_toLeftOf="@+id/tv_custom_btn"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                tools:visibility="visible"
-                tools:text="章节名" />
-
-            <TextView
-                android:id="@+id/tv_chapter_url"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:paddingLeft="10dp"
-                android:paddingRight="10dp"
-                android:singleLine="true"
-                android:visibility="gone"
-                app:layout_constraintLeft_toLeftOf="parent"
-                app:layout_constraintRight_toRightOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tv_chapter_name"
-                tools:text="http" />
-
-            <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/tv_custom_btn"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_margin="1dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="4dp"
-                android:src="@drawable/ic_custom"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="@+id/tv_source_action"
-                app:layout_constraintRight_toLeftOf="@+id/tv_source_action"
-                app:layout_constraintTop_toTopOf="@+id/tv_source_action"
-                tools:visibility="visible"
-                tools:ignore="ContentDescription" />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_source_action"
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_margin="1dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:ellipsize="end"
-                android:focusable="true"
-                android:gravity="center_vertical|end"
-                android:maxWidth="240dp"
-                android:paddingLeft="6dp"
-                android:paddingRight="6dp"
-                android:singleLine="true"
-                android:text="@string/book_source"
-                android:textColor="@color/accent"
-                android:textStyle="bold"
-                app:layout_constraintRight_toRightOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                tools:text="NovelHub · 总群四合一" />
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-    </io.legado.app.ui.widget.TitleBar>
-
-    <LinearLayout
-        android:id="@+id/ll_brightness"
-        android:layout_width="wrap_content"
-        android:layout_height="0dp"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="16dp"
-        android:background="@color/transparent30"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        app:layout_constraintBottom_toTopOf="@+id/bottom_menu"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
-        tools:ignore="RtlHardcoded">
-
-        <ImageView
-            android:id="@+id/iv_brightness_auto"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_margin="8dp"
-            android:contentDescription="@string/brightness_auto"
-            android:src="@drawable/ic_brightness_auto"
-            tools:ignore="ImageContrastCheck" />
-
-        <io.legado.app.ui.widget.seekbar.VerticalSeekBarWrapper
-            android:layout_width="wrap_content"
-            android:layout_height="0dp"
-            android:layout_weight="1">
-
-            <io.legado.app.ui.widget.seekbar.VerticalSeekBar
-                android:id="@+id/seek_brightness"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:max="255"
-                app:seekBarRotation="CW270" />
-
-        </io.legado.app.ui.widget.seekbar.VerticalSeekBarWrapper>
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/vw_brightness_pos_adjust"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_margin="8dp"
-            android:contentDescription="@string/adjust_pos"
-            android:src="@drawable/ic_swap_horiz"
-            app:tint="@color/white" />
-
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/fabAiPurifyChapter"
-        android:layout_width="wrap_content"
-        android:layout_height="32dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginBottom="12dp"
-        android:background="@drawable/bg_ai_sub_action"
-        android:contentDescription="@string/ai_purify_chapter"
-        android:elevation="2dp"
-        android:gravity="center_vertical"
-        android:minWidth="72dp"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:singleLine="true"
-        android:text="@string/ai_purify_chapter"
-        android:textColor="@color/primaryText"
-        android:textSize="13sp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/bottom_menu"
+        android:layout_marginHorizontal="8dp"
         app:layout_constraintEnd_toEndOf="parent"
-        tools:ignore="UnusedAttribute"
-        tools:visibility="visible" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/read_top_glass"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:importantForAccessibility="no"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <io.legado.app.ui.widget.TitleBar
+            android:id="@+id/title_bar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:theme="?attr/actionBarStyle"
+            app:fitStatusBar="false"
+            app:displayHomeAsUp="false"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:opaque="false">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/book_header_content"
+                android:layout_width="match_parent"
+                android:layout_height="124dp">
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/iv_header_back"
+                    android:layout_width="48dp"
+                    android:layout_height="36dp"
+                    android:layout_marginTop="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/back"
+                    android:paddingStart="4dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="6dp"
+                    android:src="@drawable/ic_arrow_back"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <io.legado.app.ui.widget.text.MarqueeTextView
+                    android:id="@+id/tv_book_title"
+                    android:layout_width="0dp"
+                    android:layout_height="38dp"
+                    android:clickable="true"
+                    android:ellipsize="marquee"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:includeFontPadding="false"
+                    android:marqueeRepeatLimit="marquee_forever"
+                    android:scrollHorizontally="true"
+                    android:singleLine="true"
+                    android:textColor="@color/primaryText"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="8dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/top_action_toolbar_host"
+                    tools:text="斗罗：丹药武魂？金丹也是丹！" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/title_bar_addition"
+                    android:layout_width="0dp"
+                    android:layout_height="26dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_marginBottom="4dp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent">
+
+                    <TextView
+                        android:id="@+id/tv_chapter_name"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_marginEnd="6dp"
+                        android:ellipsize="end"
+                        android:gravity="center_vertical"
+                        android:includeFontPadding="false"
+                        android:singleLine="true"
+                        android:textColor="@color/tv_text_summary"
+                        android:textSize="14sp"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_source_name"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        tools:text="第477章 太极门带来的报应"
+                        tools:visibility="visible" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_source_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:ellipsize="end"
+                        android:focusable="true"
+                        android:gravity="center_vertical|end"
+                        android:includeFontPadding="false"
+                        android:maxWidth="160dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:singleLine="true"
+                        android:textColor="@color/accent"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:layout_constrainedWidth="true"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@+id/tv_chapter_name"
+                        app:layout_constraintTop_toTopOf="parent"
+                        tools:text="NovelHub · 总群四合一" />
+
+                    <TextView
+                        android:id="@+id/tv_chapter_url"
+                        android:layout_width="1dp"
+                        android:layout_height="1dp"
+                        android:singleLine="true"
+                        android:visibility="gone" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/tv_custom_btn"
+                    android:layout_width="48dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_custom"
+                    android:visibility="gone"
+                    app:layout_constraintBottom_toBottomOf="@+id/top_action_toolbar_host"
+                    app:layout_constraintEnd_toStartOf="@+id/iv_header_change_source"
+                    app:layout_constraintTop_toTopOf="@+id/top_action_toolbar_host"
+                    tools:ignore="ContentDescription"
+                    tools:visibility="visible" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/iv_header_refresh"
+                    android:layout_width="48dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/refresh"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_refresh_black_24dp"
+                    app:layout_constraintBottom_toBottomOf="@+id/top_action_toolbar_host"
+                    app:layout_constraintEnd_toStartOf="@+id/iv_header_download"
+                    app:layout_constraintTop_toTopOf="@+id/top_action_toolbar_host" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/iv_header_change_source"
+                    android:layout_width="48dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/change_origin"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_exchange"
+                    app:layout_constraintBottom_toBottomOf="@+id/top_action_toolbar_host"
+                    app:layout_constraintEnd_toStartOf="@+id/iv_header_refresh"
+                    app:layout_constraintTop_toTopOf="@+id/top_action_toolbar_host" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/iv_header_download"
+                    android:layout_width="48dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/offline_cache"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_download_line"
+                    app:layout_constraintBottom_toBottomOf="@+id/top_action_toolbar_host"
+                    app:layout_constraintEnd_toStartOf="@+id/top_action_toolbar_host"
+                    app:layout_constraintTop_toTopOf="@+id/top_action_toolbar_host" />
+
+                <FrameLayout
+                    android:id="@+id/top_action_toolbar_host"
+                    android:layout_width="48dp"
+                    android:layout_height="36dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="4dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:ignore="TouchTargetSizeCheck" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+        </io.legado.app.ui.widget.TitleBar>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/read_floating_tools"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintBottom_toTopOf="@+id/bottom_menu"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/title_bar_container"
+        app:layout_constraintVertical_bias="0.5"
+        tools:ignore="RtlHardcoded" />
 
     <LinearLayout
         android:id="@+id/bottom_menu"
@@ -175,120 +239,35 @@
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <LinearLayout
-            android:id="@+id/ll_floating_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp">
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fabSearch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="8dp"
-                android:contentDescription="@string/search_content"
-                android:src="@drawable/ic_search"
-                android:tint="@color/primaryText"
-                android:tooltipText="@string/search_content"
-                app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
-                app:fabSize="mini"
-                app:pressedTranslationZ="2dp"
-                tools:ignore="UnusedAttribute" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1" />
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fabAutoPage"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="8dp"
-                android:contentDescription="@string/auto_next_page"
-                android:src="@drawable/ic_auto_page"
-                android:tint="@color/primaryText"
-                android:tooltipText="@string/auto_next_page"
-                app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
-                app:fabSize="mini"
-                app:pressedTranslationZ="2dp"
-                tools:ignore="UnusedAttribute" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1" />
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fabReplaceRule"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="8dp"
-                android:contentDescription="@string/replace_rule_title"
-                android:src="@drawable/ic_find_replace"
-                android:tint="@color/primaryText"
-                android:tooltipText="@string/replace_rule_title"
-                app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
-                app:fabSize="mini"
-                app:pressedTranslationZ="2dp"
-                tools:ignore="UnusedAttribute" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1" />
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fabNightTheme"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="8dp"
-                android:contentDescription="@string/dark_theme"
-                android:src="@drawable/ic_brightness"
-                android:tint="@color/primaryText"
-                android:tooltipText="@string/dark_theme"
-                app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
-                app:fabSize="mini"
-                app:pressedTranslationZ="2dp"
-                tools:ignore="UnusedAttribute" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1" />
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/fabAi"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="8dp"
-                android:contentDescription="@string/ai_actions"
-                android:src="@drawable/ic_ai"
-                android:tint="@color/primaryText"
-                android:tooltipText="@string/ai_actions"
-                app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
-                app:fabSize="mini"
-                app:pressedTranslationZ="2dp"
-                tools:ignore="UnusedAttribute" />
-
-        </LinearLayout>
-
         <!--底部设置栏-->
-        <LinearLayout
-            android:id="@+id/ll_bottom_bg"
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/bottom_glass_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/background_menu"
-            android:importantForAccessibility="no"
-            android:orientation="vertical">
+            android:layout_marginHorizontal="8dp"
+            android:layout_marginBottom="8dp"
+            android:importantForAccessibility="no">
+
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/read_bottom_glass"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:importantForAccessibility="no"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <LinearLayout
+                android:id="@+id/ll_bottom_bg"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
+                android:importantForAccessibility="no"
+                android:orientation="vertical"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
             <!--章节设置-->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -532,7 +511,8 @@
                     android:importantForAccessibility="no" />
 
             </LinearLayout>
-        </LinearLayout>
+            </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

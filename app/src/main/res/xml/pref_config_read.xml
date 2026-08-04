@@ -206,6 +206,20 @@
         app:iconSpaceReserved="false"
         app:isBottomBackground="true" />
 
+    <io.legado.app.lib.prefs.Preference
+        android:key="simulatedReading"
+        android:persistent="false"
+        android:title="@string/simulated_reading"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
+    <io.legado.app.lib.prefs.Preference
+        android:key="bookImageStyle"
+        android:persistent="false"
+        android:title="@string/image_style"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
     <io.legado.app.lib.prefs.SwitchPreference
         android:defaultValue="true"
         android:key="showReadTitleAddition"

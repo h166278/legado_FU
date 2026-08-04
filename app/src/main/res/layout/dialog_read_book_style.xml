@@ -1,12 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tool="http://schemas.android.com/tools"
     android:id="@+id/root_view"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@color/background"
-    android:orientation="vertical">
+    android:layout_height="wrap_content">
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/ng_drawer_background"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:importantForAccessibility="no"
+        app:layout_constraintBottom_toBottomOf="@id/drawer_content"
+        app:layout_constraintEnd_toEndOf="@id/drawer_content"
+        app:layout_constraintStart_toStartOf="@id/drawer_content"
+        app:layout_constraintTop_toTopOf="@id/drawer_content" />
+
+    <LinearLayout
+        android:id="@+id/drawer_content"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginBottom="8dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -306,4 +326,6 @@
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
         tool:listitem="@layout/item_read_style" />
 
-</LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

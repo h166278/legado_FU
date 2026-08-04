@@ -565,20 +565,6 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     }
 
     /**
-     * 翻转删除重复标题
-     */
-    fun reverseRemoveSameTitle() {
-        execute {
-            val book = ReadBook.book ?: return@execute
-            val textChapter = ReadBook.curTextChapter ?: return@execute
-            BookHelp.setRemoveSameTitle(
-                book, textChapter.chapter, !textChapter.sameTitleRemoved
-            )
-            ReadBook.loadContent(ReadBook.durChapterIndex)
-        }
-    }
-
-    /**
      * 刷新图片
      */
     fun refreshImage(src: String) {
@@ -645,12 +631,11 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun disableSource() {
+    fun setSourceEnabled(enabled: Boolean) {
+        val bookSource = ReadBook.bookSource ?: return
+        bookSource.enabled = enabled
         execute {
-            ReadBook.bookSource?.let {
-                it.enabled = false
-                appDb.bookSourceDao.update(it)
-            }
+            appDb.bookSourceDao.update(bookSource)
         }
     }
 

@@ -99,7 +99,6 @@ import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_ACCENT_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_COLOR
 import io.legado.app.ui.book.read.config.MoreConfigDialog
-import io.legado.app.ui.book.read.config.ReadAloudDialog
 import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_COLOR
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_DIVIDER_COLOR
@@ -117,6 +116,9 @@ import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.book.toc.rule.TxtTocRuleDialog
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.config.AiConfigFragment
+import io.legado.app.ui.config.ConfigActivity
+import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.dict.DictDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
@@ -124,7 +126,9 @@ import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
+import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.PopupAction
+import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.dialog.applyNgWindow
@@ -139,7 +143,6 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
-import io.legado.app.utils.iconItemOnLongClick
 import io.legado.app.utils.invisible
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isTrue
@@ -185,7 +188,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     ContentTextView.CallBack,
     ReadMenu.CallBack,
     SearchMenu.CallBack,
-    ReadAloudDialog.CallBack,
     ChangeBookSourceDialog.CallBack,
     ChangeChapterSourceDialog.CallBack,
     ReadBook.CallBack,
@@ -193,6 +195,8 @@ class ReadBookActivity : BaseReadBookActivity(),
     TxtTocRuleDialog.CallBack,
     ColorPickerDialogListener,
     LayoutProgressListener {
+
+    protected override val bindNgToolbarMenu: Boolean = false
 
     private val tocActivity =
         registerForActivityResult(TocActivityResult()) {
@@ -420,17 +424,22 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.book_read, menu)
-        menu.iconItemOnLongClick(R.id.menu_change_source) {
-            showReadChangeSourceMenu(it)
-        }
-        menu.iconItemOnLongClick(R.id.menu_refresh) {
-            showReadRefreshMenu(it)
-        }
         binding.readMenu.refreshMenuColorFilter()
+        NgMenuPopup.bindReadingToolbarMenu(
+            context = this,
+            toolbar = findViewById<TitleBar>(R.id.title_bar)?.toolbar,
+            menu = menu,
+            themeSnapshotProvider = binding.readMenu::currentThemeSnapshot,
+            prepareMenu = {
+                onPrepareOptionsMenu(menu)
+                onMenuOpened(Window.FEATURE_OPTIONS_PANEL, menu)
+            },
+            onItemClick = { onCompatOptionsItemSelected(it) }
+        )
         return super.onCompatCreateOptionsMenu(menu)
     }
 
-    private fun showReadChangeSourceMenu(anchor: View) {
+    override fun showReadChangeSourceMenu(anchor: View) {
         NgActionPopup(
             this,
             listOf(
@@ -453,7 +462,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         }.show(anchor)
     }
 
-    private fun showReadRefreshMenu(anchor: View) {
+    override fun showReadRefreshMenu(anchor: View) {
         NgActionPopup(
             this,
             listOf(
@@ -488,12 +497,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         return super.onPrepareOptionsMenu(menu)
     }
 
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_same_title_removed)?.isChecked =
-            ReadBook.curTextChapter?.sameTitleRemoved == true
-        return super.onMenuOpened(featureId, menu)
-    }
-
     /**
      * 更新菜单
      */
@@ -504,12 +507,12 @@ class ReadBookActivity : BaseReadBookActivity(),
         for (i in 0 until menu.size) {
             val item = menu[i]
             when (item.groupId) {
-                R.id.menu_group_on_line -> item.isVisible = onLine
                 R.id.menu_group_local -> item.isVisible = !onLine
                 R.id.menu_group_text -> item.isVisible = book.isLocalTxt
                 R.id.menu_group_epub -> item.isVisible = book.isEpub
                 else -> when (item.itemId) {
                     R.id.menu_enable_replace -> item.isChecked = book.getUseReplaceRule()
+                    R.id.menu_same_title_removed -> item.isChecked = book.getRemoveSameTitle()
                     R.id.menu_re_segment -> item.isChecked = book.getReSegment()
 //                    R.id.menu_enable_review -> {
 //                        item.isVisible = BuildConfig.DEBUG
@@ -612,25 +615,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_set_charset -> showCharsetConfig()
-            R.id.menu_image_style -> {
-                val imgStyles =
-                    arrayListOf(
-                        Book.imgStyleDefault, Book.imgStyleFull, Book.imgStyleText,
-                        Book.imgStyleSingle
-                    )
-                selector(
-                    R.string.image_style,
-                    imgStyles
-                ) { _, index ->
-                    val imageStyle = imgStyles[index]
-                    ReadBook.book?.setImageStyle(imageStyle)
-                    if (imageStyle == Book.imgStyleSingle) {
-                        ReadBook.book?.setPageAnim(0)  // 切换图片样式single后，自动切换为覆盖
-                        binding.readView.upPageAnim()
-                    }
-                    ReadBook.loadContent(false)
-                }
-            }
+            R.id.menu_image_style -> showImageStyleConfig()
 
             R.id.menu_get_progress -> ReadBook.book?.let {
                 viewModel.syncBookProgress(it) { progress ->
@@ -642,27 +627,41 @@ class ReadBookActivity : BaseReadBookActivity(),
                 ReadBook.uploadProgress(true) { toastOnUi(R.string.upload_book_success) }
             }
 
-            R.id.menu_same_title_removed -> {
-                ReadBook.book?.let {
-                    val contentProcessor = ContentProcessor.get(it)
-                    val textChapter = ReadBook.curTextChapter
-                    if (textChapter != null
-                        && !textChapter.sameTitleRemoved
-                        && !contentProcessor.removeSameTitleCache.contains(
-                            textChapter.chapter.getFileName("nr")
-                        )
-                    ) {
-                        toastOnUi("未找到可移除的重复标题")
-                    }
-                }
-                viewModel.reverseRemoveSameTitle()
+            R.id.menu_same_title_removed -> ReadBook.book?.let {
+                it.setRemoveSameTitle(!it.getRemoveSameTitle())
+                item.isChecked = it.getRemoveSameTitle()
+                ReadBook.saveRead()
+                ReadBook.loadContent(false)
             }
 
             R.id.menu_effective_replaces -> showDialogFragment<EffectiveReplacesDialog>()
-
-            R.id.menu_help -> showHelp()
         }
         return super.onCompatOptionsItemSelected(item)
+    }
+
+    fun showImageStyleConfig() {
+        val imageStyles = listOf(
+            Book.imgStyleDefault,
+            Book.imgStyleFull,
+            Book.imgStyleText,
+            Book.imgStyleSingle
+        )
+        val imageStyleTitles = listOf(
+            getString(R.string.image_style_original),
+            getString(R.string.image_style_fit_width),
+            getString(R.string.image_style_inline),
+            getString(R.string.image_style_single_page)
+        )
+        selector(R.string.image_style, imageStyleTitles) { _, index ->
+            val imageStyle = imageStyles[index]
+            ReadBook.book?.setImageStyle(imageStyle)
+            if (imageStyle == Book.imgStyleSingle) {
+                ReadBook.book?.setPageAnim(0)
+                binding.readView.upPageAnim()
+            }
+            ReadBook.saveRead()
+            ReadBook.loadContent(false)
+        }
     }
 
     private fun showBookChangeSource() {
@@ -670,6 +669,18 @@ class ReadBookActivity : BaseReadBookActivity(),
         ReadBook.book?.let {
             showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
         }
+    }
+
+    override fun onHeaderChangeSource() {
+        showBookChangeSource()
+    }
+
+    override fun onHeaderRefresh() {
+        refreshContentDur()
+    }
+
+    override fun onHeaderDownload() {
+        showDownloadDialog()
     }
 
     private fun showChapterChangeSource() = lifecycleScope.launch {
@@ -1297,6 +1308,13 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onClickAiPurifyChapter() {
         showAiPurifyChapterRangeDialog()
+    }
+
+    override fun onOpenAiPurifySettings() {
+        startActivity(Intent(this, ConfigActivity::class.java).apply {
+            putExtra("configTag", ConfigTag.AI_CONFIG)
+            putExtra(AiConfigFragment.EXTRA_INITIAL_PAGE, AiConfigFragment.PAGE_PURIFY)
+        })
     }
 
     private fun showAiPurifyChapterRangeDialog() {
@@ -2837,13 +2855,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     /**
-     * 显示朗读菜单
-     */
-    override fun showReadAloudDialog() {
-        showDialogFragment<ReadAloudDialog>()
-    }
-
-    /**
      * 自动翻页
      */
     override fun autoPage() {
@@ -2924,11 +2935,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
-    /**
-     * 禁用书源
-     */
-    override fun disableSource() {
-        viewModel.disableSource()
+    override fun setSourceEnabled(enabled: Boolean) {
+        viewModel.setSourceEnabled(enabled)
     }
 
     /**
@@ -3196,10 +3204,6 @@ class ReadBookActivity : BaseReadBookActivity(),
             ReadBook.durChapterPos = line.chapterPosition
             ReadBook.readAloud(startPos = line.pagePosition)
         }
-    }
-
-    override fun showHelp() {
-        showHelp("readMenuHelp")
     }
 
     /**

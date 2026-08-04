@@ -72,7 +72,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         val bg = requireContext().bottomBackground
         val isLight = ColorUtils.isColorLight(bg)
         val textColor = requireContext().getPrimaryTextColor(isLight)
-        ReadDrawerStyle.applyTopRoundedBackground(rootView, bg)
+        rootView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        ReadDrawerStyle.applyGlassBackground(ngDrawerBackground)
         tvPageAnim.setTextColor(textColor)
         tvBgTs.setTextColor(textColor)
         tvShareLayout.setTextColor(textColor)

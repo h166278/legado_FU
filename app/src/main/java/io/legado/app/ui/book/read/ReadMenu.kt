@@ -2,15 +2,10 @@ package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.ColorStateList
 import android.database.ContentObserver
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.ColorFilter
+import android.graphics.Paint
 import android.graphics.PorterDuff
-import android.graphics.PixelFormat
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.provider.Settings
 import android.util.AttributeSet
@@ -20,52 +15,63 @@ import android.view.ViewGroup
 import android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
 import android.view.animation.Animation
 import android.widget.FrameLayout
-import android.widget.PopupWindow
 import android.widget.SeekBar
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.databinding.ViewReadMenuBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.config.NgColorConfigStore
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.Selector
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.buttonDisabledColor
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgThemeResolver
+import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
+import io.legado.app.ui.widget.NgIconActionPopup
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.ConstraintModify
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.loadAnimation
-import io.legado.app.utils.modifyBegin
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
+import io.legado.app.utils.statusBarHeight
 import io.legado.app.utils.visible
-import io.legado.app.utils.windowSize
 import splitties.views.onClick
-import splitties.views.onLongClick
 import androidx.core.graphics.toColorInt
 import io.legado.app.constant.BookType
 import io.legado.app.utils.buildMainHandler
@@ -82,7 +88,13 @@ class ReadMenu @JvmOverloads constructor(
     private val binding = ViewReadMenuBinding.inflate(LayoutInflater.from(context), this, true)
     private var confirmSkipToChapter: Boolean = false
     private var isMenuOutAnimating = false
-    private var aiFabExpanded = false
+    private var floatingToolExpansion by mutableStateOf<ReadFloatingToolExpansion?>(null)
+    private var floatingBrightness by mutableIntStateOf(AppConfig.readBrightness)
+    private var floatingBrightnessAutomatic by mutableStateOf(true)
+    private var floatingAutoPage by mutableStateOf(false)
+    private var floatingToolDock by mutableStateOf(
+        ReadFloatingToolDock.fromStoredRight(AppConfig.brightnessVwPos)
+    )
     private val menuTopIn: Animation by lazy {
         loadAnimation(context, R.anim.anim_readbook_top_in)
     }
@@ -99,8 +111,21 @@ class ReadMenu @JvmOverloads constructor(
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
     private val useGradientThemeMenu: Boolean
         get() = !AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme(context)
+    private var readMenuThemeSnapshot: NgThemeSnapshot = resolveReadMenuThemeSnapshot()
+
+    private fun resolveReadMenuThemeSnapshot(): NgThemeSnapshot {
+        if (AppConfig.isEInkMode) return NgThemeResolver.resolve(context)
+        return NgThemeResolver.resolve(
+            context = context,
+            colors = NgColorConfigStore.current(context),
+            isDark = ReadBookConfig.isNightTheme
+        )
+    }
+
+    internal fun currentThemeSnapshot(): NgThemeSnapshot = readMenuThemeSnapshot
+
     private var bgColor: Int = if (useGradientThemeMenu) {
-        context.bottomBackground
+        readMenuThemeSnapshot.colors.surface
     } else if (immersiveMenu) {
         kotlin.runCatching {
             ReadBookConfig.durConfig.curBgStr().toColorInt()
@@ -109,54 +134,31 @@ class ReadMenu @JvmOverloads constructor(
         context.bottomBackground
     }
     private var textColor: Int = if (useGradientThemeMenu) {
-        context.getCompatColor(R.color.primaryText)
+        readMenuThemeSnapshot.colors.onSurface
     } else if (immersiveMenu) {
         ReadBookConfig.durConfig.curTextColor()
     } else {
         context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
     }
 
-    private var bottomBackgroundList: ColorStateList = createFloatingButtonBackgroundList()
     private var onMenuOutEnd: (() -> Unit)? = null
     private val showBrightnessView
         get() = context.getPrefBoolean(
             PreferKey.showBrightnessView,
             true
         )
-    private fun createFloatingButtonBackgroundList(): ColorStateList {
-        val defaultColor = if (useGradientThemeMenu) {
-            ThemeConfig.getReadingNgImageSurfaceColor(context)
-        } else {
-            bgColor
-        }
-        val pressedColor = if (useGradientThemeMenu) {
-            ColorUtils.darkenColor(defaultColor)
-        } else {
-            ColorUtils.darkenColor(bgColor)
-        }
-        return Selector.colorBuild()
-            .setDefaultColor(defaultColor)
-            .setPressedColor(pressedColor)
-            .create()
-    }
     private val menuInListener = object : Animation.AnimationListener {
         override fun onAnimationStart(animation: Animation) {
-            binding.tvSourceAction.text =
-                ReadBook.bookSource?.bookSourceName ?: context.getString(R.string.book_source)
-            binding.tvSourceAction.isGone = ReadBook.isLocalBook
             binding.tvCustomBtn.isGone = ReadBook.isLocalBook ||
                     ReadBook.bookSource?.customButton != true
             callBack.upSystemUiVisibility()
-            binding.llBrightness.visible(showBrightnessView)
+            binding.readFloatingTools.visible()
         }
 
         @SuppressLint("RtlHardcoded")
         override fun onAnimationEnd(animation: Animation) {
             binding.vwMenuBg.setOnClickListener { runMenuOut() }
             callBack.upSystemUiVisibility()
-            if (!LocalConfig.readMenuHelpVersionIsLast) {
-                callBack.showHelp()
-            }
         }
 
         override fun onAnimationRepeat(animation: Animation) = Unit
@@ -169,7 +171,7 @@ class ReadMenu @JvmOverloads constructor(
 
         override fun onAnimationEnd(animation: Animation) {
             this@ReadMenu.invisible()
-            binding.titleBar.invisible()
+            binding.titleBarContainer.invisible()
             binding.bottomMenu.invisible()
             canShowMenu = false
             isMenuOutAnimating = false
@@ -181,24 +183,41 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     init {
+        initGlassSurfaces()
+        initFloatingToolRail()
+        initFloatingMenuInsets()
+        initTopBarLayout()
         initView()
         upBrightnessState()
         bindEvent()
     }
 
+    private fun initTopBarLayout() = binding.titleBar.run {
+        val toolbarView = toolbar
+        removeView(toolbarView)
+        binding.topActionToolbarHost.addView(
+            toolbarView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        toolbarView.navigationIcon = null
+        toolbarView.background = null
+        toolbarView.backgroundTintList = null
+        toolbarView.minimumHeight = 0
+        toolbarView.setContentInsetsRelative(0, 0)
+        toolbarView.setPadding(0, 0, 0, 0)
+    }
+
     private fun initView(reset: Boolean = false) = binding.run {
-        if (ReadBookConfig.isNightTheme) {
-            fabNightTheme.setImageResource(R.drawable.ic_daytime)
-        } else {
-            fabNightTheme.setImageResource(R.drawable.ic_brightness)
-        }
         initAnimation()
-        tvCustomBtn.setColorFilter(context.accentColor)
+        tvCustomBtn.setColorFilter(readMenuThemeSnapshot.colors.primary)
         if (useGradientThemeMenu) {
             titleBar.setTextColor(textColor)
             titleBar.setColorFilter(textColor)
-            tvChapterName.setTextColor(context.getCompatColor(R.color.tv_text_summary))
-            tvChapterUrl.setTextColor(context.getCompatColor(R.color.tv_text_summary))
+            tvChapterName.setTextColor(readMenuThemeSnapshot.colors.onSurfaceVariant)
+            tvChapterUrl.setTextColor(readMenuThemeSnapshot.colors.onSurfaceVariant)
         } else if (immersiveMenu) {
             val lightTextColor = ColorUtils.withAlpha(ColorUtils.lightenColor(textColor), 0.75f)
             titleBar.setTextColor(textColor)
@@ -215,38 +234,32 @@ class ReadMenu @JvmOverloads constructor(
             tvChapterName.setTextColor(textColor)
             tvChapterUrl.setTextColor(textColor)
         }
-        val brightnessBackground = GradientDrawable()
-        brightnessBackground.cornerRadius = 5F.dpToPx()
-        brightnessBackground.setColor(ColorUtils.adjustAlpha(bgColor, 0.5f))
-        llBrightness.background = brightnessBackground
+        tvBookTitle.setTextColor(textColor)
+        updateSourceStateStyle()
+        ivHeaderBack.setColorFilter(textColor)
+        ivHeaderRefresh.setColorFilter(textColor)
+        ivHeaderChangeSource.setColorFilter(textColor)
+        ivHeaderDownload.setColorFilter(textColor)
+        updateHeaderActionMode()
         if (AppConfig.isEInkMode) {
+            readTopGlass.gone()
+            readBottomGlass.gone()
             titleBar.setBackgroundResource(R.drawable.bg_eink_border_bottom)
             llBottomBg.setBackgroundResource(R.drawable.bg_eink_border_top)
-        } else if (useGradientThemeMenu) {
-            if (!applyGradientThemeMenuBackground()) {
-                titleBar.setBackgroundColor(context.primaryColor)
-                ReadDrawerStyle.applyTopRoundedBackground(llBottomBg, bgColor)
-            }
         } else {
-            ReadDrawerStyle.applyTopRoundedBackground(llBottomBg, bgColor)
+            readTopGlass.visible()
+            readBottomGlass.visible()
+            // TitleBar/AppBarLayout 默认会安装主题背景。这里必须移除 Drawable 与 tint，
+            // 仅设置透明颜色仍可能让顶栏比底栏多叠一层主题表面色。
+            titleBar.background = null
+            titleBar.backgroundTintList = null
+            bookHeaderContent.background = null
+            titleBar.elevation = 0f
+            titleBar.translationZ = 0f
+            titleBar.stateListAnimator = null
+            titleBar.outlineProvider = null
+            llBottomBg.setBackgroundColor(Color.TRANSPARENT)
         }
-        fabSearch.backgroundTintList = bottomBackgroundList
-        fabSearch.setColorFilter(textColor)
-        fabAutoPage.backgroundTintList = bottomBackgroundList
-        fabAutoPage.setColorFilter(textColor)
-        fabReplaceRule.backgroundTintList = bottomBackgroundList
-        fabReplaceRule.setColorFilter(textColor)
-        fabNightTheme.backgroundTintList = bottomBackgroundList
-        fabNightTheme.setColorFilter(textColor)
-        fabAi.backgroundTintList = bottomBackgroundList
-        fabAi.setColorFilter(textColor)
-        fabAiPurifyChapter.setTextColor(textColor)
-        fabAiPurifyChapter.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 6.dpToPx().toFloat()
-            setColor(bgColor)
-        }
-        tvSourceAction.setTextColor(context.accentColor)
         tvPre.setTextColor(textColor)
         tvNext.setTextColor(textColor)
         ivCatalog.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
@@ -257,17 +270,13 @@ class ReadMenu @JvmOverloads constructor(
         tvFont.setTextColor(textColor)
         ivSetting.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         tvSetting.setTextColor(textColor)
-        vwBrightnessPosAdjust.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        llBrightness.setOnClickListener(null)
-        seekBrightness.post {
-            seekBrightness.progress = AppConfig.readBrightness
-        }
         if (AppConfig.showReadTitleBarAddition) {
             titleBarAddition.visible()
         } else {
             titleBarAddition.gone()
         }
-        upBrightnessVwPos()
+        floatingToolDock = ReadFloatingToolDock.fromStoredRight(AppConfig.brightnessVwPos)
+        upFloatingToolPos()
         /**
          * 确保视图不被导航栏遮挡
          */
@@ -275,19 +284,49 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     fun reset() {
+        readMenuThemeSnapshot = resolveReadMenuThemeSnapshot()
         upColorConfig()
+        initGlassSurfaces()
+        initFloatingToolRail()
         initView(true)
     }
 
     fun refreshMenuColorFilter() {
-        if (immersiveMenu) {
+        binding.tvBookTitle.setTextColor(textColor)
+        binding.ivHeaderBack.setColorFilter(textColor)
+        binding.ivHeaderRefresh.setColorFilter(textColor)
+        binding.ivHeaderChangeSource.setColorFilter(textColor)
+        binding.ivHeaderDownload.setColorFilter(textColor)
+        updateSourceStateStyle()
+        binding.titleBar.setColorFilter(textColor)
+        binding.titleBar.toolbar.post {
+            // overflow 图标由 Toolbar 在菜单创建后的布局阶段补建，立即着色时可能仍为空。
+            // 下一帧再次应用阅读局部颜色，避免从主界面直接进入夜间阅读时沿用黑色图标。
             binding.titleBar.setColorFilter(textColor)
+        }
+    }
+
+    private fun updateHeaderActionMode() = binding.run {
+        val online = !ReadBook.isLocalBook
+        tvSourceName.isVisible = online
+        ivHeaderRefresh.isVisible = online
+        ivHeaderChangeSource.isVisible = online
+        ivHeaderDownload.isVisible = online
+        topActionToolbarHost.updateLayoutParams<ConstraintLayout.LayoutParams> {
+            width = if (online) 48.dpToPx() else 0
+            startToEnd = if (online) {
+                ConstraintLayout.LayoutParams.UNSET
+            } else {
+                R.id.iv_header_back
+            }
+            startToStart = ConstraintLayout.LayoutParams.UNSET
+            marginStart = 0
         }
     }
 
     private fun upColorConfig() {
         bgColor = if (useGradientThemeMenu) {
-            context.bottomBackground
+            readMenuThemeSnapshot.colors.surface
         } else if (immersiveMenu) {
             kotlin.runCatching {
                 ReadBookConfig.durConfig.curBgStr().toColorInt()
@@ -296,75 +335,137 @@ class ReadMenu @JvmOverloads constructor(
             context.bottomBackground
         }
         textColor = if (useGradientThemeMenu) {
-            context.getCompatColor(R.color.primaryText)
+            readMenuThemeSnapshot.colors.onSurface
         } else if (immersiveMenu) {
             ReadBookConfig.durConfig.curTextColor()
         } else {
             context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
         }
-        bottomBackgroundList = createFloatingButtonBackgroundList()
     }
 
-    private fun applyGradientThemeMenuBackground(): Boolean {
-        val metrics = activity?.windowManager?.windowSize ?: return false
-        val titleBackground = ThemeConfig.getBgImage(context, metrics)?.withoutMinimumSize()
-        val bottomBackground = ThemeConfig.getBgImage(context, metrics)?.withoutMinimumSize()
-        if (titleBackground == null || bottomBackground == null) {
-            return false
+    private fun initGlassSurfaces() = binding.run {
+        val snapshot = readMenuThemeSnapshot
+        readTopGlass.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnDetachedFromWindow
+        )
+        readTopGlass.setContent {
+            NgAppTheme(snapshot = snapshot, updateSystemBars = false) {
+                NgGlassSurface(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(12.dp),
+                    style = NgGlassDefaults.floatingStyle()
+                ) {}
+            }
         }
-        binding.titleBar.background = titleBackground
-        binding.titleBar.elevation = 0f
-        binding.llBottomBg.background = ReadDrawerStyle.wrapTopRounded(bottomBackground)
-        return true
+        readBottomGlass.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnDetachedFromWindow
+        )
+        readBottomGlass.setContent {
+            NgAppTheme(snapshot = snapshot, updateSystemBars = false) {
+                NgGlassSurface(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(12.dp),
+                    style = NgGlassDefaults.floatingStyle()
+                ) {}
+            }
+        }
     }
 
-    private fun Drawable.withoutMinimumSize(): Drawable {
-        val source = this
-        return object : Drawable() {
-            override fun draw(canvas: Canvas) {
-                source.bounds = bounds
-                source.draw(canvas)
+    private fun initFloatingToolRail() = binding.run {
+        val snapshot = readMenuThemeSnapshot
+        readFloatingTools.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnDetachedFromWindow
+        )
+        readFloatingTools.setContent {
+            NgAppTheme(snapshot = snapshot, updateSystemBars = false) {
+                ReadFloatingToolRail(
+                    dockSide = floatingToolDock,
+                    showBrightness = showBrightnessView,
+                    expansion = floatingToolExpansion,
+                    brightness = floatingBrightness,
+                    brightnessAutomatic = floatingBrightnessAutomatic,
+                    autoPage = floatingAutoPage,
+                    nightMode = ReadBookConfig.isNightTheme,
+                    onExpansionChange = { floatingToolExpansion = it },
+                    onBrightnessChange = { value ->
+                        floatingBrightness = value.coerceIn(0, 255)
+                        if (!floatingBrightnessAutomatic) {
+                            setScreenBrightness(floatingBrightness.toFloat())
+                        }
+                    },
+                    onBrightnessChangeFinished = {
+                        AppConfig.readBrightness = floatingBrightness
+                    },
+                    onToggleBrightnessAutomatic = {
+                        context.putPrefBoolean("brightnessAuto", !brightnessAuto())
+                        upBrightnessState()
+                    },
+                    onSearch = {
+                        floatingToolExpansion = null
+                        runMenuOut { callBack.openSearchActivity(null) }
+                    },
+                    onReplace = {
+                        floatingToolExpansion = null
+                        callBack.openReplaceRule()
+                    },
+                    onAutoPage = {
+                        floatingToolExpansion = null
+                        runMenuOut { callBack.autoPage() }
+                    },
+                    onNightMode = {
+                        floatingToolExpansion = null
+                        ReadBookConfig.isNightTheme = !ReadBookConfig.isNightTheme
+                        callBack.onReadThemeChanged()
+                    },
+                    onAiPurify = {
+                        floatingToolExpansion = null
+                        runMenuOut { callBack.onClickAiPurifyChapter() }
+                    },
+                    onAiSettings = {
+                        floatingToolExpansion = null
+                        runMenuOut { callBack.onOpenAiPurifySettings() }
+                    },
+                    onToggleDockSide = {
+                        floatingToolExpansion = null
+                        floatingToolDock = floatingToolDock.toggled()
+                        AppConfig.brightnessVwPos = floatingToolDock.isRight
+                        upFloatingToolPos()
+                    }
+                )
             }
+        }
+    }
 
-            override fun setAlpha(alpha: Int) {
-                source.alpha = alpha
+    private fun initFloatingMenuInsets() = binding.run {
+        updateFloatingMenuTopMargin()
+        titleBarContainer.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
+            val statusBars = WindowInsetsCompat.Type.statusBars()
+            val visibleTopInset = if (windowInsets.isVisible(statusBars)) {
+                windowInsets.getInsets(statusBars).top
+            } else {
+                0
             }
+            val fallbackInset = if (ReadBookConfig.hideStatusBar) {
+                0
+            } else {
+                context.statusBarHeight
+            }
+            updateFloatingMenuTopMargin(maxOf(visibleTopInset, fallbackInset))
+            windowInsets
+        }
+    }
 
-            override fun setColorFilter(colorFilter: ColorFilter?) {
-                source.colorFilter = colorFilter
-            }
-
-            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-            override fun getOpacity(): Int {
-                return PixelFormat.TRANSLUCENT
-            }
-
-            override fun getIntrinsicWidth(): Int {
-                return -1
-            }
-
-            override fun getIntrinsicHeight(): Int {
-                return -1
-            }
-
-            override fun getMinimumWidth(): Int {
-                return 0
-            }
-
-            override fun getMinimumHeight(): Int {
-                return 0
-            }
+    private fun updateFloatingMenuTopMargin(
+        statusBarInset: Int = if (ReadBookConfig.hideStatusBar) 0 else context.statusBarHeight
+    ) {
+        binding.titleBarContainer.updateLayoutParams<ConstraintLayout.LayoutParams> {
+            topMargin = statusBarInset + 4.dpToPx()
         }
     }
 
     fun upBrightnessState() {
-        if (brightnessAuto()) {
-            binding.ivBrightnessAuto.setColorFilter(context.accentColor)
-            binding.seekBrightness.isEnabled = false
-        } else {
-            binding.ivBrightnessAuto.setColorFilter(context.buttonDisabledColor)
-            binding.seekBrightness.isEnabled = true
-        }
+        floatingBrightnessAutomatic = brightnessAuto()
+        floatingBrightness = AppConfig.readBrightness
         setScreenBrightness(AppConfig.readBrightness.toFloat())
     }
 
@@ -452,12 +553,13 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     fun runMenuIn(anim: Boolean = !AppConfig.isEInkMode) {
+        updateFloatingMenuTopMargin()
         callBack.onMenuShow()
         this.visible()
-        binding.titleBar.visible()
+        binding.titleBarContainer.visible()
         binding.bottomMenu.visible()
         if (anim) {
-            binding.titleBar.startAnimation(menuTopIn)
+            binding.titleBarContainer.startAnimation(menuTopIn)
             binding.bottomMenu.startAnimation(menuBottomIn)
         } else {
             menuInListener.onAnimationStart(menuBottomIn)
@@ -469,12 +571,12 @@ class ReadMenu @JvmOverloads constructor(
         if (isMenuOutAnimating) {
             return
         }
-        setAiFabExpanded(false)
+        floatingToolExpansion = null
         callBack.onMenuHide()
         this.onMenuOutEnd = onMenuOutEnd
         if (this.isVisible) {
             if (anim) {
-                binding.titleBar.startAnimation(menuTopOut)
+                binding.titleBarContainer.startAnimation(menuTopOut)
                 binding.bottomMenu.startAnimation(menuBottomOut)
             } else {
                 menuOutListener.onAnimationStart(menuBottomOut)
@@ -489,8 +591,11 @@ class ReadMenu @JvmOverloads constructor(
 
     private fun bindEvent() = binding.run {
         vwMenuBg.setOnClickListener { runMenuOut() }
-        titleBar.toolbar.setOnClickListener {
+        tvBookTitle.setOnClickListener {
             callBack.openBookInfoActivity()
+        }
+        ivHeaderBack.setOnClickListener {
+            (activity as? ReadBookActivity)?.onHomeNavigationSelected()
         }
         val chapterViewClickListener = OnClickListener {
             if (ReadBook.isLocalBook) {
@@ -531,6 +636,26 @@ class ReadMenu @JvmOverloads constructor(
         tvChapterName.setOnLongClickListener(chapterViewLongClickListener)
         tvChapterUrl.setOnClickListener(chapterViewClickListener)
         tvChapterUrl.setOnLongClickListener(chapterViewLongClickListener)
+        ivHeaderRefresh.setOnClickListener {
+            callBack.onHeaderRefresh()
+        }
+        ivHeaderRefresh.setOnLongClickListener {
+            callBack.showReadRefreshMenu(it)
+            true
+        }
+        ivHeaderChangeSource.setOnClickListener {
+            callBack.onHeaderChangeSource()
+        }
+        ivHeaderChangeSource.setOnLongClickListener {
+            callBack.showReadChangeSourceMenu(it)
+            true
+        }
+        ivHeaderDownload.setOnClickListener {
+            callBack.onHeaderDownload()
+        }
+        tvSourceName.setOnClickListener {
+            showSourceActionPopup(it)
+        }
         tvCustomBtn.setOnClickListener {
             val book = ReadBook.book ?: return@setOnClickListener
             val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
@@ -559,37 +684,6 @@ class ReadMenu @JvmOverloads constructor(
                 )
             }
             true
-        }
-        //书源操作
-        tvSourceAction.onClick {
-            val showLogin = !ReadBook.bookSource?.loginUrl.isNullOrEmpty()
-            val showChapterPay = showLogin
-                    && ReadBook.curTextChapter?.isVip == true
-                    && ReadBook.curTextChapter?.isPay != true
-            showSourceActionPopup(showLogin, showChapterPay)
-        }
-        //亮度跟随
-        ivBrightnessAuto.setOnClickListener {
-            context.putPrefBoolean("brightnessAuto", !brightnessAuto())
-            upBrightnessState()
-        }
-        //亮度调节
-        seekBrightness.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    setScreenBrightness(progress.toFloat())
-                }
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                AppConfig.readBrightness = seekBar.progress
-            }
-
-        })
-        vwBrightnessPosAdjust.setOnClickListener {
-            AppConfig.brightnessVwPos = !AppConfig.brightnessVwPos
-            upBrightnessVwPos()
         }
         //阅读进度
         seekReadPage.setOnSeekBarChangeListener(object : SeekBarChangeListener {
@@ -625,40 +719,6 @@ class ReadMenu @JvmOverloads constructor(
 
         })
 
-        //搜索
-        fabSearch.setOnClickListener {
-            runMenuOut {
-                callBack.openSearchActivity(null)
-            }
-        }
-
-        //自动翻页
-        fabAutoPage.setOnClickListener {
-            runMenuOut {
-                callBack.autoPage()
-            }
-        }
-
-        //替换
-        fabReplaceRule.setOnClickListener { callBack.openReplaceRule() }
-
-        //夜间模式
-        fabNightTheme.setOnClickListener {
-            ReadBookConfig.isNightTheme = !ReadBookConfig.isNightTheme
-            callBack.onReadThemeChanged()
-        }
-
-        //AI功能
-        fabAi.setOnClickListener {
-            setAiFabExpanded(!aiFabExpanded)
-        }
-        fabAiPurifyChapter.setOnClickListener {
-            setAiFabExpanded(false)
-            runMenuOut {
-                callBack.onClickAiPurifyChapter()
-            }
-        }
-
         //上一章
         tvPre.setOnClickListener { ReadBook.moveToPrevChapter(upContent = true, toLast = false) }
 
@@ -676,11 +736,6 @@ class ReadMenu @JvmOverloads constructor(
         llReadAloud.setOnClickListener {
             runMenuOut {
                 callBack.onClickReadAloud()
-            }
-        }
-        llReadAloud.onLongClick {
-            runMenuOut {
-                callBack.showReadAloudDialog()
             }
         }
         //界面
@@ -704,7 +759,14 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     fun upBookView() {
-        binding.titleBar.title = ReadBook.book?.name
+        binding.titleBar.title = null
+        updateHeaderActionMode()
+        binding.tvBookTitle.text = ReadBook.book?.name.orEmpty()
+        val sourceName = ReadBook.bookSource?.bookSourceName
+            ?: ReadBook.book?.originName
+            ?: context.getString(R.string.book_source)
+        binding.tvSourceName.text = sourceName
+        updateSourceStateStyle()
         ReadBook.curTextChapter?.let {
             binding.tvChapterName.text = it.title
             binding.tvChapterName.visible()
@@ -748,65 +810,95 @@ class ReadMenu @JvmOverloads constructor(
         binding.seekReadPage.progress = seek
     }
 
-    fun setAutoPage(autoPage: Boolean) = binding.run {
-        if (autoPage) {
-            fabAutoPage.setImageResource(R.drawable.ic_auto_page_stop)
-            fabAutoPage.contentDescription = context.getString(R.string.auto_next_page_stop)
-        } else {
-            fabAutoPage.setImageResource(R.drawable.ic_auto_page)
-            fabAutoPage.contentDescription = context.getString(R.string.auto_next_page)
-        }
-        fabAutoPage.setColorFilter(textColor)
+    fun setAutoPage(autoPage: Boolean) {
+        floatingAutoPage = autoPage
     }
 
-    private fun setAiFabExpanded(expanded: Boolean) = binding.run {
-        aiFabExpanded = expanded
-        if (expanded) {
-            fabAiPurifyChapter.visible()
-        } else {
-            fabAiPurifyChapter.gone()
-        }
-    }
-
-    private fun upBrightnessVwPos() {
-        if (AppConfig.brightnessVwPos) {
-            binding.root.modifyBegin()
-                .clear(R.id.ll_brightness, ConstraintModify.Anchor.LEFT)
-                .rightToRightOf(R.id.ll_brightness, R.id.vw_menu_root)
-                .commit()
-        } else {
-            binding.root.modifyBegin()
-                .clear(R.id.ll_brightness, ConstraintModify.Anchor.RIGHT)
-                .leftToLeftOf(R.id.ll_brightness, R.id.vw_menu_root)
-                .commit()
+    private fun upFloatingToolPos() {
+        binding.readFloatingTools.updateLayoutParams<ConstraintLayout.LayoutParams> {
+            startToStart = ConstraintLayout.LayoutParams.UNSET
+            startToEnd = ConstraintLayout.LayoutParams.UNSET
+            endToStart = ConstraintLayout.LayoutParams.UNSET
+            endToEnd = ConstraintLayout.LayoutParams.UNSET
+            if (floatingToolDock.isRight) {
+                leftToLeft = ConstraintLayout.LayoutParams.UNSET
+                rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
+            } else {
+                leftToLeft = ConstraintLayout.LayoutParams.PARENT_ID
+                rightToRight = ConstraintLayout.LayoutParams.UNSET
+            }
         }
     }
 
-    private fun showSourceActionPopup(showLogin: Boolean, showChapterPay: Boolean) {
+    private fun showSourceActionPopup(anchor: View) {
+        val showLogin = !ReadBook.bookSource?.loginUrl.isNullOrEmpty()
+        val showChapterPay = showLogin
+                && ReadBook.curTextChapter?.isVip == true
+                && ReadBook.curTextChapter?.isPay != true
+        showSourceActionPopup(showLogin, showChapterPay, anchor)
+    }
+
+    private fun showSourceActionPopup(
+        showLogin: Boolean,
+        showChapterPay: Boolean,
+        anchor: View
+    ) {
+        val sourceEnabled = ReadBook.bookSource?.enabled != false
         val items = buildList {
             if (showLogin) {
                 add(NgActionPopupItem(R.id.menu_login, R.string.login, R.drawable.ic_lock_outline))
             }
-            if (showChapterPay) {
-                add(NgActionPopupItem(R.id.menu_chapter_pay, R.string.chapter_pay, R.drawable.ic_check))
-            }
             add(NgActionPopupItem(R.id.menu_edit_source, R.string.edit_book_source, R.drawable.ic_edit))
             add(
                 NgActionPopupItem(
-                    R.id.menu_disable_source,
-                    R.string.disable_book_source,
-                    R.drawable.ic_baseline_close
+                    itemId = if (sourceEnabled) R.id.menu_disable_source else R.id.menu_enable,
+                    titleRes = if (sourceEnabled) R.string.disable_book_source else R.string.enable,
+                    iconRes = if (sourceEnabled) {
+                        R.drawable.ic_block_outline
+                    } else {
+                        R.drawable.ic_check_circle_outline
+                    }
                 )
             )
+            if (showChapterPay) {
+                add(NgActionPopupItem(R.id.menu_chapter_pay, R.string.chapter_pay, R.drawable.ic_check))
+            }
         }
-        NgActionPopup(context, items, widthDp = 176) {
+        NgIconActionPopup(context, items, readMenuThemeSnapshot) {
             when (it.itemId) {
                 R.id.menu_login -> callBack.showLogin()
                 R.id.menu_chapter_pay -> callBack.payAction()
                 R.id.menu_edit_source -> callBack.openSourceEditActivity()
-                R.id.menu_disable_source -> callBack.disableSource()
+                R.id.menu_disable_source -> {
+                    callBack.setSourceEnabled(false)
+                    updateSourceStateStyle(false)
+                }
+
+                R.id.menu_enable -> {
+                    callBack.setSourceEnabled(true)
+                    updateSourceStateStyle(true)
+                }
             }
-        }.show(binding.tvSourceAction)
+        }.show(anchor)
+    }
+
+    private fun updateSourceStateStyle(
+        enabled: Boolean = ReadBook.bookSource?.enabled != false
+    ) = binding.tvSourceName.run {
+        setTextColor(
+            if (enabled) readMenuThemeSnapshot.colors.primary
+            else readMenuThemeSnapshot.colors.onSurfaceVariant
+        )
+        paintFlags = if (enabled) {
+            paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
+        } else {
+            paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
+        }
+        contentDescription = if (enabled) {
+            text
+        } else {
+            "$text, ${context.getString(R.string.disabled)}"
+        }
     }
 
     interface CallBack {
@@ -818,18 +910,22 @@ class ReadMenu @JvmOverloads constructor(
         fun openBookInfoActivity()
         fun showReadStyle()
         fun showMoreSetting()
-        fun showReadAloudDialog()
         fun upSystemUiVisibility()
         fun onReadThemeChanged()
         fun onClickReadAloud()
-        fun showHelp()
         fun showLogin()
         fun payAction()
-        fun disableSource()
+        fun setSourceEnabled(enabled: Boolean)
+        fun onHeaderChangeSource()
+        fun onHeaderRefresh()
+        fun onHeaderDownload()
+        fun showReadChangeSourceMenu(anchor: View)
+        fun showReadRefreshMenu(anchor: View)
         fun skipToChapter(index: Int)
         fun onMenuShow()
         fun onMenuHide()
         fun onClickAiPurifyChapter()
+        fun onOpenAiPurifySettings()
     }
 
 }

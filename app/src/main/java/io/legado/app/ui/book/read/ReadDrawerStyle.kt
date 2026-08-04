@@ -10,9 +10,19 @@ import android.graphics.RectF
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.view.View
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.bottomBackground
+import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.windowSize
 import splitties.systemservices.windowManager
@@ -20,6 +30,28 @@ import splitties.systemservices.windowManager
 object ReadDrawerStyle {
     private val topRadius: Float
         get() = 18.dpToPx().toFloat()
+
+    /**
+     * 在保留既有 View 内容结构的前提下，只替换阅读底部抽屉的承载面。
+     */
+    fun applyGlassBackground(view: ComposeView) {
+        view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        view.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        view.setContent {
+            NgAppTheme(
+                updateSystemBars = false,
+                darkModeOverride = ReadBookConfig.isNightTheme
+            ) {
+                NgGlassSurface(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(12.dp),
+                    style = NgGlassDefaults.floatingStyle()
+                ) {}
+            }
+        }
+    }
 
     fun applyTopRoundedBackground(view: View, fallbackColor: Int = view.context.bottomBackground) {
         view.background = createTopRoundedBackground(view.context, fallbackColor)

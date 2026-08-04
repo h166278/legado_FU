@@ -25,13 +25,15 @@ import kotlin.math.roundToInt
 
 enum class NgSliderVariant {
     CONTINUOUS,
-    DISCRETE
+    DISCRETE,
+    COMPACT
 }
 
 /**
  * Reading NG 的通用滑动轨道。
  *
- * 连续型沿用听书进度条的低矮胶囊轨道；离散型使用更清晰的粗轨道并增加刻度和档位吸附。
+ * 连续型沿用听书进度条的低矮胶囊轨道；离散型使用更清晰的粗轨道并增加刻度和档位吸附；
+ * 紧凑型使用阅读底部进度条的细轨道和小滑块，适合窄高受限的浮动工具。
  * [steps] 与 Compose Slider 一致，表示最小值和最大值之间的中间档位数。
  */
 @Composable
@@ -54,6 +56,7 @@ fun NgSlider(
     val currentValue = value.coerceIn(valueRange)
     val currentOnValueChange = rememberUpdatedState(onValueChange)
     val currentOnValueChangeFinished = rememberUpdatedState(onValueChangeFinished)
+    val compact = variant == NgSliderVariant.COMPACT
     fun snapToStep(rawValue: Float): Float {
         if (steps == 0) return rawValue.coerceIn(valueRange)
         val intervals = steps + 1
@@ -75,7 +78,7 @@ fun NgSlider(
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(if (compact) 36.dp else 48.dp)
             .semantics {
                 progressBarRangeInfo = ProgressBarRangeInfo(
                     current = currentValue,
@@ -93,11 +96,11 @@ fun NgSlider(
                     }
                 }
             }
-            .pointerInput(enabled, valueRange, steps) {
+            .pointerInput(enabled, valueRange, steps, compact) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val thumbRadius = 12.dp.toPx()
+                    val thumbRadius = if (compact) 6.dp.toPx() else 12.dp.toPx()
                     currentOnValueChange.value(
                         valueForPosition(down.position.x, size.width.toFloat(), thumbRadius)
                     )
@@ -122,11 +125,12 @@ fun NgSlider(
                 }
             }
     ) {
-        val thumbRadius = 12.dp.toPx()
+        val thumbRadius = if (compact) 6.dp.toPx() else 12.dp.toPx()
         val innerThumbRadius = 8.dp.toPx()
         val trackHeight = when (variant) {
             NgSliderVariant.CONTINUOUS -> 6.dp.toPx()
             NgSliderVariant.DISCRETE -> 10.dp.toPx()
+            NgSliderVariant.COMPACT -> 2.dp.toPx()
         }
         val trackStart = thumbRadius
         val trackWidth = (size.width - thumbRadius * 2f).coerceAtLeast(0f)
@@ -174,21 +178,29 @@ fun NgSlider(
             }
         }
 
-        drawCircle(
-            color = thumbSurface,
-            radius = thumbRadius,
-            center = Offset(thumbX, size.height / 2f)
-        )
-        drawCircle(
-            color = primary,
-            radius = innerThumbRadius,
-            center = Offset(thumbX, size.height / 2f)
-        )
-        drawCircle(
-            color = primary.copy(alpha = 0.42f * enabledAlpha),
-            radius = thumbRadius,
-            center = Offset(thumbX, size.height / 2f),
-            style = Stroke(width = 1.dp.toPx())
-        )
+        if (compact) {
+            drawCircle(
+                color = primary,
+                radius = thumbRadius,
+                center = Offset(thumbX, size.height / 2f)
+            )
+        } else {
+            drawCircle(
+                color = thumbSurface,
+                radius = thumbRadius,
+                center = Offset(thumbX, size.height / 2f)
+            )
+            drawCircle(
+                color = primary,
+                radius = innerThumbRadius,
+                center = Offset(thumbX, size.height / 2f)
+            )
+            drawCircle(
+                color = primary.copy(alpha = 0.42f * enabledAlpha),
+                radius = thumbRadius,
+                center = Offset(thumbX, size.height / 2f),
+                style = Stroke(width = 1.dp.toPx())
+            )
+        }
     }
 }

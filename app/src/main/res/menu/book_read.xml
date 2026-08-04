@@ -4,27 +4,6 @@
     tools:context=".ui.main.MainActivity"
     tools:ignore="AlwaysShowAction">
 
-    <group android:id="@+id/menu_group_on_line">
-        <item
-            android:id="@+id/menu_change_source"
-            android:icon="@drawable/ic_exchange"
-            android:title="@string/change_origin"
-            app:showAsAction="always" />
-
-        <item
-            android:id="@+id/menu_refresh"
-            android:icon="@drawable/ic_refresh_black_24dp"
-            android:title="@string/refresh"
-            app:showAsAction="always" />
-
-        <item
-            android:id="@+id/menu_download"
-            android:icon="@drawable/ic_download_line"
-            android:title="@string/offline_cache"
-            app:showAsAction="always" />
-
-    </group>
-
     <group android:id="@+id/menu_group_text">
         <item
             android:id="@+id/menu_toc_regex"
@@ -45,6 +24,11 @@
     </group>
 
     <item
+        android:id="@+id/menu_update_toc"
+        android:title="@string/update_toc"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_add_bookmark"
         android:title="@string/bookmark_add"
         app:showAsAction="never" />
@@ -57,6 +41,7 @@
     <item
         android:id="@+id/menu_page_anim"
         android:title="@string/book_page_anim"
+        android:visible="false"
         app:showAsAction="never" />
 
     <item
@@ -79,6 +64,7 @@
     <item
         android:id="@+id/menu_simulated_reading"
         android:title="@string/simulated_reading"
+        android:visible="false"
         app:showAsAction="never" />
 
     <item
@@ -130,11 +116,7 @@
     <item
         android:id="@+id/menu_image_style"
         android:title="@string/image_style"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_update_toc"
-        android:title="@string/update_toc"
+        android:visible="false"
         app:showAsAction="never" />
 
     <item
@@ -150,11 +132,6 @@
     <item
         android:id="@+id/menu_network_log"
         android:title="@string/network_request_log"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_help"
-        android:title="@string/help"
         app:showAsAction="never" />
 
 </menu>

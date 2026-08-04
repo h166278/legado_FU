@@ -1322,6 +1322,11 @@
     <string name="restore_ignore">Bypass list</string>
     <string name="restore_ignore_summary">Ignore some contents while restoring</string>
     <string name="read_config">Reading interface settings</string>
+    <string name="read_settings_section_screen">Screen and immersion</string>
+    <string name="read_settings_section_layout">Page and layout</string>
+    <string name="read_settings_section_controls">Page controls</string>
+    <string name="read_settings_section_behavior">Reading behavior</string>
+    <string name="read_settings_section_menu">Menu and display</string>
     <string name="group_name">Group name</string>
     <string name="note_content">Remarks section</string>
     <string name="replace_enable_default_t">Enable replace rule by default</string>
@@ -1410,7 +1415,11 @@
     <string name="debug">Debug</string>
     <string name="crash_log">Crash log</string>
     <string name="use_zh_layout">Custom Chinese line feed</string>
-    <string name="image_style">Style of Images</string>
+    <string name="image_style">Content image layout</string>
+    <string name="image_style_original">Original ratio</string>
+    <string name="image_style_fit_width">Fit width</string>
+    <string name="image_style_inline">Inline images</string>
+    <string name="image_style_single_page">One image per page</string>
     <string name="system_tts">System tts</string>
     <string name="export_type">Exported file format</string>
     <string name="checkAuthor">Check by author</string>
@@ -1731,6 +1740,7 @@
     <string name="enable_optimize_render">启用绘制优化</string>
     <string name="ignore_battery_permission_rationale">阅读需要请求后台权限以保持服务正常运行</string>
     <string name="simulated_reading">Simulated Reading</string>
+    <string name="simulated_reading_enabled_summary">Enabled, %1$d chapters per day</string>
     <string name="switch_on">Switch</string>
     <string name="start_from">Start from</string>
     <string name="daily_chapters">Daily Chapters</string>

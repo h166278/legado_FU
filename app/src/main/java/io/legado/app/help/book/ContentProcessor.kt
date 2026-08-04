@@ -53,7 +53,6 @@ class ContentProcessor private constructor(
 
     private val titleReplaceRules = CopyOnWriteArrayList<ReplaceRule>()
     private val contentReplaceRules = CopyOnWriteArrayList<ReplaceRule>()
-    val removeSameTitleCache = hashSetOf<String>()
 
     private fun String.limitLogText(maxLength: Int = 80): String {
         return replace("\n", "\\n").let {
@@ -106,7 +105,6 @@ class ContentProcessor private constructor(
 
     init {
         upReplaceRules()
-        upRemoveSameTitle()
     }
 
     fun upReplaceRules() {
@@ -118,15 +116,6 @@ class ContentProcessor private constructor(
             clear()
             addAll(appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin))
         }
-    }
-
-    private fun upRemoveSameTitle() {
-        val book = appDb.bookDao.getBookByOrigin(bookName, bookOrigin) ?: return
-        removeSameTitleCache.clear()
-        val files = BookHelp.getChapterFiles(book).filter {
-            it.endsWith("nr")
-        }
-        removeSameTitleCache.addAll(files)
     }
 
     fun getTitleReplaceRules(): List<ReplaceRule> {
@@ -153,8 +142,7 @@ class ContentProcessor private constructor(
         val replaceBook by lazy { book.toReplaceBook() }
         if (content != "null") {
             //去除重复标题
-            val fileName = chapter.getFileName("nr")
-            if (!removeSameTitleCache.contains(fileName)) try {
+            if (book.getRemoveSameTitle()) try {
                 val name = Pattern.quote(book.name)
                 var title = chapter.title.escapeRegex().replace(spaceRegex, "\\\\s*")
                 var matcher = Pattern.compile("^(\\s|\\p{P}|${name})*${title}(\\s)*")

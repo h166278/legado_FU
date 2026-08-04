@@ -21,14 +21,12 @@ import io.legado.app.model.ReadManga
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.ConstraintModify
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.loadAnimation
-import io.legado.app.utils.modifyBegin
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
@@ -111,25 +109,10 @@ class MangaMenu @JvmOverloads constructor(
         } else {
             titleBarAddition.gone()
         }
-        upBrightnessVwPos()
         /**
          * 确保视图不被导航栏遮挡
          */
         bottomMenu.applyNavigationBarPadding()
-    }
-
-    private fun upBrightnessVwPos() {
-        if (AppConfig.brightnessVwPos) {
-            binding.root.modifyBegin()
-                .clear(R.id.ll_brightness, ConstraintModify.Anchor.LEFT)
-                .rightToRightOf(R.id.ll_brightness, R.id.vw_menu_root)
-                .commit()
-        } else {
-            binding.root.modifyBegin()
-                .clear(R.id.ll_brightness, ConstraintModify.Anchor.RIGHT)
-                .leftToLeftOf(R.id.ll_brightness, R.id.vw_menu_root)
-                .commit()
-        }
     }
 
     private fun initAnimation() {

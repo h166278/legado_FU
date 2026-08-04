@@ -1318,6 +1318,11 @@
     <string name="restore_ignore">恢复忽略列表</string>
     <string name="restore_ignore_summary">恢复时忽略一些内容不恢复，方便不同手机配置不同</string>
     <string name="read_config">阅读界面设置</string>
+    <string name="read_settings_section_screen">屏幕与沉浸</string>
+    <string name="read_settings_section_layout">页面与排版</string>
+    <string name="read_settings_section_controls">翻页与操作</string>
+    <string name="read_settings_section_behavior">阅读行为</string>
+    <string name="read_settings_section_menu">菜单与显示</string>
     <string name="group_name">分组名称</string>
     <string name="note_content">备注内容</string>
     <string name="replace_enable_default_t">默认启用替换净化</string>
@@ -1406,7 +1411,11 @@
     <string name="debug">调试</string>
     <string name="crash_log">崩溃日志</string>
     <string name="use_zh_layout">使用自定义中文分行</string>
-    <string name="image_style">图片样式</string>
+    <string name="image_style">正文图片排版</string>
+    <string name="image_style_original">原始比例</string>
+    <string name="image_style_fit_width">适应宽度</string>
+    <string name="image_style_inline">行内图片</string>
+    <string name="image_style_single_page">单图一页</string>
     <string name="system_tts">系统 TTS</string>
     <string name="export_type">导出格式</string>
     <string name="checkAuthor">校验作者</string>
@@ -1723,6 +1732,7 @@
     <string name="enable_optimize_render">启用绘制优化</string>
     <string name="ignore_battery_permission_rationale">阅读需要请求后台权限以保持服务正常运行</string>
     <string name="simulated_reading">模拟追读</string>
+    <string name="simulated_reading_enabled_summary">已启用，每天 %1$d 章</string>
     <string name="switch_on">开关</string>
     <string name="start_from">开始日期</string>
     <string name="daily_chapters">日更章数</string>

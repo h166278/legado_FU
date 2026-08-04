@@ -15,8 +15,16 @@ import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import io.legado.app.R
+import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.utils.dpToPx
+
+private typealias OverflowPopupPresenter = (
+    anchor: View,
+    menu: Menu,
+    itemIds: List<Int>,
+    onItemClick: (MenuItem) -> Unit
+) -> Unit
 
 object NgMenuPopup {
 
@@ -26,7 +34,8 @@ object NgMenuPopup {
         val menu: Menu,
         val candidateIds: List<Int>,
         val prepareMenu: () -> Unit,
-        val onItemClick: (MenuItem) -> Unit
+        val onItemClick: (MenuItem) -> Unit,
+        val popupPresenter: OverflowPopupPresenter?
     )
 
     fun bindToolbarMenu(
@@ -38,7 +47,38 @@ object NgMenuPopup {
     ) {
         if (toolbar == null) return
         bindActionSubMenus(context, menu, prepareMenu, onItemClick)
-        bindOverflowMenu(toolbar, menu, prepareMenu, onItemClick)
+        bindOverflowMenu(toolbar, menu, prepareMenu, onItemClick, popupPresenter = null)
+    }
+
+    fun bindReadingToolbarMenu(
+        context: Context,
+        toolbar: Toolbar?,
+        menu: Menu,
+        themeSnapshotProvider: () -> NgThemeSnapshot,
+        prepareMenu: () -> Unit = {},
+        onItemClick: (MenuItem) -> Unit
+    ) {
+        if (toolbar == null) return
+        bindActionSubMenus(context, menu, prepareMenu, onItemClick)
+        bindOverflowMenu(
+            toolbar = toolbar,
+            menu = menu,
+            prepareMenu = prepareMenu,
+            onItemClick = onItemClick,
+            popupPresenter = { anchor, popupMenu, itemIds, click ->
+                val items = popupMenu.toPopupItems(itemIds = itemIds)
+                    .map { item -> item.withReadingMenuIcon() }
+                if (items.isNotEmpty()) {
+                    NgReadingActionPopup(
+                        context = anchor.context,
+                        items = items,
+                        themeSnapshot = themeSnapshotProvider()
+                    ) { item ->
+                        (item.payload as? MenuItem)?.let(click)
+                    }.show(anchor)
+                }
+            }
+        )
     }
 
     fun show(
@@ -121,11 +161,19 @@ object NgMenuPopup {
         toolbar: Toolbar,
         menu: Menu,
         prepareMenu: () -> Unit,
-        onItemClick: (MenuItem) -> Unit
+        onItemClick: (MenuItem) -> Unit,
+        popupPresenter: OverflowPopupPresenter?
     ) {
         val candidateIds = overflowCandidates(menu).map { it.itemId }
         if (candidateIds.isEmpty()) return
-        bindNativeOverflow(toolbar, menu, candidateIds, prepareMenu, onItemClick)
+        bindNativeOverflow(
+            toolbar,
+            menu,
+            candidateIds,
+            prepareMenu,
+            onItemClick,
+            popupPresenter
+        )
     }
 
     private fun overflowCandidates(menu: Menu): List<MenuItem> {
@@ -166,7 +214,8 @@ object NgMenuPopup {
         menu: Menu,
         candidateIds: List<Int>,
         prepareMenu: () -> Unit,
-        onItemClick: (MenuItem) -> Unit
+        onItemClick: (MenuItem) -> Unit,
+        popupPresenter: OverflowPopupPresenter?
     ) {
         val hasLayoutListener = toolbar.getTag(R.id.menu_more) is NativeOverflowBinding
         toolbar.setTag(
@@ -175,7 +224,8 @@ object NgMenuPopup {
                 menu = menu,
                 candidateIds = candidateIds,
                 prepareMenu = prepareMenu,
-                onItemClick = onItemClick
+                onItemClick = onItemClick,
+                popupPresenter = popupPresenter
             )
         )
         if (!hasLayoutListener) {
@@ -194,12 +244,17 @@ object NgMenuPopup {
                 binding.menu.findItem(id)?.isVisible == true
             }
             if (visibleIds.isEmpty()) return@setOnClickListener
-            show(
-                anchor = anchor,
-                menu = binding.menu,
-                itemIds = visibleIds,
-                onItemClick = binding.onItemClick
-            )
+            binding.popupPresenter?.invoke(
+                anchor,
+                binding.menu,
+                visibleIds,
+                binding.onItemClick
+            ) ?: show(
+                    anchor = anchor,
+                    menu = binding.menu,
+                    itemIds = visibleIds,
+                    onItemClick = binding.onItemClick
+                )
         }
     }
 
@@ -361,8 +416,8 @@ object NgMenuPopup {
             R.id.menu_load_word_count -> R.drawable.ic_chapter_list
             R.id.menu_reverse_toc,
             R.id.menu_reverse_content -> R.drawable.ic_exchange_order
+            R.id.menu_enable_replace -> R.drawable.ic_cfg_replace
             R.id.menu_use_replace,
-            R.id.menu_enable_replace,
             R.id.menu_effective_replaces -> R.drawable.ic_find_replace
 
             R.id.menu_book_src,
@@ -411,6 +466,27 @@ object NgMenuPopup {
             R.id.menu_skip_credits -> R.drawable.ic_skip_next
             else -> titleFallbackIconRes()
         }
+    }
+
+    private fun NgActionPopupItem.withReadingMenuIcon(): NgActionPopupItem {
+        val (readingIconRes, readingIconInsetDp) = when (itemId) {
+            R.id.menu_update_toc -> R.drawable.ic_refresh_black_24dp to 1
+            R.id.menu_add_bookmark -> R.drawable.ic_bookmark to 1
+            R.id.menu_edit_content -> R.drawable.ic_edit to 1
+            R.id.menu_reverse_content -> R.drawable.ic_swap_vert to 2
+            R.id.menu_enable_replace -> R.drawable.ic_cfg_replace to 1
+            R.id.menu_same_title_removed -> R.drawable.ic_ai_capability_text to 1
+            R.id.menu_re_segment -> R.drawable.ic_format_line_spacing to 2
+            R.id.menu_effective_replaces -> R.drawable.ic_visibility to 2
+            R.id.menu_log -> R.drawable.ic_bug_report to 2
+            R.id.menu_network_log -> R.drawable.ic_web_outline to 1
+            else -> return this
+        }
+        return copy(
+            iconRes = readingIconRes,
+            iconInsetDp = readingIconInsetDp,
+            iconDrawable = null
+        )
     }
 
     @DrawableRes

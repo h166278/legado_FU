@@ -11,12 +11,14 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.LinearLayout
+import android.widget.FrameLayout
+import androidx.compose.ui.platform.ComposeView
 import androidx.preference.Preference
 import io.legado.app.R
 import io.legado.app.base.BasePrefDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
+import io.legado.app.data.entities.Book
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
@@ -35,6 +37,11 @@ import io.legado.app.utils.setEdgeEffectColor
 
 class MoreConfigDialog : BasePrefDialogFragment() {
     private val readPreferTag = "readPreferenceFragment"
+
+    private companion object {
+        const val KEY_SIMULATED_READING = "simulatedReading"
+        const val KEY_IMAGE_STYLE = "bookImageStyle"
+    }
 
     override fun onStart() {
         super.onStart()
@@ -56,11 +63,31 @@ class MoreConfigDialog : BasePrefDialogFragment() {
         savedInstanceState: Bundle?
     ): View {
         (activity as ReadBookActivity).bottomDialog++
-        val view = LinearLayout(context)
-        ReadDrawerStyle.applyTopRoundedBackground(view)
-        view.id = R.id.tag1
-        container?.addView(view)
-        return view
+        val inset = 8.dpToPx()
+        val root = FrameLayout(requireContext()).apply {
+            setPadding(inset, 0, inset, inset)
+        }
+        val glass = ComposeView(requireContext()).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        ReadDrawerStyle.applyGlassBackground(glass)
+        root.addView(glass)
+        root.addView(
+            FrameLayout(requireContext()).apply {
+                id = R.id.tag1
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.TRANSPARENT)
+            }
+        )
+        container?.addView(root)
+        return root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -68,7 +95,7 @@ class MoreConfigDialog : BasePrefDialogFragment() {
         var preferenceFragment = childFragmentManager.findFragmentByTag(readPreferTag)
         if (preferenceFragment == null) preferenceFragment = ReadPreferenceFragment()
         childFragmentManager.beginTransaction()
-            .replace(view.id, preferenceFragment, readPreferTag)
+            .replace(R.id.tag1, preferenceFragment, readPreferTag)
             .commit()
     }
 
@@ -86,6 +113,7 @@ class MoreConfigDialog : BasePrefDialogFragment() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             addPreferencesFromResource(R.xml.pref_config_read)
             upPreferenceSummary(PreferKey.pageTouchSlop, slopSquare.toString())
+            upBookPreferenceSummaries()
             if (!CanvasRecorderFactory.isSupport) {
                 removePref(PreferKey.optimizeRender)
                 preferenceScreen.removePreferenceRecursively(PreferKey.optimizeRender)
@@ -182,6 +210,18 @@ class MoreConfigDialog : BasePrefDialogFragment() {
 
         override fun onPreferenceTreeClick(preference: Preference): Boolean {
             when (preference.key) {
+                KEY_SIMULATED_READING -> {
+                    dismissMoreConfig()
+                    (activity as? ReadBookActivity)?.showSimulatedReading()
+                    return true
+                }
+
+                KEY_IMAGE_STYLE -> {
+                    dismissMoreConfig()
+                    (activity as? ReadBookActivity)?.showImageStyleConfig()
+                    return true
+                }
+
                 "customPageKey" -> PageKeyDialog(requireContext()).show()
                 "clickRegionalConfig" -> {
                     (activity as? ReadBookActivity)?.showClickRegionalConfig()
@@ -212,6 +252,32 @@ class MoreConfigDialog : BasePrefDialogFragment() {
                 }
             }
             return super.onPreferenceTreeClick(preference)
+        }
+
+        private fun dismissMoreConfig() {
+            (parentFragment as? MoreConfigDialog)?.dismissAllowingStateLoss()
+        }
+
+        private fun upBookPreferenceSummaries() {
+            val book = ReadBook.book ?: return
+            findPreference<Preference>(KEY_SIMULATED_READING)?.summary =
+                if (book.config.readSimulating) {
+                    getString(R.string.simulated_reading_enabled_summary, book.config.dailyChapters)
+                } else {
+                    getString(R.string.disabled)
+                }
+            findPreference<Preference>(KEY_IMAGE_STYLE)?.summary = when {
+                book.getImageStyle().equals(Book.imgStyleFull, true) ->
+                    getString(R.string.image_style_fit_width)
+
+                book.getImageStyle().equals(Book.imgStyleText, true) ->
+                    getString(R.string.image_style_inline)
+
+                book.getImageStyle().equals(Book.imgStyleSingle, true) ->
+                    getString(R.string.image_style_single_page)
+
+                else -> getString(R.string.image_style_original)
+            }
         }
 
         @Suppress("SameParameterValue")

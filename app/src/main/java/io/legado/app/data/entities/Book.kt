@@ -8,6 +8,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.google.gson.annotations.SerializedName
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.BookType
 import io.legado.app.constant.PageAnim
@@ -221,6 +222,14 @@ data class Book(
 
     fun getReSegment(): Boolean {
         return config.reSegment
+    }
+
+    fun setRemoveSameTitle(removeSameTitle: Boolean) {
+        config.removeSameTitle = removeSameTitle
+    }
+
+    fun getRemoveSameTitle(): Boolean {
+        return config.removeSameTitle ?: true
     }
 
     fun setPageAnim(pageAnim: Int?) {
@@ -454,6 +463,8 @@ data class Book(
         var reverseToc: Boolean = false,
         var pageAnim: Int? = null,
         var reSegment: Boolean = false,
+        @SerializedName("removeSameTitle")
+        var removeSameTitle: Boolean? = null,
         var imageStyle: String? = null,
         var useReplaceRule: Boolean? = null,// 正文使用净化替换规则
         var delTag: Long = 0L,//去除标签

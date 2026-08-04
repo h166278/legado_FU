@@ -68,30 +68,36 @@ object NgTheme {
 
 @Composable
 fun NgAppTheme(
-    snapshot: NgThemeSnapshot = rememberNgThemeSnapshot(),
+    snapshot: NgThemeSnapshot? = null,
+    updateSystemBars: Boolean = true,
+    darkModeOverride: Boolean? = null,
     content: @Composable () -> Unit
 ) {
+    val resolvedSnapshot = snapshot ?: rememberNgThemeSnapshot(darkModeOverride)
     val view = LocalView.current
     val context = LocalContext.current
     val appTypeface = NgThemeRuntimeAssets.appTypeface(context)
     val typography = remember(appTypeface) {
         Typography().withFontFamily(appTypeface?.let(::FontFamily))
     }
-    SideEffect {
-        if (!view.isInEditMode) {
-            view.context.findActivity()?.window?.let { window ->
-                WindowInsetsControllerCompat(window, view).apply {
-                    isAppearanceLightStatusBars = snapshot.systemBars.darkStatusBarIcons
-                    isAppearanceLightNavigationBars =
-                        snapshot.systemBars.darkNavigationBarIcons
+    if (updateSystemBars) {
+        SideEffect {
+            if (!view.isInEditMode) {
+                view.context.findActivity()?.window?.let { window ->
+                    WindowInsetsControllerCompat(window, view).apply {
+                        isAppearanceLightStatusBars =
+                            resolvedSnapshot.systemBars.darkStatusBarIcons
+                        isAppearanceLightNavigationBars =
+                            resolvedSnapshot.systemBars.darkNavigationBarIcons
+                    }
                 }
             }
         }
     }
-    CompositionLocalProvider(LocalNgThemeSnapshot provides snapshot) {
+    CompositionLocalProvider(LocalNgThemeSnapshot provides resolvedSnapshot) {
         MaterialTheme(
-            colorScheme = snapshot.toMaterialColorScheme(),
-            shapes = snapshot.shapes.toMaterialShapes(),
+            colorScheme = resolvedSnapshot.toMaterialColorScheme(),
+            shapes = resolvedSnapshot.shapes.toMaterialShapes(),
             typography = typography,
             content = content
         )
@@ -99,15 +105,15 @@ fun NgAppTheme(
 }
 
 @Composable
-private fun rememberNgThemeSnapshot(): NgThemeSnapshot {
+private fun rememberNgThemeSnapshot(darkModeOverride: Boolean?): NgThemeSnapshot {
     val context = LocalContext.current
     val systemNightMode = LocalConfiguration.current.isNightMode
     val themeMode = AppConfig.themeMode
-    val isDark = resolveThemeNightMode(themeMode, systemNightMode)
+    val isDark = resolveNgThemeNightMode(themeMode, systemNightMode, darkModeOverride)
     val colorFlow = remember(context) { NgColorConfigStore.observe(context) }
     val observedColors by colorFlow.collectAsState()
     val colors = observedColors ?: NgColorConfigStore.current(context)
-    return remember(context, themeMode, isDark, colors) {
+    return remember(context, themeMode, isDark, colors, darkModeOverride) {
         if (AppConfig.isEInkMode) {
             NgThemeResolver.resolve(context)
         } else {
@@ -119,6 +125,12 @@ private fun rememberNgThemeSnapshot(): NgThemeSnapshot {
         }
     }
 }
+
+internal fun resolveNgThemeNightMode(
+    themeMode: String,
+    systemNightMode: Boolean,
+    darkModeOverride: Boolean?
+): Boolean = darkModeOverride ?: resolveThemeNightMode(themeMode, systemNightMode)
 
 private fun Typography.withFontFamily(fontFamily: FontFamily?): Typography {
     if (fontFamily == null) return this

@@ -433,45 +433,6 @@ object BookHelp {
     }
 
     /**
-     * 设置是否禁用正文的去除重复标题,针对单个章节
-     */
-    fun setRemoveSameTitle(book: Book, bookChapter: BookChapter, removeSameTitle: Boolean) {
-        val fileName = bookChapter.getFileName("nr")
-        val contentProcessor = ContentProcessor.get(book)
-        if (removeSameTitle) {
-            val path = FileUtils.getPath(
-                downloadDir,
-                cacheFolderName,
-                book.getFolderName(),
-                fileName
-            )
-            contentProcessor.removeSameTitleCache.remove(fileName)
-            File(path).delete()
-        } else {
-            FileUtils.createFileIfNotExist(
-                downloadDir,
-                cacheFolderName,
-                book.getFolderName(),
-                fileName
-            )
-            contentProcessor.removeSameTitleCache.add(fileName)
-        }
-    }
-
-    /**
-     * 获取是否去除重复标题
-     */
-    fun removeSameTitle(book: Book, bookChapter: BookChapter): Boolean {
-        val path = FileUtils.getPath(
-            downloadDir,
-            cacheFolderName,
-            book.getFolderName(),
-            bookChapter.getFileName("nr")
-        )
-        return !File(path).exists()
-    }
-
-    /**
      * 格式化书名
      */
     fun formatBookName(name: String): String {

@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
@@ -50,6 +51,7 @@ import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.components.NgSettingsTrailing
 import io.legado.app.ui.design.components.compose.NgButton
 import io.legado.app.ui.design.components.compose.NgCard
+import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSettingsItem
 import io.legado.app.ui.design.components.view.NgSettingsItemView
 import io.legado.app.ui.design.components.view.NgSurfaceLayout
@@ -268,6 +270,8 @@ private fun NgCatalogContent(
                     }
                 }
             }
+            item { CatalogSectionTitle("玻璃承载面") }
+            item { GlassSurfaceSample() }
         }
     }
 }
@@ -355,6 +359,45 @@ private fun ComposeStateSamples(onInteraction: (String) -> Unit) {
                 checked = checked,
                 onCheckedChange = updateChecked,
                 onClick = { updateChecked(!checked) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun GlassSurfaceSample() {
+    val colors = NgTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(168.dp)
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(colors.primary).copy(alpha = 0.28f),
+                        Color(colors.background),
+                        Color(colors.selectedContainer).copy(alpha = 0.52f)
+                    )
+                ),
+                shape = RoundedCornerShape(NgTheme.shapes.extraLargeDp.dp)
+            )
+            .padding(16.dp)
+    ) {
+        NgGlassSurface(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+        ) {
+            Text(
+                text = "透明玻璃承载面",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "颜色、透明度、描边与高光均由当前主题解析",
+                modifier = Modifier.padding(top = 6.dp),
+                color = Color(colors.onSurfaceVariant),
+                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
