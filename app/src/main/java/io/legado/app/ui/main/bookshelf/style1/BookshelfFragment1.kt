@@ -35,6 +35,7 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.FragmentBookshelf1Binding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
@@ -96,6 +97,9 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private var dockContentTopInsetPx by mutableIntStateOf(0)
     private var dockTransparency by mutableIntStateOf(
         BookshelfFloatingDockConfig.DEFAULT_TRANSPARENCY_PERCENT
+    )
+    private var dockSearchPosition by mutableStateOf(
+        BookshelfFloatingDockSearchPosition.LEFT
     )
     private var configuredTopBarStyle: BookshelfTopBarStyle? = null
     override val groupId: Long get() = selectedGroup?.groupId ?: 0
@@ -205,7 +209,8 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                     },
                     topDistancePx = dockTopDistancePx,
                     contentTopInsetPx = dockContentTopInsetPx,
-                    transparencyPercent = dockTransparency
+                    transparencyPercent = dockTransparency,
+                    searchPosition = dockSearchPosition
                 )
             }
         }
@@ -225,6 +230,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             statusBarHeightPx = dockContentTopInsetPx
         )
         dockTransparency = AppConfig.bookshelfFloatingDockTransparency
+        dockSearchPosition = AppConfig.bookshelfFloatingDockSearchPosition
     }
 
     override fun onResume() {

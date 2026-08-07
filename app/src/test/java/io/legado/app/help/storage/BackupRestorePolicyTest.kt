@@ -17,6 +17,7 @@ class BackupRestorePolicyTest {
             PreferKey.useFloatingBottomBar,
             PreferKey.bookshelfTopBarStyle,
             PreferKey.bookshelfFloatingDockTransparency,
+            PreferKey.bookshelfFloatingDockSearchPosition,
             "ngManagedThemes.v1",
             "ngActiveManagedThemeId.v1"
         )

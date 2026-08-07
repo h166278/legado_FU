@@ -177,6 +177,7 @@ internal object BackupRestorePolicy {
         PreferKey.bookshelfTopBarStyle,
         PreferKey.bookshelfFloatingDockTopDistancePx,
         PreferKey.bookshelfFloatingDockTransparency,
+        PreferKey.bookshelfFloatingDockSearchPosition,
         "ngManagedThemes.v1",
         "ngActiveManagedThemeId.v1"
     )

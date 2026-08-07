@@ -532,6 +532,10 @@ object ThemeConfig {
                 bars.bookshelfFloatingDockTransparency?.let {
                     AppConfig.bookshelfFloatingDockTransparency = it
                 }
+                bars.bookshelfFloatingDockSearchPosition?.let {
+                    AppConfig.bookshelfFloatingDockSearchPosition =
+                        BookshelfFloatingDockSearchPosition.fromValue(it)
+                }
             }
             NgColorConfigStore.update(context, theme.colors)
             theme.coverProfile?.let { cover ->

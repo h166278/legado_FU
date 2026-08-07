@@ -18,6 +18,7 @@ object PreferKey {
     const val bookshelfTopBarStyle = "bookshelfTopBarStyle"
     const val bookshelfFloatingDockTopDistancePx = "bookshelfFloatingDockTopDistancePx"
     const val bookshelfFloatingDockTransparency = "bookshelfFloatingDockTransparency"
+    const val bookshelfFloatingDockSearchPosition = "bookshelfFloatingDockSearchPosition"
     const val useDefaultCover = "useDefaultCover"
     const val loadCoverOnlyWifi = "loadCoverOnlyWifi"
     const val coverShowName = "coverShowName"

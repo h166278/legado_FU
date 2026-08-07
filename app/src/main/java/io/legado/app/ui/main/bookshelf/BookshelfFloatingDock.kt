@@ -57,6 +57,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.ui.design.theme.NgTheme
 
@@ -76,6 +77,7 @@ internal fun BookshelfFloatingDock(
     topDistancePx: Int,
     contentTopInsetPx: Int,
     transparencyPercent: Int,
+    searchPosition: BookshelfFloatingDockSearchPosition,
     modifier: Modifier = Modifier
 ) {
     val snapshot = NgTheme.snapshot
@@ -111,11 +113,13 @@ internal fun BookshelfFloatingDock(
                     .border(0.6.dp, dockBorderColor, shape),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                DockAction(
-                    iconRes = R.drawable.ic_bookshelf_dock_search,
-                    label = stringResource(R.string.search),
-                    onClick = onSearchClick
-                )
+                if (searchPosition == BookshelfFloatingDockSearchPosition.LEFT) {
+                    DockAction(
+                        iconRes = R.drawable.ic_bookshelf_dock_search,
+                        label = stringResource(R.string.search),
+                        onClick = onSearchClick
+                    )
+                }
                 GroupTrack(
                     groups = groups,
                     selectedIndex = selectedIndex,
@@ -123,6 +127,13 @@ internal fun BookshelfFloatingDock(
                     onGroupLongClick = onGroupLongClick,
                     modifier = Modifier.weight(1f)
                 )
+                if (searchPosition == BookshelfFloatingDockSearchPosition.RIGHT) {
+                    DockAction(
+                        iconRes = R.drawable.ic_bookshelf_dock_search,
+                        label = stringResource(R.string.search),
+                        onClick = onSearchClick
+                    )
+                }
             }
         }
     }

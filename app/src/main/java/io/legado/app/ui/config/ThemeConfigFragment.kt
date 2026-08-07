@@ -18,6 +18,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.help.config.FloatingBottomBarConfig
 import io.legado.app.help.config.ThemeConfig
@@ -104,6 +105,8 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                             ::setBookshelfFloatingDockTransparencyDraft,
                         onBookshelfFloatingDockTransparencyChangeFinished =
                             ::saveBookshelfFloatingDockTransparency,
+                        onBookshelfFloatingDockSearchPositionSelected =
+                            ::setBookshelfFloatingDockSearchPosition,
                         onTransparentAppBarsChanged = ::setTransparentAppBars,
                         onOpenCustomColors = {
                             (activity as? ConfigActivity)?.openThemeColorConfigPage()
@@ -192,6 +195,8 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                 ),
             bookshelfFloatingDockTransparency =
                 AppConfig.bookshelfFloatingDockTransparency,
+            bookshelfFloatingDockSearchPosition =
+                AppConfig.bookshelfFloatingDockSearchPosition,
             transparentAppBars = getPrefBoolean(PreferKey.tNavBar, false),
             fontScaleSummary = getString(
                 R.string.font_scale_summary,
@@ -298,6 +303,14 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     private fun saveBookshelfFloatingDockTransparency() {
         AppConfig.bookshelfFloatingDockTransparency =
             screenState.bookshelfFloatingDockTransparency
+    }
+
+    private fun setBookshelfFloatingDockSearchPosition(
+        position: BookshelfFloatingDockSearchPosition
+    ) {
+        if (position == screenState.bookshelfFloatingDockSearchPosition) return
+        AppConfig.bookshelfFloatingDockSearchPosition = position
+        screenState = screenState.copy(bookshelfFloatingDockSearchPosition = position)
     }
 
     private fun setTransparentAppBars(enabled: Boolean) {

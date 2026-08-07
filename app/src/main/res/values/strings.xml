@@ -739,6 +739,7 @@
     <string name="bookshelf_floating_dock_top_distance_value">%1$d px</string>
     <string name="bookshelf_floating_dock_transparency">Dock transparency</string>
     <string name="bookshelf_floating_dock_transparency_value">%1$d%%</string>
+    <string name="bookshelf_floating_dock_search_position">Search icon position</string>
     <string name="remove_from_bookshelf">Remove</string>
     <string name="start_read">Start reading</string>
     <string name="data_loading">Loading…</string>

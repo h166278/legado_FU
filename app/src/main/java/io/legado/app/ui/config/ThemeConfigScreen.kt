@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.help.config.FloatingBottomBarConfig
 import io.legado.app.ui.design.components.NgSettingsTrailing
@@ -56,6 +58,8 @@ internal data class ThemeConfigScreenState(
     val bookshelfFloatingDockTopDistancePx: Int = 0,
     val bookshelfFloatingDockTransparency: Int =
         BookshelfFloatingDockConfig.DEFAULT_TRANSPARENCY_PERCENT,
+    val bookshelfFloatingDockSearchPosition: BookshelfFloatingDockSearchPosition =
+        BookshelfFloatingDockSearchPosition.LEFT,
     val transparentAppBars: Boolean = false,
     val fontScaleSummary: String = "",
     val dayBackgroundSummary: String = "",
@@ -77,6 +81,8 @@ internal fun ThemeConfigScreen(
     onBookshelfFloatingDockTopDistanceChangeFinished: () -> Unit,
     onBookshelfFloatingDockTransparencyChanged: (Int) -> Unit,
     onBookshelfFloatingDockTransparencyChangeFinished: () -> Unit,
+    onBookshelfFloatingDockSearchPositionSelected:
+        (BookshelfFloatingDockSearchPosition) -> Unit,
     onTransparentAppBarsChanged: (Boolean) -> Unit,
     onOpenCustomColors: () -> Unit,
     onOpenFontScale: () -> Unit,
@@ -258,6 +264,34 @@ internal fun ThemeConfigScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        NgSettingsItem(
+                            title = stringResource(
+                                R.string.bookshelf_floating_dock_search_position
+                            ),
+                            trailing = NgSettingsTrailing.CUSTOM,
+                            customTrailing = {
+                                NgFloatingTabBar(
+                                    items = listOf(
+                                        NgFloatingTabSpec(
+                                            text = stringResource(R.string.left)
+                                        ),
+                                        NgFloatingTabSpec(
+                                            text = stringResource(R.string.right)
+                                        )
+                                    ),
+                                    selectedIndex =
+                                        BookshelfFloatingDockSearchPosition.entries.indexOf(
+                                            state.bookshelfFloatingDockSearchPosition
+                                        ),
+                                    onTabSelected = { index ->
+                                        onBookshelfFloatingDockSearchPositionSelected(
+                                            BookshelfFloatingDockSearchPosition.entries[index]
+                                        )
+                                    },
+                                    modifier = Modifier.width(132.dp)
+                                )
+                            }
+                        )
                         NgDockSlider(
                             title = stringResource(R.string.bookshelf_floating_dock_top_distance),
                             valueText = stringResource(

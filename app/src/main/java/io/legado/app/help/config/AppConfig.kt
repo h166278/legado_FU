@@ -326,6 +326,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             )
         }
 
+    var bookshelfFloatingDockSearchPosition: BookshelfFloatingDockSearchPosition
+        get() = BookshelfFloatingDockSearchPosition.fromValue(
+            appCtx.getPrefInt(
+                PreferKey.bookshelfFloatingDockSearchPosition,
+                BookshelfFloatingDockSearchPosition.LEFT.value
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(PreferKey.bookshelfFloatingDockSearchPosition, value.value)
+        }
+
     var bookshelfLayout: Int
         get() = appCtx.getPrefInt(PreferKey.bookshelfLayout, 0)
         set(value) {

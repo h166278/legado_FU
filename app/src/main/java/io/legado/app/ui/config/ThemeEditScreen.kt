@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.BookshelfFloatingDockConfig
+import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.help.config.FloatingBottomBarConfig
 import io.legado.app.help.config.NgManagedTheme
@@ -130,6 +132,10 @@ private fun ThemeBarProfileEditor(
         ?: NgThemeBarProfile.EDITOR_DEFAULT_TOP_DISTANCE_PX
     val topTransparency = profile.bookshelfFloatingDockTransparency
         ?: BookshelfFloatingDockConfig.DEFAULT_TRANSPARENCY_PERCENT
+    val searchPosition = BookshelfFloatingDockSearchPosition.fromValue(
+        profile.bookshelfFloatingDockSearchPosition
+            ?: BookshelfFloatingDockSearchPosition.LEFT.value
+    )
 
     NgExpandableSettingsItem(
         title = stringResource(R.string.main_bottom_bar_style),
@@ -263,6 +269,9 @@ private fun ThemeBarProfileEditor(
                         bookshelfFloatingDockTransparency =
                             profile.bookshelfFloatingDockTransparency
                                 ?: BookshelfFloatingDockConfig.DEFAULT_TRANSPARENCY_PERCENT,
+                        bookshelfFloatingDockSearchPosition =
+                            profile.bookshelfFloatingDockSearchPosition
+                                ?: BookshelfFloatingDockSearchPosition.LEFT.value,
                     )
                 )
             },
@@ -273,6 +282,31 @@ private fun ThemeBarProfileEditor(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                NgSettingsItem(
+                    title = stringResource(R.string.bookshelf_floating_dock_search_position),
+                    trailing = NgSettingsTrailing.CUSTOM,
+                    customTrailing = {
+                        NgFloatingTabBar(
+                            items = listOf(
+                                NgFloatingTabSpec(text = stringResource(R.string.left)),
+                                NgFloatingTabSpec(text = stringResource(R.string.right))
+                            ),
+                            selectedIndex =
+                                BookshelfFloatingDockSearchPosition.entries.indexOf(
+                                    searchPosition
+                                ),
+                            onTabSelected = { index ->
+                                onProfileChanged(
+                                    profile.copy(
+                                        bookshelfFloatingDockSearchPosition =
+                                            BookshelfFloatingDockSearchPosition.entries[index].value
+                                    )
+                                )
+                            },
+                            modifier = Modifier.width(132.dp)
+                        )
+                    }
+                )
                 NgDockSlider(
                     title = stringResource(R.string.bookshelf_floating_dock_top_distance),
                     valueText = stringResource(

@@ -47,6 +47,8 @@ internal data class NgThemeBarProfile(
     val bookshelfFloatingDockTopDistancePx: Int? = null,
     @SerializedName("bookshelfFloatingDockTransparency")
     val bookshelfFloatingDockTransparency: Int? = null,
+    @SerializedName("bookshelfFloatingDockSearchPosition")
+    val bookshelfFloatingDockSearchPosition: Int? = null,
 ) {
     fun normalized(): NgThemeBarProfile = copy(
         floatingBottomBarBottomDistancePx = floatingBottomBarBottomDistancePx?.let {
@@ -63,6 +65,9 @@ internal data class NgThemeBarProfile(
         },
         bookshelfFloatingDockTransparency = bookshelfFloatingDockTransparency?.let {
             BookshelfFloatingDockConfig.normalizeTransparencyPercent(it)
+        },
+        bookshelfFloatingDockSearchPosition = bookshelfFloatingDockSearchPosition?.let {
+            BookshelfFloatingDockSearchPosition.fromValue(it).value
         },
     )
 
@@ -89,6 +94,9 @@ internal fun NgThemeBarProfile?.withFallback(
             ?: fallback.bookshelfFloatingDockTopDistancePx,
         bookshelfFloatingDockTransparency = profile?.bookshelfFloatingDockTransparency
             ?: fallback.bookshelfFloatingDockTransparency,
+        bookshelfFloatingDockSearchPosition =
+            profile?.bookshelfFloatingDockSearchPosition
+                ?: fallback.bookshelfFloatingDockSearchPosition,
     ).normalized()
 }
 
@@ -384,6 +392,8 @@ internal object NgThemeLibraryStore {
             statusBarHeightPx = context.statusBarHeight,
         ),
         bookshelfFloatingDockTransparency = AppConfig.bookshelfFloatingDockTransparency,
+        bookshelfFloatingDockSearchPosition =
+            AppConfig.bookshelfFloatingDockSearchPosition.value,
     )
 
     fun uniqueName(context: Context, requestedName: String): String {
@@ -524,6 +534,8 @@ internal object NgBuiltInThemes {
             bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
             bookshelfFloatingDockTopDistancePx = 360,
             bookshelfFloatingDockTransparency = 40,
+            bookshelfFloatingDockSearchPosition =
+                BookshelfFloatingDockSearchPosition.LEFT.value,
         ),
     )
 

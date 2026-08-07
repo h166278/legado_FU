@@ -108,6 +108,8 @@ class NgBuiltInThemePresetTest {
                 bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
                 bookshelfFloatingDockTopDistancePx = 360,
                 bookshelfFloatingDockTransparency = 40,
+                bookshelfFloatingDockSearchPosition =
+                    BookshelfFloatingDockSearchPosition.LEFT.value,
             ),
             autumn.barProfile,
         )
@@ -124,6 +126,8 @@ class NgBuiltInThemePresetTest {
             bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
             bookshelfFloatingDockTopDistancePx = 360,
             bookshelfFloatingDockTransparency = 40,
+            bookshelfFloatingDockSearchPosition =
+                BookshelfFloatingDockSearchPosition.RIGHT.value,
         )
         val legacy: NgThemeBarProfile? = null
 
@@ -132,11 +136,21 @@ class NgBuiltInThemePresetTest {
             current.copy(
                 useFloatingBottomBar = false,
                 bookshelfFloatingDockTransparency = 75,
+                bookshelfFloatingDockSearchPosition =
+                    BookshelfFloatingDockSearchPosition.LEFT.value,
             ),
             NgThemeBarProfile(
                 useFloatingBottomBar = false,
                 bookshelfFloatingDockTransparency = 75,
+                bookshelfFloatingDockSearchPosition =
+                    BookshelfFloatingDockSearchPosition.LEFT.value,
             ).withFallback(current),
+        )
+        assertEquals(
+            BookshelfFloatingDockSearchPosition.LEFT.value,
+            NgThemeBarProfile(
+                bookshelfFloatingDockSearchPosition = Int.MAX_VALUE
+            ).normalized().bookshelfFloatingDockSearchPosition,
         )
     }
 }
