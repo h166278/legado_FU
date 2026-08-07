@@ -128,6 +128,7 @@ internal data class ReadStyleUiState(
     val presets: List<ReadStylePresetUi>,
     val selectedPresetIndex: Int,
     val selectedPresetName: String,
+    val canRestoreCurrentDefault: Boolean,
     val highlightSummary: String,
     val shareLayout: Boolean,
     val textSize: Int,
@@ -149,6 +150,7 @@ internal data class ReadStyleUiState(
     val fullLineUnderline: FullLineUnderlineUiState,
     val highlightDraft: ReadHighlightRule?,
     val editingHighlightIndex: Int?,
+    val highlightColorMode: Int,
     val editorInitialColor: Int?,
     val editorInitialColorWasUnset: Boolean,
     val editorInitialBackgroundType: Int?,
@@ -164,6 +166,8 @@ internal data class ReadStyleActions(
     val onEditPreset: () -> Unit,
     val onExportPreset: () -> Unit,
     val onDeletePreset: () -> Unit,
+    val onRestoreCurrentPreset: () -> Unit,
+    val onRestoreAllPresets: () -> Unit,
     val onShareLayoutChanged: (Boolean) -> Unit,
     val onOpenHighlights: () -> Unit,
     val onBack: () -> Unit,
@@ -197,6 +201,7 @@ internal data class ReadStyleActions(
     val onCreateHighlight: () -> Unit,
     val onEditHighlight: (Int) -> Unit,
     val onHighlightDraftChanged: (ReadHighlightRule) -> Unit,
+    val onHighlightColorModeChanged: (Int) -> Unit,
     val onSelectHighlightBackground: () -> Unit,
     val onClearHighlightBackground: () -> Unit,
     val onSelectHighlightFont: () -> Unit,
@@ -224,7 +229,9 @@ internal fun ReadStyleScreen(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         shape = RoundedCornerShape(20.dp),
-        style = NgGlassDefaults.floatingStyle(),
+        style = NgGlassDefaults.style(
+            containerAlpha = NgTheme.effects.dialogAlpha
+        ),
     ) {
         Column(
             modifier = Modifier
@@ -402,6 +409,11 @@ private fun PresetPage(
         iconRes = R.drawable.ic_edit,
         contentColor = contentColor,
         onClick = actions.onOpenHighlights,
+    )
+    ReadDivider(contentColor)
+    PresetRestoreAllRow(
+        contentColor = contentColor,
+        onClick = actions.onRestoreAllPresets,
     )
 }
 
@@ -619,6 +631,40 @@ private fun PresetNavigationRow(
 }
 
 @Composable
+private fun PresetRestoreAllRow(
+    contentColor: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_restore),
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = contentColor,
+        )
+        Text(
+            text = stringResource(R.string.read_style_restore_all),
+            modifier = Modifier.padding(start = 16.dp).weight(1f),
+            color = contentColor,
+            fontSize = 14.sp,
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right_20),
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = contentColor.copy(alpha = 0.72f),
+        )
+    }
+}
+
+@Composable
 private fun EditorPage(
     state: ReadStyleUiState,
     contentColor: Color,
@@ -763,6 +809,20 @@ private fun EditorPage(
                         )
                     }
                 }
+                ReadDivider(contentColor, horizontalPadding = 0.dp)
+                EditorNavigationRow(
+                    title = stringResource(R.string.read_style_restore_current),
+                    summary = stringResource(
+                        if (state.canRestoreCurrentDefault) {
+                            R.string.read_style_restore_current_summary
+                        } else {
+                            R.string.read_style_restore_unavailable
+                        }
+                    ),
+                    color = contentColor,
+                    enabled = state.canRestoreCurrentDefault,
+                    onClick = actions.onRestoreCurrentPreset,
+                )
             }
         }
     }
@@ -872,31 +932,33 @@ private fun EditorNavigationRow(
     title: String,
     summary: String,
     color: Color,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
+    val rowColor = if (enabled) color else color.copy(alpha = 0.38f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clickable(role = Role.Button, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = title,
             modifier = Modifier.weight(1f),
-            color = color,
+            color = rowColor,
             fontSize = 15.sp,
         )
         Text(
             text = summary,
-            color = color.copy(alpha = 0.62f),
+            color = rowColor.copy(alpha = if (enabled) 0.62f else 0.72f),
             fontSize = 13.sp,
         )
         Icon(
             painter = painterResource(R.drawable.ic_chevron_right_20),
             contentDescription = null,
             modifier = Modifier.padding(start = 6.dp).size(18.dp),
-            tint = color.copy(alpha = 0.72f),
+            tint = rowColor.copy(alpha = if (enabled) 0.72f else 0.55f),
         )
     }
 }

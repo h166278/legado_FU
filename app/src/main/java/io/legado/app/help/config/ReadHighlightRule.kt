@@ -18,9 +18,12 @@ data class ReadHighlightRule(
     @SerializedName("enabled") val enabled: Boolean = true,
     @SerializedName("position") val position: Int = 0,
     @SerializedName("textColor") val textColor: Int? = null,
+    @SerializedName("textColorNight") val textColorNight: Int? = null,
     @SerializedName("bgColor") val bgColor: Int? = null,
+    @SerializedName("bgColorNight") val bgColorNight: Int? = null,
     @SerializedName("underlineMode") val underlineMode: Int = 0,
     @SerializedName("underlineColor") val underlineColor: Int? = null,
+    @SerializedName("underlineColorNight") val underlineColorNight: Int? = null,
     @SerializedName("underlineWidth") val underlineWidth: Float = 1f,
     @SerializedName("underlineOffset") val underlineOffset: Float = 2f,
     @SerializedName("underlineSvgPath") val underlineSvgPath: String? = null,
@@ -58,6 +61,15 @@ data class ReadHighlightRule(
         TARGET_BODY -> !isTitle
         else -> true
     }
+
+    fun resolveTextColor(isNight: Boolean): Int? =
+        if (isNight) textColorNight ?: textColor else textColor
+
+    fun resolveBackgroundColor(isNight: Boolean): Int? =
+        if (isNight) bgColorNight ?: bgColor else bgColor
+
+    fun resolveUnderlineColor(isNight: Boolean): Int? =
+        if (isNight) underlineColorNight ?: underlineColor else underlineColor
 
     companion object {
         const val TARGET_ALL = 0

@@ -1083,25 +1083,30 @@ class TextChapterLayout(
         return styles
     }
 
-    private fun ReadHighlightRule.toReadCharStyle() = ReadCharStyle(
-        textColor = textColor,
-        bgColor = bgColor,
-        underlineMode = underlineMode,
-        underlineColor = underlineColor,
-        underlineWidth = underlineWidth,
-        underlineOffset = underlineOffset,
-        underlineSvgPath = underlineSvgPath.orEmpty(),
-        bgImage = bgImage.orEmpty(),
-        bgImageFit = bgImageFit,
-        bgImageScale = bgImageScale,
-        fontPath = fontPath.orEmpty(),
-        fontWeight = fontWeight,
-        isItalic = isItalic,
-        npLeft = npLeft,
-        npRight = npRight,
-        npTop = npTop,
-        npBottom = npBottom,
-    )
+    private fun ReadHighlightRule.toReadCharStyle(): ReadCharStyle {
+        return ReadCharStyle(
+            textColor = textColor,
+            textColorNight = textColorNight,
+            bgColor = bgColor,
+            bgColorNight = bgColorNight,
+            underlineMode = underlineMode,
+            underlineColor = underlineColor,
+            underlineColorNight = underlineColorNight,
+            underlineWidth = underlineWidth,
+            underlineOffset = underlineOffset,
+            underlineSvgPath = underlineSvgPath.orEmpty(),
+            bgImage = bgImage.orEmpty(),
+            bgImageFit = bgImageFit,
+            bgImageScale = bgImageScale,
+            fontPath = fontPath.orEmpty(),
+            fontWeight = fontWeight,
+            isItalic = isItalic,
+            npLeft = npLeft,
+            npRight = npRight,
+            npTop = npTop,
+            npBottom = npBottom,
+        )
+    }
 
     private fun remeasureHighlightFonts(
         text: String,

@@ -128,7 +128,9 @@ internal fun ReadMoreConfigScreen(
             .padding(horizontal = 8.dp, vertical = 8.dp)
             .fillMaxSize(),
         shape = RoundedCornerShape(20.dp),
-        style = NgGlassDefaults.floatingStyle(),
+        style = NgGlassDefaults.style(
+            containerAlpha = NgTheme.effects.dialogAlpha
+        ),
     ) {
         Column(
             modifier = Modifier

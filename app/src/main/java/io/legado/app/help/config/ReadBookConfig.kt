@@ -91,9 +91,9 @@ object ReadBookConfig {
                 AppLog.put("读取排版配置文件出错", e)
             }
         }
-        (configs ?: DefaultData.readConfigs).let {
+        (configs ?: DefaultData.readConfigs).let { source ->
             configList.clear()
-            configList.addAll(it)
+            source.mapTo(configList) { it.detachedCopy() }
         }
     }
 
@@ -108,7 +108,7 @@ object ReadBookConfig {
                 e.printOnDebug()
             }
         }
-        shareConfig = c ?: configList.getOrNull(5) ?: Config()
+        shareConfig = c ?: configList.lastOrNull()?.detachedCopy() ?: Config()
     }
 
     fun upBg(width: Int, height: Int) {
@@ -186,12 +186,41 @@ object ReadBookConfig {
         FileUtils.delete(configZipPath)
     }
 
+    fun hasDefaultForCurrent(): Boolean {
+        val index = styleSelect.takeIf(configList.indices::contains) ?: return false
+        return defaultConfig(configList[index].name) != null
+    }
+
+    fun restoreCurrentDefault(): Boolean {
+        val index = styleSelect.takeIf(configList.indices::contains) ?: return false
+        val default = defaultConfig(configList[index].name) ?: return false
+        configList[index] = default.detachedCopy()
+        save()
+        return true
+    }
+
+    fun restoreAllDefaults(): Boolean {
+        val defaults = DefaultData.readConfigs.map { it.detachedCopy() }
+        if (defaults.isEmpty()) return false
+        configList.clear()
+        configList.addAll(defaults)
+        readStyleSelect = 0
+        comicStyleSelect = 0
+        shareConfig = defaults.last().detachedCopy()
+        save()
+        return true
+    }
+
+    private fun defaultConfig(name: String): Config? =
+        DefaultData.readConfigs.firstOrNull { it.name == name }
+
+    private fun Config.detachedCopy(): Config = copy(
+        highlightRules = ArrayList(highlightRules.map { it.copy() }),
+        ngUnknownFields = ngUnknownFields.toMap(),
+    )
+
     private fun resetAll() {
-        DefaultData.readConfigs.let {
-            configList.clear()
-            configList.addAll(it)
-            save()
-        }
+        restoreAllDefaults()
     }
 
     //配置写入读取

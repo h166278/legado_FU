@@ -51,10 +51,11 @@ data class TextColumn(
         } else {
             ChapterProvider.contentPaint
         }
+        val styleTextColor = readStyle?.resolveTextColor(ReadBookConfig.isNightTheme)
         val textColor = if (textLine.isReadAloud || isSearchResult) {
             ReadBookConfig.textAccentColor
-        } else if (readStyle?.textColor != null) {
-            readStyle!!.textColor!!
+        } else if (styleTextColor != null) {
+            styleTextColor
         } else if (textLine.isTitle) {
             ReadBookConfig.resolvedTitleColor
         } else {

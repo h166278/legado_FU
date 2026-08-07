@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,16 +23,23 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -45,7 +54,9 @@ import io.legado.app.ui.design.components.compose.NgSliderVariant
 import io.legado.app.ui.design.components.compose.NgSwitchControl
 import io.legado.app.ui.design.theme.NgTheme
 import java.util.Locale
+import kotlin.math.PI
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private val AdvancedPageHeight = 500.dp
 
@@ -169,6 +180,14 @@ internal fun HighlightRuleEditorPage(
     actions: ReadStyleActions,
 ) {
     val draft = state.highlightDraft ?: return
+    val isNightColors = state.highlightColorMode == 1
+    val selectedTextColor = if (isNightColors) draft.textColorNight else draft.textColor
+    val selectedBackgroundColor = if (isNightColors) draft.bgColorNight else draft.bgColor
+    val selectedUnderlineColor = if (isNightColors) {
+        draft.underlineColorNight
+    } else {
+        draft.underlineColor
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -228,6 +247,36 @@ internal fun HighlightRuleEditorPage(
                     },
                 )
                 Text(
+                    text = stringResource(R.string.highlight_rule_color_mode),
+                    modifier = Modifier.padding(top = 12.dp, bottom = 7.dp),
+                    color = contentColor,
+                    fontSize = 14.sp,
+                )
+                AdvancedDock(
+                    labels = listOf(
+                        stringResource(R.string.read_style_mode_day),
+                        stringResource(R.string.read_style_mode_night),
+                    ),
+                    selectedIndex = state.highlightColorMode,
+                    contentColor = contentColor,
+                    accentColor = accentColor,
+                    onSelected = actions.onHighlightColorModeChanged,
+                )
+                if (isNightColors) {
+                    Text(
+                        text = stringResource(R.string.highlight_rule_night_color_fallback),
+                        modifier = Modifier.padding(top = 6.dp),
+                        color = contentColor.copy(alpha = 0.62f),
+                        fontSize = 11.sp,
+                    )
+                }
+                HighlightRulePreview(
+                    rule = draft,
+                    isNight = isNightColors,
+                    contentColor = contentColor,
+                    accentColor = accentColor,
+                )
+                Text(
                     text = stringResource(R.string.highlight_rule_scope),
                     modifier = Modifier.padding(top = 12.dp, bottom = 7.dp),
                     color = contentColor,
@@ -261,11 +310,23 @@ internal fun HighlightRuleEditorPage(
                 )
                 OptionalColorRow(
                     title = stringResource(R.string.highlight_rule_use_text_color),
-                    color = draft.textColor,
+                    color = selectedTextColor,
                     contentColor = contentColor,
                     onEnabledChanged = { enabled ->
                         actions.onHighlightDraftChanged(
-                            draft.copy(textColor = if (enabled) state.editorTextAccentColor else null)
+                            if (isNightColors) {
+                                draft.copy(
+                                    textColorNight = if (enabled) {
+                                        draft.textColor ?: state.editorTextAccentColor
+                                    } else {
+                                        null
+                                    }
+                                )
+                            } else {
+                                draft.copy(
+                                    textColor = if (enabled) state.editorTextAccentColor else null
+                                )
+                            }
                         )
                     },
                     onClick = {
@@ -274,12 +335,18 @@ internal fun HighlightRuleEditorPage(
                 )
                 OptionalColorRow(
                     title = stringResource(R.string.highlight_rule_use_background_color),
-                    color = draft.bgColor,
+                    color = selectedBackgroundColor,
                     contentColor = contentColor,
                     onEnabledChanged = { enabled ->
                         val fallback = (state.editorTextAccentColor and 0x00FFFFFF) or 0x33000000
                         actions.onHighlightDraftChanged(
-                            draft.copy(bgColor = if (enabled) fallback else null)
+                            if (isNightColors) {
+                                draft.copy(
+                                    bgColorNight = if (enabled) draft.bgColor ?: fallback else null
+                                )
+                            } else {
+                                draft.copy(bgColor = if (enabled) fallback else null)
+                            }
                         )
                     },
                     onClick = {
@@ -345,17 +412,29 @@ internal fun HighlightRuleEditorPage(
                 if (draft.underlineMode != 0) {
                     OptionalColorRow(
                         title = stringResource(R.string.highlight_rule_use_underline_color),
-                        color = draft.underlineColor,
+                        color = selectedUnderlineColor,
                         contentColor = contentColor,
                         onEnabledChanged = { enabled ->
                             actions.onHighlightDraftChanged(
-                                draft.copy(
-                                    underlineColor = if (enabled) {
-                                        draft.textColor ?: state.editorTextAccentColor
-                                    } else {
-                                        null
-                                    }
-                                )
+                                if (isNightColors) {
+                                    draft.copy(
+                                        underlineColorNight = if (enabled) {
+                                            draft.underlineColor
+                                                ?: draft.resolveTextColor(true)
+                                                ?: state.editorTextAccentColor
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                } else {
+                                    draft.copy(
+                                        underlineColor = if (enabled) {
+                                            draft.textColor ?: state.editorTextAccentColor
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                }
                             )
                         },
                         onClick = {
@@ -461,28 +540,158 @@ internal fun HighlightRuleEditorPage(
 }
 
 @Composable
+private fun HighlightRulePreview(
+    rule: ReadHighlightRule,
+    isNight: Boolean,
+    contentColor: Color,
+    accentColor: Color,
+) {
+    val text = rule.sampleText.ifBlank { stringResource(R.string.highlight_rule_sample) }
+    val textColor = rule.resolveTextColor(isNight)?.let(::Color) ?: contentColor
+    val underlineColor = rule.resolveUnderlineColor(isNight)?.let(::Color) ?: textColor
+    val bottomPadding = if (rule.underlineMode == 0) {
+        0.dp
+    } else {
+        (rule.underlineOffset.coerceAtLeast(0f) + 7f).dp
+    }
+    var textLayout by remember(text, rule.fontWeight, rule.isItalic) {
+        mutableStateOf<TextLayoutResult?>(null)
+    }
+    val shape = RoundedCornerShape(12.dp)
+
+    AdvancedSectionLabel(
+        label = stringResource(R.string.highlight_rule_preview),
+        accentColor = accentColor,
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color(NgTheme.colors.surface).copy(alpha = 0.22f))
+            .border(0.7.dp, contentColor.copy(alpha = 0.12f), shape)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .wrapContentSize()
+                .background(rule.resolveBackgroundColor(isNight)?.let(::Color) ?: Color.Transparent),
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(bottom = bottomPadding),
+                color = textColor,
+                fontSize = 16.sp,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight(rule.fontWeight.coerceIn(100, 900)),
+                fontStyle = if (rule.isItalic) FontStyle.Italic else FontStyle.Normal,
+                onTextLayout = { textLayout = it },
+            )
+            if (rule.underlineMode != 0) {
+                Canvas(Modifier.matchParentSize()) {
+                    val layout = textLayout ?: return@Canvas
+                    val strokeWidth = rule.underlineWidth.coerceIn(0.1f, 10f).dp.toPx()
+                    val offset = rule.underlineOffset.coerceIn(0f, 20f).dp.toPx()
+                    repeat(layout.lineCount) { line ->
+                        val start = layout.getLineLeft(line)
+                        val end = layout.getLineRight(line)
+                        val y = layout.getLineBottom(line) + offset
+                        when (rule.underlineMode) {
+                            1 -> drawLine(
+                                color = underlineColor,
+                                start = androidx.compose.ui.geometry.Offset(start, y),
+                                end = androidx.compose.ui.geometry.Offset(end, y),
+                                strokeWidth = strokeWidth,
+                            )
+
+                            2 -> drawLine(
+                                color = underlineColor,
+                                start = androidx.compose.ui.geometry.Offset(start, y),
+                                end = androidx.compose.ui.geometry.Offset(end, y),
+                                strokeWidth = strokeWidth,
+                                pathEffect = PathEffect.dashPathEffect(
+                                    floatArrayOf(8.dp.toPx(), 5.dp.toPx())
+                                ),
+                            )
+
+                            3 -> {
+                                val amplitude = 3.dp.toPx()
+                                val wavelength = 12.dp.toPx()
+                                val step = 1.dp.toPx()
+                                var previous = androidx.compose.ui.geometry.Offset(start, y)
+                                var x = start
+                                while (x < end) {
+                                    val next = (x + step).coerceAtMost(end)
+                                    val phase = ((next - start) / wavelength) * 2f * PI.toFloat()
+                                    val nextPoint = androidx.compose.ui.geometry.Offset(
+                                        next,
+                                        y + sin(phase.toDouble()).toFloat() * amplitude,
+                                    )
+                                    drawLine(
+                                        color = underlineColor,
+                                        start = previous,
+                                        end = nextPoint,
+                                        strokeWidth = strokeWidth,
+                                    )
+                                    previous = nextPoint
+                                    x = next
+                                }
+                            }
+
+                            4 -> {
+                                drawLine(
+                                    color = underlineColor,
+                                    start = androidx.compose.ui.geometry.Offset(start, y),
+                                    end = androidx.compose.ui.geometry.Offset(end, y),
+                                    strokeWidth = strokeWidth,
+                                )
+                                drawLine(
+                                    color = underlineColor,
+                                    start = androidx.compose.ui.geometry.Offset(start, y + 3.dp.toPx()),
+                                    end = androidx.compose.ui.geometry.Offset(end, y + 3.dp.toPx()),
+                                    strokeWidth = strokeWidth,
+                                )
+                            }
+
+                            else -> drawLine(
+                                color = underlineColor,
+                                start = androidx.compose.ui.geometry.Offset(start, y),
+                                end = androidx.compose.ui.geometry.Offset(end, y),
+                                strokeWidth = strokeWidth,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 internal fun HighlightRuleColorPage(
     page: ReadStylePage,
     state: ReadStyleUiState,
     actions: ReadStyleActions,
 ) {
     val draft = state.highlightDraft ?: return
+    val isNightColors = state.highlightColorMode == 1
     val title: String
     val color: Int
     when (page) {
         ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> {
             title = stringResource(R.string.bg_color)
-            color = draft.bgColor ?: state.editorTextAccentColor
+            color = draft.resolveBackgroundColor(isNightColors) ?: state.editorTextAccentColor
         }
 
         ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> {
             title = stringResource(R.string.read_style_full_underline_color)
-            color = draft.underlineColor ?: draft.textColor ?: state.editorTextAccentColor
+            color = draft.resolveUnderlineColor(isNightColors)
+                ?: draft.resolveTextColor(isNightColors)
+                ?: state.editorTextAccentColor
         }
 
         else -> {
             title = stringResource(R.string.text_color)
-            color = draft.textColor ?: state.editorTextAccentColor
+            color = draft.resolveTextColor(isNightColors) ?: state.editorTextAccentColor
         }
     }
     AdvancedColorPage(
@@ -492,9 +701,21 @@ internal fun HighlightRuleColorPage(
         onColorChanged = { selected ->
             actions.onHighlightDraftChanged(
                 when (page) {
-                    ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> draft.copy(bgColor = selected)
-                    ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> draft.copy(underlineColor = selected)
-                    else -> draft.copy(textColor = selected)
+                    ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> if (isNightColors) {
+                        draft.copy(bgColorNight = selected)
+                    } else {
+                        draft.copy(bgColor = selected)
+                    }
+                    ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> if (isNightColors) {
+                        draft.copy(underlineColorNight = selected)
+                    } else {
+                        draft.copy(underlineColor = selected)
+                    }
+                    else -> if (isNightColors) {
+                        draft.copy(textColorNight = selected)
+                    } else {
+                        draft.copy(textColor = selected)
+                    }
                 }
             )
         },

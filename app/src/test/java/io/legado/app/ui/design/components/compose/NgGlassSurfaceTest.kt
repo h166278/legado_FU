@@ -66,6 +66,20 @@ class NgGlassSurfaceTest {
     }
 
     @Test
+    fun dialogAlphaKeepsDenseGlassReadableWithoutMakingItOpaque() {
+        val snapshot = NgThemeResolver.resolve(lightInput())
+        val style = resolveNgGlassStyle(
+            snapshot,
+            requestedContainerAlpha = snapshot.effects.dialogAlpha
+        )
+
+        assertEquals(0.94f, style.containerTop.alpha, 0.001f)
+        assertEquals(0.88f, style.containerBottom.alpha, 0.001f)
+        assertTrue(style.containerTop.alpha < 1f)
+        assertTrue(style.containerBottom.alpha < 1f)
+    }
+
+    @Test
     fun einkStyleDisablesGlassEffectsAndTransparency() {
         val snapshot = NgThemeResolver.resolve(lightInput().copy(isEInk = true))
         val style = resolveNgGlassStyle(snapshot, requestedContainerAlpha = 0.5f)

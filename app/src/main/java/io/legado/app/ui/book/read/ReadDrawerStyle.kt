@@ -27,6 +27,7 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.utils.dpToPx
@@ -54,7 +55,8 @@ object ReadDrawerStyle {
     )
 
     /**
-     * 在保留既有 View 内容结构的前提下，只替换阅读底部抽屉的承载面。
+     * 在保留既有 View 内容结构的前提下，只替换阅读配置抽屉的承载面。
+     * 配置内容较密，使用 dialogAlpha；初始阅读菜单继续使用更通透的 floatingStyle。
      */
     fun applyGlassBackground(
         view: ComposeView,
@@ -78,7 +80,9 @@ object ReadDrawerStyle {
                 NgGlassSurface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(radiusDp.dp),
-                    style = NgGlassDefaults.floatingStyle()
+                    style = NgGlassDefaults.style(
+                        containerAlpha = NgTheme.effects.dialogAlpha
+                    )
                 ) {}
             }
         }

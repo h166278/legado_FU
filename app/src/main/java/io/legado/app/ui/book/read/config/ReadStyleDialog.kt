@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import android.content.DialogInterface
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -9,7 +10,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -33,10 +36,12 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.font.FontSelectDialog
+import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.hexString
 import io.legado.app.utils.inputStream
@@ -66,6 +71,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private var editorBackgroundCache: List<ReadStyleBackgroundUi>? = null
     private var editingHighlightIndex: Int? = null
     private var highlightDraft: ReadHighlightRule? = null
+    private var highlightColorMode = 0
     private val configFileName = "readConfig.zip"
     private val selectExportDocument = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -148,6 +154,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             selectExportDocument.launch(currentExportFileName())
         },
         onDeletePreset = ::deleteCurrentStyle,
+        onRestoreCurrentPreset = ::confirmRestoreCurrentPreset,
+        onRestoreAllPresets = ::confirmRestoreAllPresets,
         onShareLayoutChanged = { checked ->
             ReadBookConfig.shareLayout = checked
             refreshUi()
@@ -160,7 +168,12 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         onBack = ::navigateBack,
         onPresetNameChanged = { value ->
             ReadBookConfig.durConfig.name = value
-            updateEditorState { copy(selectedPresetName = value) }
+            updateEditorState {
+                copy(
+                    selectedPresetName = value,
+                    canRestoreCurrentDefault = ReadBookConfig.hasDefaultForCurrent(),
+                )
+            }
         },
         onTextColorChanged = ::applyEditorTextColor,
         onBackgroundColorChanged = ::applyEditorBackgroundColor,
@@ -252,6 +265,10 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             highlightDraft = draft
             updateEditorState { copy(highlightDraft = draft) }
         },
+        onHighlightColorModeChanged = { mode ->
+            highlightColorMode = mode.coerceIn(0, 1)
+            updateEditorState { copy(highlightColorMode = highlightColorMode) }
+        },
         onSelectHighlightBackground = {
             selectHighlightBackground.launch(arrayOf("image/*"))
         },
@@ -334,6 +351,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             },
             selectedPresetIndex = ReadBookConfig.styleSelect,
             selectedPresetName = name,
+            canRestoreCurrentDefault = ReadBookConfig.hasDefaultForCurrent(),
             highlightSummary = getString(
                 R.string.read_highlight_summary,
                 rules.count(ReadHighlightRule::enabled),
@@ -359,6 +377,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             fullLineUnderline = currentFullLineUnderlineState(),
             highlightDraft = highlightDraft,
             editingHighlightIndex = editingHighlightIndex,
+            highlightColorMode = highlightColorMode,
             editorInitialColor = null,
             editorInitialColorWasUnset = false,
             editorInitialBackgroundType = null,
@@ -390,19 +409,34 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private fun navigateTo(target: ReadStylePage) {
         if (target.isAnyColorEditorPage()) {
             val state = screenState ?: return
+            val highlightNight = state.highlightColorMode == 1
             val initialNullableColor = when (target) {
                 ReadStylePage.EDIT_TEXT_COLOR -> state.editorTextColor
                 ReadStylePage.EDIT_BACKGROUND_COLOR -> state.editorBackgroundColor
                 ReadStylePage.EDIT_ACCENT_COLOR -> state.editorTextAccentColor
                 ReadStylePage.EDIT_UNDERLINE_COLOR -> state.fullLineUnderline.color
-                ReadStylePage.HIGHLIGHT_TEXT_COLOR -> state.highlightDraft?.textColor
-                ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> state.highlightDraft?.bgColor
-                ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> state.highlightDraft?.underlineColor
+                ReadStylePage.HIGHLIGHT_TEXT_COLOR -> state.highlightDraft?.let {
+                    if (highlightNight) it.textColorNight else it.textColor
+                }
+                ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> state.highlightDraft?.let {
+                    if (highlightNight) it.bgColorNight else it.bgColor
+                }
+                ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> state.highlightDraft?.let {
+                    if (highlightNight) it.underlineColorNight else it.underlineColor
+                }
                 else -> null
             }
             val fallbackColor = when (target) {
                 ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR ->
-                    (state.editorTextAccentColor and 0x00FFFFFF) or 0x33000000
+                    state.highlightDraft?.resolveBackgroundColor(highlightNight)
+                        ?: ((state.editorTextAccentColor and 0x00FFFFFF) or 0x33000000)
+                ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR ->
+                    state.highlightDraft?.resolveUnderlineColor(highlightNight)
+                        ?: state.highlightDraft?.resolveTextColor(highlightNight)
+                        ?: state.editorTextAccentColor
+                ReadStylePage.HIGHLIGHT_TEXT_COLOR ->
+                    state.highlightDraft?.resolveTextColor(highlightNight)
+                        ?: state.editorTextAccentColor
                 else -> state.editorTextAccentColor
             }
             screenState = state.copy(
@@ -516,13 +550,33 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
                 refreshFullLineUnderlineState()
             }
             ReadStylePage.HIGHLIGHT_TEXT_COLOR -> updateHighlightDraft {
-                copy(textColor = if (state.editorInitialColorWasUnset) null else initialColor)
+                if (state.highlightColorMode == 1) {
+                    copy(textColorNight = if (state.editorInitialColorWasUnset) null else initialColor)
+                } else {
+                    copy(textColor = if (state.editorInitialColorWasUnset) null else initialColor)
+                }
             }
             ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> updateHighlightDraft {
-                copy(bgColor = if (state.editorInitialColorWasUnset) null else initialColor)
+                if (state.highlightColorMode == 1) {
+                    copy(bgColorNight = if (state.editorInitialColorWasUnset) null else initialColor)
+                } else {
+                    copy(bgColor = if (state.editorInitialColorWasUnset) null else initialColor)
+                }
             }
             ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> updateHighlightDraft {
-                copy(underlineColor = if (state.editorInitialColorWasUnset) null else initialColor)
+                if (state.highlightColorMode == 1) {
+                    copy(
+                        underlineColorNight = if (state.editorInitialColorWasUnset) {
+                            null
+                        } else {
+                            initialColor
+                        }
+                    )
+                } else {
+                    copy(
+                        underlineColor = if (state.editorInitialColorWasUnset) null else initialColor
+                    )
+                }
             }
             else -> return
         }
@@ -768,6 +822,71 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         }
     }
 
+    private fun confirmRestoreCurrentPreset() {
+        if (!ReadBookConfig.hasDefaultForCurrent()) {
+            toastOnUi(R.string.read_style_restore_unavailable)
+            return
+        }
+        alert(
+            R.string.read_style_restore_current,
+            R.string.read_style_restore_current_confirm,
+        ) {
+            yesButton {
+                if (ReadBookConfig.restoreCurrentDefault()) {
+                    editorBackgroundCache = null
+                    refreshUi()
+                    notifyPresetRestored()
+                    toastOnUi(R.string.read_style_restore_current_done)
+                }
+            }
+            noButton()
+        }.applyOpaqueReadConfirmWindow()
+    }
+
+    private fun confirmRestoreAllPresets() {
+        alert(
+            R.string.read_style_restore_all,
+            R.string.read_style_restore_all_confirm,
+        ) {
+            yesButton {
+                if (ReadBookConfig.restoreAllDefaults()) {
+                    editorBackgroundCache = null
+                    clearHighlightDraft()
+                    page = ReadStylePage.PRESET
+                    refreshUi()
+                    notifyPresetRestored()
+                    toastOnUi(R.string.read_style_restore_all_done)
+                }
+            }
+            noButton()
+        }.applyOpaqueReadConfirmWindow()
+    }
+
+    private fun AlertDialog.applyOpaqueReadConfirmWindow() {
+        applyNgWindow(marginDp = 20, dimAmount = 0.14f)
+        val colors = ReadDrawerStyle.themeSnapshot(requireContext()).colors
+        window?.setBackgroundDrawable(
+            GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20.dpToPx().toFloat()
+                setColor(colors.dialogContainer or 0xFF000000.toInt())
+            }
+        )
+        findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
+            ?.setTextColor(colors.onSurface)
+        findViewById<TextView>(android.R.id.message)
+            ?.setTextColor(colors.onSurfaceVariant)
+        getButton(DialogInterface.BUTTON_POSITIVE)?.setTextColor(colors.primary)
+        getButton(DialogInterface.BUTTON_NEGATIVE)?.setTextColor(colors.primary)
+    }
+
+    private fun notifyPresetRestored() {
+        postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+        if (AppConfig.readBarStyleFollowPage) {
+            postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
+        }
+    }
+
     private fun applyHighlightRules(rules: List<ReadHighlightRule>) {
         ReadBookConfig.config.highlightRules = ArrayList(
             rules.mapIndexed { index, rule -> rule.copy(position = index) }
@@ -780,6 +899,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private fun openHighlightEditor(position: Int? = null) {
         val oldRule = position?.let(currentRules()::getOrNull)
         editingHighlightIndex = position
+        highlightColorMode = if (ReadBookConfig.isNightTheme) 1 else 0
         highlightDraft = oldRule ?: ReadHighlightRule(
             id = UUID.randomUUID().toString(),
             name = getString(R.string.highlight_rule_default_name),

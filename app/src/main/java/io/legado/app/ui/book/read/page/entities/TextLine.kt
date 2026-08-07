@@ -208,17 +208,21 @@ data class TextLine(
     private fun drawHighlightBackgrounds(canvas: Canvas) {
         if (!hasReadStyle) return
         val columns = textColumns.filterIsInstance<TextColumn>()
+        val isNight = ReadBookConfig.isNightTheme
         var index = 0
         while (index < columns.size) {
             val column = columns[index]
-            val color = column.readStyle?.bgColor
+            val color = column.readStyle?.resolveBackgroundColor(isNight)
             if (color == null) {
                 index++
                 continue
             }
             var end = column.end
             var next = index + 1
-            while (next < columns.size && columns[next].readStyle?.bgColor == color) {
+            while (
+                next < columns.size &&
+                columns[next].readStyle?.resolveBackgroundColor(isNight) == color
+            ) {
                 end = columns[next].end
                 next++
             }
@@ -369,7 +373,9 @@ data class TextLine(
             val paint = PaintPool.obtain()
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = style.underlineWidth.dpToPx()
-            paint.color = style.underlineColor ?: style.textColor ?: ReadBookConfig.textColor
+            paint.color = style.resolveUnderlineColor(ReadBookConfig.isNightTheme)
+                ?: style.resolveTextColor(ReadBookConfig.isNightTheme)
+                ?: ReadBookConfig.textColor
             val lineY = height + style.underlineOffset.dpToPx()
             when (style.underlineMode) {
                 1 -> canvas.drawLine(column.start, lineY, end, lineY, paint)
