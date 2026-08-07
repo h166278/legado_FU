@@ -32,6 +32,7 @@ import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.resizeAndRecycle
 import splitties.init.appCtx
 import java.io.File
+import java.io.OutputStream
 
 /**
  * 阅读界面配置
@@ -501,8 +502,19 @@ object ReadBookConfig {
         val exportConfig = durConfig.copy()
         if (shareLayout) {
             exportConfig.textFont = shareConfig.textFont
+            exportConfig.titleFont = shareConfig.titleFont
+            exportConfig.headerFont = shareConfig.headerFont
+            exportConfig.footerFont = shareConfig.footerFont
+            exportConfig.headerFontSize = shareConfig.headerFontSize
+            exportConfig.footerFontSize = shareConfig.footerFontSize
+            exportConfig.applyHeaderStyle = shareConfig.applyHeaderStyle
             exportConfig.textBold = shareConfig.textBold
             exportConfig.textSize = shareConfig.textSize
+            exportConfig.textItalic = shareConfig.textItalic
+            exportConfig.textShadow = shareConfig.textShadow
+            exportConfig.shadowRadius = shareConfig.shadowRadius
+            exportConfig.shadowDx = shareConfig.shadowDx
+            exportConfig.shadowDy = shareConfig.shadowDy
             exportConfig.letterSpacing = shareConfig.letterSpacing
             exportConfig.lineSpacingExtra = shareConfig.lineSpacingExtra
             exportConfig.paragraphSpacing = shareConfig.paragraphSpacing
@@ -510,6 +522,14 @@ object ReadBookConfig {
             exportConfig.titleSize = shareConfig.titleSize
             exportConfig.titleTopSpacing = shareConfig.titleTopSpacing
             exportConfig.titleBottomSpacing = shareConfig.titleBottomSpacing
+            exportConfig.titleBold = shareConfig.titleBold
+            exportConfig.titleLineSpacingExtra = shareConfig.titleLineSpacingExtra
+            exportConfig.titleLineSpacingSub = shareConfig.titleLineSpacingSub
+            exportConfig.titleSegType = shareConfig.titleSegType
+            exportConfig.titleSegScaling = shareConfig.titleSegScaling
+            exportConfig.titleSegDistance = shareConfig.titleSegDistance
+            exportConfig.titleSegFlag = shareConfig.titleSegFlag
+            exportConfig.paragraphIndent = shareConfig.paragraphIndent
             exportConfig.underline = shareConfig.underline
             exportConfig.underlinePadding = shareConfig.underlinePadding
             exportConfig.underlineHeight = shareConfig.underlineHeight
@@ -550,6 +570,18 @@ object ReadBookConfig {
 
     internal fun importWithReport(byteArray: ByteArray): ReadStylePackageManager.ImportResult {
         return ReadStylePackageManager.import(byteArray)
+    }
+
+    internal fun exportWithReport(output: OutputStream): ReadStylePackageManager.ExportResult {
+        return ReadStylePackageManager.export(getExportConfig(), output)
+    }
+
+    internal fun appendImportedConfig(config: Config): Int {
+        configList.add(config)
+        val index = configList.lastIndex
+        readStyleSelect = index
+        save()
+        return index
     }
 
     @Keep

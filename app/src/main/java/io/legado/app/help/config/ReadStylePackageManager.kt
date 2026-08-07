@@ -8,10 +8,13 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /** MD3/Legado 阅读排版 ZIP 的安全解析、资源安装和 NG 字段规范化边界。 */
 internal object ReadStylePackageManager {
@@ -30,11 +33,160 @@ internal object ReadStylePackageManager {
         val installedRoot: File,
     )
 
+    data class ExportResult(
+        val warnings: List<String>,
+    )
+
     fun import(bytes: ByteArray): ImportResult = import(
         input = bytes.inputStream(),
         packageHash = bytes.sha256(),
         packageParent = File(appCtx.filesDir, PACKAGE_DIR),
     )
+
+    fun export(config: ReadBookConfig.Config, output: OutputStream): ExportResult {
+        val stagingRoot = File(appCtx.cacheDir, ".read-style-export-${UUID.randomUUID()}")
+        return export(config, output, stagingRoot, ::openResource)
+    }
+
+    internal fun export(
+        config: ReadBookConfig.Config,
+        output: OutputStream,
+        stagingRoot: File,
+        openResource: (String) -> InputStream?,
+    ): ExportResult {
+        val warnings = mutableListOf<String>()
+        val exportedFiles = arrayListOf<File>()
+        var totalBytes = 0L
+        stagingRoot.deleteRecursively()
+        stagingRoot.mkdirs()
+        try {
+            val portableConfig = config.copy(
+                highlightRules = ArrayList(config.highlightRules.map { it.copy() })
+            )
+
+            fun copyResource(reference: String?, prefix: String, label: String): String? {
+                val source = reference?.trim()?.takeIf(String::isNotEmpty) ?: return null
+                if (source.startsWith("assets://")) return source
+                val sourceName = resourceName(source)
+                val target = File(stagingRoot, "${prefix}_${sourceName.safeFileName()}")
+                val copied = runCatching {
+                    openResource(source)?.use { input ->
+                        FileOutputStream(target).use { fileOutput ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var entryBytes = 0L
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                entryBytes += read
+                                totalBytes += read
+                                require(entryBytes <= MAX_ENTRY_BYTES) { "$label 文件过大" }
+                                require(totalBytes <= MAX_TOTAL_BYTES) { "排版包资源总体积过大" }
+                                fileOutput.write(buffer, 0, read)
+                            }
+                        }
+                    } != null
+                }.getOrElse {
+                    target.delete()
+                    throw it
+                }
+                if (!copied || !target.isFile) {
+                    target.delete()
+                    warnings += "$label 无法读取，未写入排版包"
+                    return null
+                }
+                exportedFiles += target
+                return target.name
+            }
+
+            fun exportBackground(index: Int, label: String) {
+                val type = when (index) {
+                    0 -> portableConfig.bgType
+                    1 -> portableConfig.bgTypeNight
+                    else -> portableConfig.bgTypeEInk
+                }
+                if (type != 2) return
+                val reference = when (index) {
+                    0 -> portableConfig.bgStr
+                    1 -> portableConfig.bgStrNight
+                    else -> portableConfig.bgStrEInk
+                }
+                val bundled = copyResource(reference, "read_background_$index", label)
+                if (bundled != null) {
+                    when (index) {
+                        0 -> portableConfig.bgStr = bundled
+                        1 -> portableConfig.bgStrNight = bundled
+                        else -> portableConfig.bgStrEInk = bundled
+                    }
+                } else {
+                    when (index) {
+                        0 -> {
+                            portableConfig.bgType = 0
+                            portableConfig.bgStr = "#FFFFFF"
+                        }
+
+                        1 -> {
+                            portableConfig.bgTypeNight = 0
+                            portableConfig.bgStrNight = "#000000"
+                        }
+
+                        else -> {
+                            portableConfig.bgTypeEInk = 0
+                            portableConfig.bgStrEInk = "#FFFFFF"
+                        }
+                    }
+                }
+            }
+
+            exportBackground(0, "日间阅读背景")
+            exportBackground(1, "夜间阅读背景")
+            exportBackground(2, "墨水屏阅读背景")
+            portableConfig.textFont = copyResource(
+                portableConfig.textFont,
+                "read_font_text",
+                "正文字体",
+            ).orEmpty()
+            portableConfig.titleFont = copyResource(
+                portableConfig.titleFont,
+                "read_font_title",
+                "标题字体",
+            ).orEmpty()
+            portableConfig.highlightRules = ArrayList(
+                portableConfig.highlightRules.mapIndexed { index, rule ->
+                    rule.copy(
+                        bgImage = copyResource(
+                            rule.bgImage,
+                            "highlight_rule_bg_$index",
+                            "高亮规则“${rule.name.ifBlank { rule.id }}”的背景图",
+                        ),
+                        fontPath = copyResource(
+                            rule.fontPath,
+                            "highlight_rule_font_$index",
+                            "高亮规则“${rule.name.ifBlank { rule.id }}”的字体",
+                        ),
+                    )
+                }
+            )
+
+            val configJson = GSON.toJsonTree(portableConfig).asJsonObject.apply {
+                remove("ngReadStyleSource")
+                remove("ngUnknownFields")
+            }
+            val configFile = File(stagingRoot, CONFIG_NAME)
+            configFile.writeText(GSON.toJson(configJson))
+            exportedFiles += configFile
+
+            ZipOutputStream(output).use { zip ->
+                exportedFiles.forEach { file ->
+                    zip.putNextEntry(ZipEntry(file.name))
+                    file.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+            return ExportResult(warnings.distinct())
+        } finally {
+            stagingRoot.deleteRecursively()
+        }
+    }
 
     internal fun import(
         input: InputStream,
@@ -53,6 +205,7 @@ internal object ReadStylePackageManager {
             require(configFile.length() <= MAX_CONFIG_BYTES) { "排版配置文件过大" }
             val root = GSON.fromJson(configFile.readText(), JsonObject::class.java)
                 ?: error("排版配置为空")
+            require(!isArcPackage(root)) { "暂不支持 ARC 排版包，请导入 MD3 排版包" }
             val sourceFormat = detectSourceFormat(root)
             val config = GSON.fromJson(root, ReadBookConfig.Config::class.java)
                 ?: error("无法解析排版配置")
@@ -135,9 +288,12 @@ internal object ReadStylePackageManager {
     private fun detectSourceFormat(root: JsonObject): String = when {
         root.has("highlightRules") || root.has("titleFont") || root.has("textItalic") ||
             root.has("underline") || root.has("tipHeaderColor") -> "md3-read-style"
-        root.has("paperEffect") || root.has("readScrollFollowBackground") -> "arc-read-style"
         else -> "legado-read-style"
     }
+
+    private fun isArcPackage(root: JsonObject): Boolean =
+        root.has("paperEffect") || root.has("readScrollFollowBackground") ||
+            root.has("readScrollFollowBackgroundNight") || root.has("readScrollFollowBackgroundEInk")
 
     private fun normalizeResources(
         config: ReadBookConfig.Config,
@@ -261,6 +417,29 @@ internal object ReadStylePackageManager {
     private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
         .digest(this)
         .joinToString("") { "%02x".format(it) }
+
+    private fun openResource(reference: String): InputStream? {
+        val uri = Uri.parse(reference)
+        return when (uri.scheme?.lowercase(Locale.ROOT)) {
+            "content" -> appCtx.contentResolver.openInputStream(uri)
+            "file" -> uri.path?.let(::File)?.takeIf(File::isFile)?.inputStream()
+            else -> File(reference).takeIf(File::isFile)?.inputStream()
+        }
+    }
+
+    private fun resourceName(reference: String): String {
+        val uriName = runCatching {
+            Uri.decode(Uri.parse(reference).lastPathSegment.orEmpty())
+                .substringAfterLast('/')
+                .substringAfterLast(':')
+        }.getOrNull()
+        return uriName?.takeIf(String::isNotBlank)
+            ?: File(reference).name.takeIf(String::isNotBlank)
+            ?: "asset"
+    }
+
+    private fun String.safeFileName(): String =
+        replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "asset" }
 
     private val knownFieldNames = setOf(
         "name", "bgStr", "bgStrNight", "bgStrEInk", "bgAlpha", "bgType", "bgTypeNight",

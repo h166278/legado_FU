@@ -28,8 +28,6 @@ internal object Md3BackupCompatibility {
     )
 
     private val integerPreferenceKeys = setOf(
-        PreferKey.readStyleSelect,
-        PreferKey.comicStyleSelect,
         PreferKey.autoReadSpeed,
         PreferKey.clickActionTL,
         PreferKey.clickActionTC,
@@ -45,16 +43,12 @@ internal object Md3BackupCompatibility {
     )
 
     private val booleanPreferenceKeys = setOf(
-        PreferKey.shareLayout,
         PreferKey.hideStatusBar,
         PreferKey.hideNavigationBar,
-        PreferKey.readNightTheme,
         PreferKey.readBodyToLh,
         PreferKey.textFullJustify,
         PreferKey.textBottomJustify,
         PreferKey.adaptSpecialStyle,
-        PreferKey.showBrightnessView,
-        PreferKey.brightnessVwPos,
         "brightnessAuto"
     )
 
@@ -89,36 +83,8 @@ internal object Md3BackupCompatibility {
 
     fun normalizePreference(key: String, value: Any?): Any? {
         return when (key) {
-            PreferKey.showBrightnessView -> normalizeBrightnessVisibility(value)
-            PreferKey.brightnessVwPos -> normalizeBrightnessPosition(value)
             in integerPreferenceKeys -> value.toCompatibleInt()
             in booleanPreferenceKeys -> value as? Boolean
-            else -> null
-        }
-    }
-
-    private fun normalizeBrightnessVisibility(value: Any?): Boolean? {
-        return when (value) {
-            is Boolean -> value
-            is String -> when (value.trim()) {
-                "0", "false" -> false
-                "1", "2", "true" -> true
-                else -> null
-            }
-
-            else -> null
-        }
-    }
-
-    private fun normalizeBrightnessPosition(value: Any?): Boolean? {
-        return when (value) {
-            is Boolean -> value
-            is String -> when (value.trim()) {
-                "0", "false" -> false
-                "1", "true" -> true
-                else -> null
-            }
-
             else -> null
         }
     }

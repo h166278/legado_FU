@@ -82,42 +82,7 @@ object BackupConfig {
         PreferKey.clickActionBR
     )
 
-    private val themePrefKeys = arrayOf(
-        PreferKey.cPrimary,
-        PreferKey.cAccent,
-        PreferKey.cBackground,
-        PreferKey.cBBackground,
-        PreferKey.bgImage,
-        PreferKey.bgImageBlurring,
-        PreferKey.tNavBar,
-        PreferKey.cNPrimary,
-        PreferKey.cNAccent,
-        PreferKey.cNBackground,
-        PreferKey.cNBBackground,
-        PreferKey.ngColorMode,
-        PreferKey.ngColorLightSeed,
-        PreferKey.ngColorDarkSeed,
-        PreferKey.ngColorPaletteStyle,
-        PreferKey.ngColorContrast,
-        PreferKey.ngColorSpec,
-        PreferKey.ngColorLightPrimary,
-        PreferKey.ngColorLightSecondary,
-        PreferKey.ngColorLightPrimaryText,
-        PreferKey.ngColorLightSecondaryText,
-        PreferKey.ngColorLightBackground,
-        PreferKey.ngColorLightLabel,
-        PreferKey.ngColorLightTopBarTextMode,
-        PreferKey.ngColorDarkPrimary,
-        PreferKey.ngColorDarkSecondary,
-        PreferKey.ngColorDarkPrimaryText,
-        PreferKey.ngColorDarkSecondaryText,
-        PreferKey.ngColorDarkBackground,
-        PreferKey.ngColorDarkLabel,
-        PreferKey.ngColorDarkTopBarTextMode,
-        PreferKey.bgImageN,
-        PreferKey.bgImageNBlurring,
-        PreferKey.tNavBarN
-    )
+    private val themePrefKeys = BackupRestorePolicy.themeConfigPreferenceKeys
 
     private val coverPrefKeys = arrayOf(
         PreferKey.useDefaultCover,
@@ -164,4 +129,71 @@ object BackupConfig {
         FileUtils.createFileIfNotExist(ignoreConfigPath).writeText(json)
     }
 
+}
+
+/**
+ * 整包备份只恢复数据和可移植偏好；主题由主题包管理，MD3 排版由排版包管理。
+ */
+internal object BackupRestorePolicy {
+
+    val themeConfigPreferenceKeys = setOf(
+        PreferKey.cPrimary,
+        PreferKey.cAccent,
+        PreferKey.cBackground,
+        PreferKey.cBBackground,
+        PreferKey.bgImage,
+        PreferKey.bgImageBlurring,
+        PreferKey.tNavBar,
+        PreferKey.cNPrimary,
+        PreferKey.cNAccent,
+        PreferKey.cNBackground,
+        PreferKey.cNBBackground,
+        PreferKey.ngColorMode,
+        PreferKey.ngColorLightSeed,
+        PreferKey.ngColorDarkSeed,
+        PreferKey.ngColorPaletteStyle,
+        PreferKey.ngColorContrast,
+        PreferKey.ngColorSpec,
+        PreferKey.ngColorLightPrimary,
+        PreferKey.ngColorLightSecondary,
+        PreferKey.ngColorLightPrimaryText,
+        PreferKey.ngColorLightSecondaryText,
+        PreferKey.ngColorLightBackground,
+        PreferKey.ngColorLightLabel,
+        PreferKey.ngColorLightTopBarTextMode,
+        PreferKey.ngColorDarkPrimary,
+        PreferKey.ngColorDarkSecondary,
+        PreferKey.ngColorDarkPrimaryText,
+        PreferKey.ngColorDarkSecondaryText,
+        PreferKey.ngColorDarkBackground,
+        PreferKey.ngColorDarkLabel,
+        PreferKey.ngColorDarkTopBarTextMode,
+        PreferKey.bgImageN,
+        PreferKey.bgImageNBlurring,
+        PreferKey.tNavBarN,
+        PreferKey.useFloatingBottomBar,
+        PreferKey.floatingBottomBarBottomDistancePx,
+        PreferKey.floatingBottomBarTransparency,
+        PreferKey.bookshelfTopBarStyle,
+        PreferKey.bookshelfFloatingDockTopDistancePx,
+        PreferKey.bookshelfFloatingDockTransparency,
+        "ngManagedThemes.v1",
+        "ngActiveManagedThemeId.v1"
+    )
+
+    private val md3ReadStylePreferenceKeys = setOf(
+        PreferKey.readStyleSelect,
+        PreferKey.comicStyleSelect,
+        PreferKey.shareLayout,
+        PreferKey.showBrightnessView,
+        PreferKey.brightnessVwPos
+    )
+
+    fun shouldRestoreReadConfigs(isMd3Backup: Boolean): Boolean = !isMd3Backup
+
+    fun shouldRestorePreference(key: String, isMd3Backup: Boolean): Boolean {
+        if (key == PreferKey.themeMode || key == PreferKey.readNightTheme) return false
+        if (key in themeConfigPreferenceKeys) return false
+        return !isMd3Backup || key !in md3ReadStylePreferenceKeys
+    }
 }

@@ -35,21 +35,13 @@ import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.BitmapUtils
-import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
-import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.compress.ZipUtils
-import io.legado.app.utils.createFileReplace
-import io.legado.app.utils.createFolderReplace
-import io.legado.app.utils.externalCache
 import io.legado.app.utils.externalFiles
-import io.legado.app.utils.getFile
 import io.legado.app.utils.hexString
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.longToast
 import io.legado.app.utils.normalizeFileName
-import io.legado.app.utils.openInputStream
 import io.legado.app.utils.outputStream
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
@@ -869,8 +861,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         execute {
             ReadBookConfig.importWithReport(uri.readBytes(requireContext()))
         }.onSuccess { result ->
-            ReadBookConfig.configList.add(result.config)
-            ReadBookConfig.styleSelect = ReadBookConfig.configList.lastIndex
+            val importedIndex = ReadBookConfig.appendImportedConfig(result.config)
+            ReadBookConfig.styleSelect = importedIndex
             editorBackgroundCache = null
             refreshUi()
             postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
@@ -888,53 +880,15 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private fun exportConfig(uri: Uri) {
         val exportFileName = currentExportFileName()
         execute {
-            val exportFiles = arrayListOf<File>()
-            val configDir = requireContext().externalCache.getFile("readConfig")
-            configDir.createFolderReplace()
-            val configFile = configDir.getFile("readConfig.json")
-            configFile.createFileReplace()
-            val config = ReadBookConfig.getExportConfig()
-            val fontPath = ReadBookConfig.textFont
-            if (fontPath.isNotEmpty()) {
-                val fontDoc = FileDoc.fromFile(fontPath)
-                val fontName = fontDoc.name
-                fontDoc.openInputStream().getOrNull()?.use { input ->
-                    val fontExportFile = FileUtils.createFileIfNotExist(configDir, fontName)
-                    fontExportFile.outputStream().use { out -> input.copyTo(out) }
-                    config.textFont = fontName
-                    exportFiles.add(fontExportFile)
-                }
+            uri.outputStream(requireContext()).getOrThrow().use { output ->
+                ReadBookConfig.exportWithReport(output)
             }
-            config.highlightRules = ArrayList(config.highlightRules.mapIndexed { index, rule ->
-                rule.copy(
-                    bgImage = copyRuleResource(
-                        reference = rule.bgImage,
-                        prefix = "rule_${index}_background",
-                        configDir = configDir,
-                        exportFiles = exportFiles,
-                    ),
-                    fontPath = copyRuleResource(
-                        reference = rule.fontPath,
-                        prefix = "rule_${index}_font",
-                        configDir = configDir,
-                        exportFiles = exportFiles,
-                    ),
-                )
-            })
-            configFile.writeText(GSON.toJson(config))
-            exportFiles.add(configFile)
-            repeat(3) {
-                val path = ReadBookConfig.durConfig.getBgPath(it) ?: return@repeat
-                copyBgImage(path, configDir)?.let(exportFiles::add)
+        }.onSuccess { result ->
+            if (result.warnings.isEmpty()) {
+                toastOnUi("导出成功, 文件名为 $exportFileName")
+            } else {
+                longToast("导出成功\n${result.warnings.joinToString("\n")}")
             }
-            val configZipPath = FileUtils.getPath(requireContext().externalCache, configFileName)
-            if (ZipUtils.zipFiles(exportFiles, File(configZipPath))) {
-                uri.outputStream(requireContext()).getOrThrow().use { out ->
-                    File(configZipPath).inputStream().use { it.copyTo(out) }
-                }
-            }
-        }.onSuccess {
-            toastOnUi("导出成功, 文件名为 $exportFileName")
         }.onError {
             it.printOnDebug()
             AppLog.put("导出失败:${it.localizedMessage}", it)
@@ -945,32 +899,6 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
     private fun currentExportFileName(): String {
         val presetName = ReadBookConfig.durConfig.name.normalizeFileName()
         return if (presetName.isBlank()) configFileName else "$presetName.zip"
-    }
-
-    private fun copyBgImage(path: String, configDir: File): File? {
-        val bgFile = File(path)
-        if (!bgFile.exists()) return null
-        val bgExportFile = File(FileUtils.getPath(configDir, FileUtils.getName(path)))
-        if (bgExportFile.exists()) return null
-        bgFile.copyTo(bgExportFile)
-        return bgExportFile
-    }
-
-    private fun copyRuleResource(
-        reference: String?,
-        prefix: String,
-        configDir: File,
-        exportFiles: MutableList<File>,
-    ): String? {
-        val path = reference?.takeIf(String::isNotBlank) ?: return null
-        if (path.startsWith("assets://")) return path
-        val source = File(path)
-        if (!source.isFile) return null
-        val suffix = source.extension.takeIf(String::isNotBlank)?.let { ".$it" }.orEmpty()
-        val target = File(configDir, "$prefix$suffix")
-        source.copyTo(target, overwrite = true)
-        exportFiles.add(target)
-        return target.name
     }
 
     override val curFontPath: String

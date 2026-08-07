@@ -57,18 +57,10 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
     fun importReadConfig(bytes: ByteArray, finally: (title: String, msg: String) -> Unit) {
         execute {
             val result = ReadBookConfig.importWithReport(bytes)
-            val config = result.config
-            ReadBookConfig.configList.forEachIndexed { index, c ->
-                if (c.name == config.name) {
-                    ReadBookConfig.configList[index] = config
-                    return@execute result.warnings
-                }
-                ReadBookConfig.configList.add(config)
-                return@execute result.warnings
-            }
+            ReadBookConfig.appendImportedConfig(result.config)
             result.warnings
         }.onSuccess {
-                    val warningText = it.takeIf { warnings -> warnings.isNotEmpty() }
+            val warningText = it.takeIf { warnings -> warnings.isNotEmpty() }
                 ?.joinToString(prefix = "\n", separator = "\n")
                 .orEmpty()
             finally.invoke(context.getString(R.string.success), "导入排版成功$warningText")

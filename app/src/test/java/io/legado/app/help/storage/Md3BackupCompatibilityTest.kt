@@ -22,7 +22,7 @@ class Md3BackupCompatibilityTest {
         )
         assertTrue(
             Md3BackupCompatibility.isBackup(
-                emptyMap(),
+                emptyMap<String, Any?>(),
                 listOf(-20L)
             )
         )
@@ -46,21 +46,24 @@ class Md3BackupCompatibilityTest {
 
     @Test
     fun normalizesPortableReaderPreferencesAndIgnoresShellState() {
-        assertEquals(
-            false,
+        assertNull(
             Md3BackupCompatibility.normalizePreference(PreferKey.showBrightnessView, "0")
         )
-        assertEquals(
-            true,
+        assertNull(
             Md3BackupCompatibility.normalizePreference(PreferKey.showBrightnessView, "2")
         )
-        assertEquals(
-            false,
+        assertNull(
             Md3BackupCompatibility.normalizePreference(PreferKey.brightnessVwPos, "0")
         )
-        assertEquals(
-            2,
+        assertNull(
             Md3BackupCompatibility.normalizePreference(PreferKey.readStyleSelect, 2L)
+        )
+        assertNull(
+            Md3BackupCompatibility.normalizePreference(PreferKey.shareLayout, true)
+        )
+        assertEquals(
+            46,
+            Md3BackupCompatibility.normalizePreference(PreferKey.autoReadSpeed, 46L)
         )
         assertNull(
             Md3BackupCompatibility.normalizePreference(PreferKey.saveTabPosition, -8L)

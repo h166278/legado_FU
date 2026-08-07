@@ -107,7 +107,7 @@ object Restore {
             backupGroups.orEmpty().map(BookGroup::groupId)
         )
         if (isMd3Backup) {
-            LogUtils.d(TAG, "检测到 MD3 备份，过滤 MD3 壳层配置和内置分组")
+            LogUtils.d(TAG, "检测到 MD3 备份，只恢复基础数据并过滤内置分组")
         }
         val bookGson = if (isMd3Backup) Md3BackupCompatibility.bookGson else GSON
         fileToListT<Book>(path, "bookshelf.json", bookGson)?.let {
@@ -223,15 +223,8 @@ object Restore {
         }?.onFailure {
             AppLog.put("恢复直链上传出错\n${it.localizedMessage}", it)
         }
-        //恢复主题配置
-        File(path, ThemeConfig.configFileName).takeIf {
-            it.exists()
-        }?.runCatching {
-            FileUtils.delete(ThemeConfig.configFilePath)
-            copyTo(File(ThemeConfig.configFilePath))
-            ThemeConfig.upConfig()
-        }?.onFailure {
-            AppLog.put("恢复主题出错\n${it.localizedMessage}", it)
+        File(path, ThemeConfig.configFileName).takeIf(File::exists)?.let {
+            LogUtils.d(TAG, "忽略整包备份中的旧主题配置，保留当前 NG 主题")
         }
         File(path, BookCover.configFileName).takeIf {
             it.exists()
@@ -241,7 +234,9 @@ object Restore {
         }?.onFailure {
             AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
         }
-        if (!BackupConfig.ignoreReadConfig) {
+        if (!BackupConfig.ignoreReadConfig &&
+            BackupRestorePolicy.shouldRestoreReadConfigs(isMd3Backup)
+        ) {
             //恢复阅读界面配置
             File(path, ReadBookConfig.configFileName).takeIf {
                 it.exists()
@@ -267,7 +262,9 @@ object Restore {
             val edit = appCtx.defaultSharedPreferences.edit()
 
             map.forEach { (key, value) ->
-                if (BackupConfig.keyIsNotIgnore(key)) {
+                if (BackupConfig.keyIsNotIgnore(key) &&
+                    BackupRestorePolicy.shouldRestorePreference(key, isMd3Backup)
+                ) {
                     val compatibleValue = if (isMd3Backup) {
                         Md3BackupCompatibility.normalizePreference(key, value)
                     } else {
