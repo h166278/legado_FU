@@ -55,6 +55,27 @@ internal fun isEffectiveNightMode(mode: Int, systemNightMode: Boolean): Boolean 
     }
 }
 
+internal data class ThemeModeTransition(
+    val isNightTheme: Boolean,
+    val nightModeChanged: Boolean
+)
+
+internal fun resolveThemeModeTransition(
+    themeMode: String,
+    systemNightMode: Boolean,
+    currentDelegateMode: Int,
+    currentConfigurationNightMode: Boolean
+): ThemeModeTransition {
+    val isNightTheme = resolveThemeNightMode(themeMode, systemNightMode)
+    return ThemeModeTransition(
+        isNightTheme = isNightTheme,
+        nightModeChanged = isEffectiveNightMode(
+            currentDelegateMode,
+            currentConfigurationNightMode
+        ) != isNightTheme
+    )
+}
+
 @Keep
 object ThemeConfig {
     const val configFileName = "themeConfig.json"
@@ -113,11 +134,14 @@ object ThemeConfig {
     }
 
     fun applyThemeMode(context: Context, themeMode: String) {
+        // Activity 的 Configuration 仍可能受切换前的强制日／夜模式覆盖。
+        // 选择“跟随”时必须先以 Application 的实时系统模式解析目标配色。
+        val systemNightMode = AppConfig.isSystemNightTheme
         val normalizedMode = normalizeThemeMode(themeMode)
         AppConfig.themeMode = normalizedMode
         AppConfig.isEInkMode = normalizedMode == THEME_MODE_EINK
         context.putPrefString(PreferKey.themeMode, normalizedMode)
-        applyDayNight(context)
+        applyDayNight(context, systemNightMode)
     }
 
     fun isDarkTheme(context: Context): Boolean {
@@ -126,15 +150,21 @@ object ThemeConfig {
 
     fun applyDayNight(context: Context) {
         val configuration = context.resources.configuration
-        val isNightTheme = resolveThemeNightMode(AppConfig.themeMode, configuration)
-        applyTheme(context, isNightTheme)
-        val nightModeChanged = isEffectiveNightMode(
-            AppCompatDelegate.getDefaultNightMode(),
-            configuration.isNightMode
-        ) != isNightTheme
+        applyDayNight(context, configuration.isNightMode)
+    }
+
+    private fun applyDayNight(context: Context, systemNightMode: Boolean) {
+        val configuration = context.resources.configuration
+        val transition = resolveThemeModeTransition(
+            themeMode = AppConfig.themeMode,
+            systemNightMode = systemNightMode,
+            currentDelegateMode = AppCompatDelegate.getDefaultNightMode(),
+            currentConfigurationNightMode = configuration.isNightMode
+        )
+        applyTheme(context, transition.isNightTheme)
         initNightMode()
         BookCover.upDefaultCover()
-        if (!nightModeChanged) {
+        if (!transition.nightModeChanged) {
             postEvent(EventBus.RECREATE, "")
         }
     }

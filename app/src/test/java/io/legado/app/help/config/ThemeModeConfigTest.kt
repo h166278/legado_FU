@@ -56,4 +56,17 @@ class ThemeModeConfigTest {
         assertTrue(resolveThemeNightModeFromUiMode("0", night))
         assertFalse(resolveThemeNightModeFromUiMode("0", day))
     }
+
+    @Test
+    fun switchingFromForcedNightToFollowUsesSystemModeInsteadOfActivityMode() {
+        val transition = resolveThemeModeTransition(
+            themeMode = "0",
+            systemNightMode = false,
+            currentDelegateMode = AppCompatDelegate.MODE_NIGHT_YES,
+            currentConfigurationNightMode = true
+        )
+
+        assertFalse(transition.isNightTheme)
+        assertTrue(transition.nightModeChanged)
+    }
 }

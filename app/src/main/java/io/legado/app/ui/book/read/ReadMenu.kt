@@ -54,6 +54,7 @@ import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyTint
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.gone
@@ -200,6 +201,10 @@ class ReadMenu @JvmOverloads constructor(
 
     private fun initView() = binding.run {
         initAnimation()
+        seekReadPage.applyTint(
+            color = readMenuThemeSnapshot.colors.primary,
+            isDark = readMenuThemeSnapshot.isDark
+        )
         tvCustomBtn.setColorFilter(readMenuThemeSnapshot.colors.primary)
         if (useGradientThemeMenu) {
             titleBar.setTextColor(textColor)

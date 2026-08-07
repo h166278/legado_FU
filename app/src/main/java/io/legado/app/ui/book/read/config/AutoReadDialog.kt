@@ -19,6 +19,7 @@ import io.legado.app.ui.book.read.BaseReadBookActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.utils.applyTint
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.util.Locale
 
@@ -53,9 +54,14 @@ class AutoReadDialog : BaseDialogFragment(R.layout.dialog_auto_read) {
             dismiss()
             return@run
         }
-        val textColor = ReadDrawerStyle.contentColor(requireContext())
+        val themeSnapshot = ReadDrawerStyle.themeSnapshot(requireContext())
+        val textColor = themeSnapshot.colors.onSurface
         root.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         ReadDrawerStyle.applyGlassBackground(ngDrawerBackground)
+        seekAutoRead.applyTint(
+            color = themeSnapshot.colors.primary,
+            isDark = themeSnapshot.isDark
+        )
         tvReadSpeedTitle.setTextColor(textColor)
         tvReadSpeed.setTextColor(textColor)
         ivCatalog.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
