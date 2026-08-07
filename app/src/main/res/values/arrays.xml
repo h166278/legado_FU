@@ -235,4 +235,36 @@
 		<item>5</item>
 	</string-array>
 
+	<string-array name="text_font_weight_levels">
+		<item>Thin</item>
+		<item>Extra light</item>
+		<item>Light</item>
+		<item>Regular</item>
+		<item>Medium</item>
+		<item>Semi bold</item>
+		<item>Bold</item>
+		<item>Extra bold</item>
+		<item>Heavy</item>
+	</string-array>
+
+	<string-array name="indent_short">
+		<item>None</item>
+		<item>1</item>
+		<item>2</item>
+		<item>3</item>
+		<item>4</item>
+	</string-array>
+
+	<string-array name="chinese_mode_short">
+		<item>Off</item>
+		<item>T→S</item>
+		<item>S→T</item>
+	</string-array>
+
+	<string-array name="chinese_mode_top">
+		<item>Original</item>
+		<item>T→S</item>
+		<item>S→T</item>
+	</string-array>
+
 </resources>

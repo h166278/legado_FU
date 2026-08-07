@@ -14,8 +14,6 @@ import io.legado.app.constant.EventBus
 import io.legado.app.databinding.DialogReadAloudBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
@@ -55,9 +53,8 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             dismiss()
             return
         }
-        val bg = requireContext().bottomBackground
-        val isLight = ColorUtils.isColorLight(bg)
-        val textColor = requireContext().getPrimaryTextColor(isLight)
+        val bg = ReadDrawerStyle.surfaceColor(requireContext())
+        val textColor = ReadDrawerStyle.contentColor(requireContext())
         binding.run {
             ReadDrawerStyle.applyTopRoundedBackground(rootView, bg)
             tvPre.setTextColor(textColor)
@@ -188,10 +185,9 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             binding.ivPlayPause.setImageResource(R.drawable.ic_play_24dp)
             binding.ivPlayPause.contentDescription = getString(R.string.audio_play)
         }
-        val bg = requireContext().bottomBackground
-        val isLight = ColorUtils.isColorLight(bg)
-        val textColor = requireContext().getPrimaryTextColor(isLight)
-        binding.ivPlayPause.setColorFilter(textColor)
+        binding.ivPlayPause.setColorFilter(
+            ReadDrawerStyle.contentColor(requireContext())
+        )
     }
 
     private fun upSeekTimer() {

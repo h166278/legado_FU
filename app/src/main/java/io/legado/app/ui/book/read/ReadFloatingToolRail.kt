@@ -66,7 +66,6 @@ internal enum class ReadFloatingToolDock {
 @Composable
 internal fun ReadFloatingToolRail(
     dockSide: ReadFloatingToolDock,
-    showBrightness: Boolean,
     expansion: ReadFloatingToolExpansion?,
     brightness: Int,
     brightnessAutomatic: Boolean,
@@ -91,7 +90,6 @@ internal fun ReadFloatingToolRail(
             ToolExpansion(
                 visible = panelVisible,
                 dockRight = true,
-                showBrightness = showBrightness,
                 expansion = expansion,
                 brightness = brightness,
                 brightnessAutomatic = brightnessAutomatic,
@@ -105,7 +103,6 @@ internal fun ReadFloatingToolRail(
         }
 
         ToolRail(
-            showBrightness = showBrightness,
             expansion = expansion,
             autoPage = autoPage,
             nightMode = nightMode,
@@ -122,7 +119,6 @@ internal fun ReadFloatingToolRail(
             ToolExpansion(
                 visible = panelVisible,
                 dockRight = false,
-                showBrightness = showBrightness,
                 expansion = expansion,
                 brightness = brightness,
                 brightnessAutomatic = brightnessAutomatic,
@@ -138,7 +134,6 @@ internal fun ReadFloatingToolRail(
 
 @Composable
 private fun ToolRail(
-    showBrightness: Boolean,
     expansion: ReadFloatingToolExpansion?,
     autoPage: Boolean,
     nightMode: Boolean,
@@ -155,18 +150,16 @@ private fun ToolRail(
         style = NgGlassDefaults.floatingStyle(),
         contentPadding = PaddingValues(vertical = 6.dp)
     ) {
-        if (showBrightness) {
-            ToolButton(
-                iconRes = R.drawable.ic_daytime,
-                labelRes = R.string.brightness,
-                selected = expansion == ReadFloatingToolExpansion.BRIGHTNESS,
-                onClick = {
-                    onExpansionChange(
-                        expansion.toggle(ReadFloatingToolExpansion.BRIGHTNESS)
-                    )
-                }
-            )
-        }
+        ToolButton(
+            iconRes = R.drawable.ic_daytime,
+            labelRes = R.string.brightness,
+            selected = expansion == ReadFloatingToolExpansion.BRIGHTNESS,
+            onClick = {
+                onExpansionChange(
+                    expansion.toggle(ReadFloatingToolExpansion.BRIGHTNESS)
+                )
+            }
+        )
         ToolButton(
             iconRes = R.drawable.ic_search,
             labelRes = R.string.search_content,
@@ -261,7 +254,6 @@ private fun ToolButton(
 private fun ToolExpansion(
     visible: Boolean,
     dockRight: Boolean,
-    showBrightness: Boolean,
     expansion: ReadFloatingToolExpansion?,
     brightness: Int,
     brightnessAutomatic: Boolean,
@@ -280,9 +272,8 @@ private fun ToolExpansion(
             shrinkTowards = if (dockRight) Alignment.End else Alignment.Start
         )
     ) {
-        val railHeight = if (showBrightness) 357.dp else 309.dp
         Box(
-            modifier = Modifier.height(railHeight),
+            modifier = Modifier.height(357.dp),
             contentAlignment = when (expansion) {
                 ReadFloatingToolExpansion.AI -> Alignment.BottomCenter
                 else -> Alignment.TopCenter

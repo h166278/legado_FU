@@ -95,9 +95,6 @@ import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.aloud.ReadAloudLauncher
 import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
 import io.legado.app.ui.book.read.config.AutoReadDialog
-import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
-import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_ACCENT_COLOR
-import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_COLOR
 import io.legado.app.ui.book.read.config.MoreConfigDialog
 import io.legado.app.ui.book.read.config.ReadStyleDialog
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_COLOR
@@ -124,8 +121,8 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
-import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
+import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.TitleBar
@@ -142,7 +139,6 @@ import io.legado.app.utils.dismissDialogFragment
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
-import io.legado.app.utils.hexString
 import io.legado.app.utils.invisible
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isTrue
@@ -441,8 +437,8 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun showReadChangeSourceMenu(anchor: View) {
         NgActionPopup(
-            this,
-            listOf(
+            context = this,
+            items = listOf(
                 NgActionPopupItem(
                     R.id.menu_chapter_change_source,
                     R.string.chapter_change_source,
@@ -453,7 +449,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                     R.string.book_change_source,
                     R.drawable.ic_bubble_chart
                 )
-            )
+            ),
+            themeSnapshot = binding.readMenu.currentThemeSnapshot(),
         ) { item ->
             when (item.itemId) {
                 R.id.menu_chapter_change_source -> showChapterChangeSource()
@@ -464,8 +461,8 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun showReadRefreshMenu(anchor: View) {
         NgActionPopup(
-            this,
-            listOf(
+            context = this,
+            items = listOf(
                 NgActionPopupItem(
                     R.id.menu_refresh_dur,
                     R.string.menu_refresh_dur,
@@ -481,7 +478,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                     R.string.menu_refresh_all,
                     R.drawable.ic_refresh_black_24dp
                 )
-            )
+            ),
+            themeSnapshot = binding.readMenu.currentThemeSnapshot(),
         ) { item ->
             when (item.itemId) {
                 R.id.menu_refresh_dur -> refreshContentDur()
@@ -3254,30 +3252,6 @@ class ReadBookActivity : BaseReadBookActivity(),
      */
     override fun onColorSelected(dialogId: Int, color: Int) = ReadBookConfig.durConfig.run {
         when (dialogId) {
-            TEXT_COLOR -> {
-                setCurTextColor(color)
-                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6, 9, 11))
-                if (AppConfig.readBarStyleFollowPage) {
-                    postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-                }
-            }
-
-            TEXT_ACCENT_COLOR -> {
-                setCurTextAccentColor(color)
-                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6, 9, 11))
-                if (AppConfig.readBarStyleFollowPage) {
-                    postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-                }
-            }
-
-            BG_COLOR -> {
-                setCurBg(0, "#${color.hexString}")
-                postEvent(EventBus.UP_CONFIG, arrayListOf(1))
-                if (AppConfig.readBarStyleFollowPage) {
-                    postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-                }
-            }
-
             TIP_COLOR -> {
                 ReadTipConfig.tipColor = color
                 postEvent(EventBus.TIP_COLOR, "")
@@ -3328,10 +3302,12 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onMenuShow() {
         binding.readView.autoPager.pause()
+        binding.readView.upTipVisibility(true)
     }
 
     override fun onMenuHide() {
         binding.readView.autoPager.resume()
+        binding.readView.upTipVisibility(false)
     }
 
     override fun onLayoutPageCompleted(index: Int, page: TextPage) {
@@ -3541,7 +3517,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             readView.curPage.upSelectAble(it)
         }
         observeEvent<String>(PreferKey.showBrightnessView) {
-            readMenu.upBrightnessState()
+            readMenu.upFloatingToolVisibility()
         }
         observeEvent<List<SearchResult>>(EventBus.SEARCH_RESULT) {
             viewModel.searchResultList = it

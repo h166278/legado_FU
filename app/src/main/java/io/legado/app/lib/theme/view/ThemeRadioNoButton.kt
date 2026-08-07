@@ -3,6 +3,7 @@ package io.legado.app.lib.theme.view
 import android.content.Context
 import android.graphics.Color
 import android.util.AttributeSet
+import androidx.annotation.ColorInt
 import androidx.appcompat.widget.AppCompatRadioButton
 import androidx.appcompat.widget.TooltipCompat
 import io.legado.app.R
@@ -28,13 +29,14 @@ class ThemeRadioNoButton(context: Context, attrs: AttributeSet) :
         TooltipCompat.setTooltipText(this, text)
     }
 
-    private fun initTheme() {
+    private fun initTheme(contentColor: Int? = null) {
         when {
             isInEditMode -> Unit
             isBottomBackground -> {
                 val accentColor = context.accentColor
-                val isLight = ColorUtils.isColorLight(context.bottomBackground)
-                val textColor = context.getPrimaryTextColor(isLight)
+                val textColor = contentColor ?: context.getPrimaryTextColor(
+                    ColorUtils.isColorLight(context.bottomBackground)
+                )
                 val checkedTextColor = if (ColorUtils.isColorLight(accentColor)) {
                     Color.BLACK
                 } else {
@@ -78,6 +80,10 @@ class ThemeRadioNoButton(context: Context, attrs: AttributeSet) :
             }
         }
 
+    }
+
+    fun setContentColor(@ColorInt color: Int) {
+        initTheme(color)
     }
 
 }

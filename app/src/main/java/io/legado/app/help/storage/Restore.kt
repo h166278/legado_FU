@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
+import com.google.gson.Gson
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.AppConst.androidId
@@ -99,7 +100,17 @@ object Restore {
 
     private suspend fun restore(path: String) {
         val aes = BackupAES()
-        fileToListT<Book>(path, "bookshelf.json")?.let {
+        val backupPreferences = appCtx.getSharedPreferences(path, "config")?.all
+        val backupGroups = fileToListT<BookGroup>(path, "bookGroup.json")
+        val isMd3Backup = Md3BackupCompatibility.isBackup(
+            backupPreferences,
+            backupGroups.orEmpty().map(BookGroup::groupId)
+        )
+        if (isMd3Backup) {
+            LogUtils.d(TAG, "检测到 MD3 备份，过滤 MD3 壳层配置和内置分组")
+        }
+        val bookGson = if (isMd3Backup) Md3BackupCompatibility.bookGson else GSON
+        fileToListT<Book>(path, "bookshelf.json", bookGson)?.let {
             it.forEach { book ->
                 book.upType()
             }
@@ -128,14 +139,20 @@ object Restore {
         fileToListT<Bookmark>(path, "bookmark.json")?.let {
             appDb.bookmarkDao.insert(*it.toTypedArray())
         }
-        fileToListT<BookGroup>(path, "bookGroup.json")?.let {
+        backupGroups?.let {
             val supportedGroups = it.filter { group ->
-                group.groupId >= 0 || group.groupId == BookGroup.IdAll ||
-                        group.groupId == BookGroup.IdLocal ||
-                        group.groupId == BookGroup.IdAudio ||
-                        group.groupId == BookGroup.IdVideo
+                if (isMd3Backup) {
+                    Md3BackupCompatibility.shouldRestoreGroup(group.groupId)
+                } else {
+                    group.groupId >= 0 || group.groupId == BookGroup.IdAll ||
+                            group.groupId == BookGroup.IdLocal ||
+                            group.groupId == BookGroup.IdAudio ||
+                            group.groupId == BookGroup.IdVideo
+                }
             }
-            appDb.bookGroupDao.insert(*supportedGroups.toTypedArray())
+            if (supportedGroups.isNotEmpty()) {
+                appDb.bookGroupDao.insert(*supportedGroups.toTypedArray())
+            }
         }
         fileToListT<BookSource>(path, "bookSource.json")?.let {
             appDb.bookSourceDao.insert(*it.toTypedArray())
@@ -246,32 +263,37 @@ object Restore {
             }
         }
         //AppWebDav.downBgs()
-        appCtx.getSharedPreferences(path, "config")?.all?.let { map ->
+        backupPreferences?.let { map ->
             val edit = appCtx.defaultSharedPreferences.edit()
 
             map.forEach { (key, value) ->
                 if (BackupConfig.keyIsNotIgnore(key)) {
+                    val compatibleValue = if (isMd3Backup) {
+                        Md3BackupCompatibility.normalizePreference(key, value)
+                    } else {
+                        value
+                    } ?: return@forEach
                     when (key) {
                         PreferKey.webDavPassword -> {
                             kotlin.runCatching {
-                                aes.decryptStr(value.toString())
+                                aes.decryptStr(compatibleValue.toString())
                             }.getOrNull()?.let {
                                 edit.putString(key, it)
                             } ?: let {
                                 if (appCtx.getPrefString(PreferKey.webDavPassword)
-                                        .isNullOrBlank()
+                                    .isNullOrBlank()
                                 ) {
-                                    edit.putString(key, value.toString())
+                                    edit.putString(key, compatibleValue.toString())
                                 }
                             }
                         }
 
-                        else -> when (value) {
-                            is Int -> edit.putInt(key, value)
-                            is Boolean -> edit.putBoolean(key, value)
-                            is Long -> edit.putLong(key, value)
-                            is Float -> edit.putFloat(key, value)
-                            is String -> edit.putString(key, value)
+                        else -> when (compatibleValue) {
+                            is Int -> edit.putInt(key, compatibleValue)
+                            is Boolean -> edit.putBoolean(key, compatibleValue)
+                            is Long -> edit.putLong(key, compatibleValue)
+                            is Float -> edit.putFloat(key, compatibleValue)
+                            is String -> edit.putString(key, compatibleValue)
                         }
                     }
                 }
@@ -310,13 +332,17 @@ object Restore {
         }
     }
 
-    private inline fun <reified T> fileToListT(path: String, fileName: String): List<T>? {
+    private inline fun <reified T> fileToListT(
+        path: String,
+        fileName: String,
+        gson: Gson = GSON
+    ): List<T>? {
         try {
             val file = File(path, fileName)
             if (file.exists()) {
                 LogUtils.d(TAG, "阅读恢复备份 $fileName 文件大小 ${file.length()}")
                 FileInputStream(file).use {
-                    return GSON.fromJsonArray<T>(it).getOrThrow().also { list ->
+                    return gson.fromJsonArray<T>(it).getOrThrow().also { list ->
                         LogUtils.d(TAG, "阅读恢复备份 $fileName 列表大小 ${list.size}")
                     }
                 }

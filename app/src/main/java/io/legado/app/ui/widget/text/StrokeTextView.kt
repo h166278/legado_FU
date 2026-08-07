@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.text
 
 import android.content.Context
 import android.util.AttributeSet
+import androidx.annotation.ColorInt
 import androidx.appcompat.widget.AppCompatTextView
 import io.legado.app.R
 import io.legado.app.lib.theme.*
@@ -28,6 +29,24 @@ open class StrokeTextView(context: Context, attrs: AttributeSet?) :
     fun setRadius(radius: Int) {
         this.radius = radius.dpToPx()
         upBackground()
+    }
+
+    fun setContentColor(@ColorInt color: Int) {
+        background = Selector.shapeBuild()
+            .setCornerRadius(radius)
+            .setStrokeWidth(1.dpToPx())
+            .setDisabledStrokeColor(context.getCompatColor(R.color.md_grey_500))
+            .setDefaultStrokeColor(color)
+            .setSelectedStrokeColor(context.accentColor)
+            .setPressedBgColor(context.getCompatColor(R.color.transparent30))
+            .create()
+        setTextColor(
+            Selector.colorBuild()
+                .setDefaultColor(color)
+                .setSelectedColor(context.accentColor)
+                .setDisabledColor(context.getCompatColor(R.color.md_grey_500))
+                .create()
+        )
     }
 
     private fun upBackground() {

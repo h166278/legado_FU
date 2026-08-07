@@ -10,6 +10,7 @@ import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
@@ -53,8 +54,15 @@ class NgFloatingTabBar @JvmOverloads constructor(
         val tintIcon: Boolean,
     )
 
+    private data class TabColors(
+        @param:ColorInt val unselectedContent: Int,
+        @param:ColorInt val selectedContent: Int,
+        @param:ColorInt val selectedContainer: Int,
+    )
+
     private var items: List<NgFloatingTabItem> = emptyList()
     private var onTabSelected: ((Int) -> Unit)? = null
+    private var tabColors: TabColors? = null
     var selectedIndex: Int = 0
         private set
 
@@ -88,6 +96,19 @@ class NgFloatingTabBar @JvmOverloads constructor(
                 )
             )
         }
+    }
+
+    fun setContentColors(
+        @ColorInt unselectedContentColor: Int,
+        @ColorInt selectedContentColor: Int,
+        @ColorInt selectedContainerColor: Int,
+    ) {
+        tabColors = TabColors(
+            unselectedContent = unselectedContentColor,
+            selectedContent = selectedContentColor,
+            selectedContainer = selectedContainerColor,
+        )
+        refreshStyles()
     }
 
     fun setItems(
@@ -210,11 +231,16 @@ class NgFloatingTabBar @JvmOverloads constructor(
 
     private fun refreshStyles() {
         val colors = NgThemeResolver.resolve(context).colors
+        val customColors = tabColors
         for (index in 0 until childCount) {
             val tab = getChildAt(index) as LinearLayout
             val content = tab.tag as TabContent
             val selected = index == selectedIndex
-            val contentColor = if (selected) colors.primary else colors.onSurface
+            val contentColor = if (selected) {
+                customColors?.selectedContent ?: colors.primary
+            } else {
+                customColors?.unselectedContent ?: colors.onSurface
+            }
             tab.isSelected = selected
             content.label?.setTextColor(contentColor)
             content.label?.typeface = Typeface.defaultFromStyle(
@@ -230,7 +256,7 @@ class NgFloatingTabBar @JvmOverloads constructor(
             tab.background = if (selected) {
                 GradientDrawable().apply {
                     cornerRadius = 10.dp.toFloat()
-                    setColor(colors.selectedContainer)
+                    setColor(customColors?.selectedContainer ?: colors.selectedContainer)
                 }
             } else {
                 null

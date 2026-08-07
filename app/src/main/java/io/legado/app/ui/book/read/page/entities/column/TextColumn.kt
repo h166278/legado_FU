@@ -3,12 +3,13 @@ package io.legado.app.ui.book.read.page.entities.column
 import android.graphics.Canvas
 import android.os.Build
 import androidx.annotation.Keep
+import io.legado.app.help.PaintPool
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextLine.Companion.emptyTextLine
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import io.legado.app.ui.book.read.page.provider.ReadCharStyle
 
 /**
  * 文字列
@@ -19,6 +20,8 @@ data class TextColumn(
     override var end: Float,
     override val charData: String,
 ) : TextBaseColumn {
+
+    var readStyle: ReadCharStyle? = null
 
     override var textLine: TextLine = emptyTextLine
 
@@ -43,18 +46,31 @@ data class TextColumn(
         }
 
     override fun draw(view: ContentTextView, canvas: Canvas) {
-        val textPaint = if (textLine.isTitle) {
+        val basePaint = if (textLine.isTitle) {
             ChapterProvider.titlePaint
         } else {
             ChapterProvider.contentPaint
         }
         val textColor = if (textLine.isReadAloud || isSearchResult) {
             ReadBookConfig.textAccentColor
+        } else if (readStyle?.textColor != null) {
+            readStyle!!.textColor!!
+        } else if (textLine.isTitle) {
+            ReadBookConfig.resolvedTitleColor
         } else {
             ReadBookConfig.textColor
         }
-        if (textPaint.color != textColor) {
-            textPaint.color = textColor
+        val textPaint = PaintPool.obtain().apply {
+            set(basePaint)
+            color = textColor
+            textLine.titleTextSize?.let { textSize = it }
+            readStyle?.let { style ->
+                ChapterProvider.resolveStyledTypeface(
+                    style.fontPath,
+                    style.fontWeight,
+                    style.isItalic,
+                )?.let { typeface = it }
+            }
         }
         val y = textLine.lineBase - textLine.lineTop
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
@@ -64,6 +80,7 @@ data class TextColumn(
         } else {
             canvas.drawText(charData, start, y, textPaint)
         }
+        PaintPool.recycle(textPaint)
         if (selected) {
             canvas.drawRect(start, 0f, end, textLine.height, view.selectedPaint)
         }

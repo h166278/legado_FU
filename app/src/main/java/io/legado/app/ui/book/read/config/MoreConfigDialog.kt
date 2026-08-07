@@ -1,47 +1,49 @@
 package io.legado.app.ui.book.read.config
 
-import android.annotation.SuppressLint
 import android.content.DialogInterface
-import android.content.SharedPreferences
-import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.ViewConfiguration
+import android.view.Window
 import android.view.WindowManager
-import android.widget.FrameLayout
+import androidx.activity.ComponentDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
-import androidx.preference.Preference
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
-import io.legado.app.base.BasePrefDialogFragment
+import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
-import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.removePref
-import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.putPrefBoolean
+import io.legado.app.utils.putPrefString
 
-class MoreConfigDialog : BasePrefDialogFragment() {
-    private val readPreferTag = "readPreferenceFragment"
+class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
 
-    private companion object {
-        const val KEY_SIMULATED_READING = "simulatedReading"
-        const val KEY_IMAGE_STYLE = "bookImageStyle"
-    }
+    private var selectedTab by mutableStateOf(ReadMoreConfigTab.INTERFACE)
+    private var screenState by mutableStateOf<ReadMoreConfigUiState?>(null)
+    private var bottomDialogRegistered = false
+
+    private val readActivity: ReadBookActivity?
+        get() = activity as? ReadBookActivity
 
     override fun onStart() {
         super.onStart()
@@ -49,224 +51,363 @@ class MoreConfigDialog : BasePrefDialogFragment() {
             clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setBackgroundDrawableResource(R.color.transparent)
             decorView.setPadding(0, 0, 0, 0)
-            val attr = attributes
-            attr.dimAmount = 0.0f
-            attr.gravity = Gravity.BOTTOM
-            attributes = attr
-            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 360.dpToPx())
-        }
-    }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        (activity as ReadBookActivity).bottomDialog++
-        val inset = 8.dpToPx()
-        val root = FrameLayout(requireContext()).apply {
-            setPadding(inset, 0, inset, inset)
-        }
-        val glass = ComposeView(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        ReadDrawerStyle.applyGlassBackground(glass)
-        root.addView(glass)
-        root.addView(
-            FrameLayout(requireContext()).apply {
-                id = R.id.tag1
-                layoutParams = FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                setBackgroundColor(Color.TRANSPARENT)
+            attributes = attributes.apply {
+                dimAmount = 0.0f
+                gravity = Gravity.BOTTOM
             }
-        )
-        container?.addView(root)
-        return root
+            setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                READ_MORE_CONFIG_WINDOW_HEIGHT_DP.dpToPx(),
+            )
+        }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        var preferenceFragment = childFragmentManager.findFragmentByTag(readPreferTag)
-        if (preferenceFragment == null) preferenceFragment = ReadPreferenceFragment()
-        childFragmentManager.beginTransaction()
-            .replace(R.id.tag1, preferenceFragment, readPreferTag)
-            .commit()
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        if (!bottomDialogRegistered) {
+            readActivity?.let {
+                it.bottomDialog++
+                bottomDialogRegistered = true
+            }
+        }
+        refreshUi()
+        val actions = createActions()
+        (view as ComposeView).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme(
+                    snapshot = ReadDrawerStyle.themeSnapshot(requireContext()),
+                    updateSystemBars = false,
+                ) {
+                    screenState?.let { state ->
+                        ReadMoreConfigScreen(
+                            tab = selectedTab,
+                            state = state,
+                            actions = actions,
+                        )
+                    }
+                }
+            }
+        }
     }
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        (activity as ReadBookActivity).bottomDialog--
+        if (bottomDialogRegistered) {
+            readActivity?.let {
+                it.bottomDialog = (it.bottomDialog - 1).coerceAtLeast(0)
+            }
+            bottomDialogRegistered = false
+        }
     }
 
-    class ReadPreferenceFragment : PreferenceFragment(),
-        SharedPreferences.OnSharedPreferenceChangeListener {
+    private fun createActions() = ReadMoreConfigActions(
+        onTabSelected = { selectedTab = it },
+        onBooleanChanged = ::changeBoolean,
+        onValueChanged = ::changeValue,
+        onAction = ::handleAction,
+    )
 
-        private val slopSquare by lazy { ViewConfiguration.get(requireContext()).scaledTouchSlop }
-
-        @SuppressLint("RestrictedApi")
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            addPreferencesFromResource(R.xml.pref_config_read)
-            upPreferenceSummary(PreferKey.pageTouchSlop, slopSquare.toString())
-            upBookPreferenceSummaries()
-            if (!CanvasRecorderFactory.isSupport) {
-                removePref(PreferKey.optimizeRender)
-                preferenceScreen.removePreferenceRecursively(PreferKey.optimizeRender)
-            }
+    private fun changeBoolean(key: String, value: Boolean) {
+        val context = requireContext()
+        if (key == PreferKey.hideStatusBar && !value && ReadTipConfig.headerMode == 1) {
+            ReadTipConfig.headerMode = 2
+            ReadBookConfig.save()
         }
-
-        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-            super.onViewCreated(view, savedInstanceState)
-            view.setBackgroundColor(Color.TRANSPARENT)
-            listView.setBackgroundColor(Color.TRANSPARENT)
-            listView.setEdgeEffectColor(primaryColor)
-        }
-
-        override fun onResume() {
-            super.onResume()
-            preferenceManager
-                .sharedPreferences
-                ?.registerOnSharedPreferenceChangeListener(this)
-        }
-
-        override fun onPause() {
-            preferenceManager
-                .sharedPreferences
-                ?.unregisterOnSharedPreferenceChangeListener(this)
-            super.onPause()
-        }
-
-        override fun onSharedPreferenceChanged(
-            sharedPreferences: SharedPreferences?,
-            key: String?
-        ) {
+        val exclusiveKey = if (value) {
             when (key) {
-                PreferKey.readBodyToLh -> activity?.recreate()
-                PreferKey.hideStatusBar -> {
-                    ReadBookConfig.hideStatusBar = getPrefBoolean(PreferKey.hideStatusBar)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
-                }
-
-                PreferKey.hideNavigationBar -> {
-                    ReadBookConfig.hideNavigationBar = getPrefBoolean(PreferKey.hideNavigationBar)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
-                }
-
-                PreferKey.keepLight -> postEvent(key, true)
-                PreferKey.textSelectAble -> postEvent(key, getPrefBoolean(key))
-                PreferKey.screenOrientation -> {
-                    (activity as? ReadBookActivity)?.setOrientation()
-                }
-
-                PreferKey.textFullJustify,
-                PreferKey.textBottomJustify,
-                PreferKey.useZhLayout,
-                PreferKey.adaptSpecialStyle-> {
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(5))
-                }
-
-                PreferKey.showBrightnessView -> {
-                    postEvent(PreferKey.showBrightnessView, "")
-                }
-
-                PreferKey.expandTextMenu -> {
-                    (activity as? ReadBookActivity)?.textActionMenu?.upMenu()
-                }
-
-                PreferKey.doublePageHorizontal -> {
-                    ChapterProvider.upLayout()
-                    ReadBook.loadContent(false)
-                }
-
-                PreferKey.showReadTitleAddition,
-                PreferKey.readBarStyleFollowPage -> {
-                    postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-                }
-
-                PreferKey.progressBarBehavior -> {
-                    postEvent(EventBus.UP_SEEK_BAR, true)
-                }
-
-                PreferKey.noAnimScrollPage -> {
-                    ReadBook.callBack?.upPageAnim()
-                }
-
-                PreferKey.optimizeRender -> {
-                    ChapterProvider.upStyle()
-                    ReadBook.callBack?.upPageAnim(true)
-                    ReadBook.loadContent(false)
-                }
-
-                PreferKey.paddingDisplayCutouts -> {
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(2))
-                }
+                PreferKey.readBodyToLh -> PreferKey.paddingDisplayCutouts
+                PreferKey.paddingDisplayCutouts -> PreferKey.readBodyToLh
+                else -> null
+            }
+        } else {
+            null
+        }
+        exclusiveKey?.let { otherKey ->
+            val otherDefault = otherKey == PreferKey.readBodyToLh
+            if (context.getPrefBoolean(otherKey, otherDefault)) {
+                context.putPrefBoolean(otherKey, false)
+                handlePreferenceChanged(otherKey, false)
             }
         }
+        context.putPrefBoolean(key, value)
+        handlePreferenceChanged(key, value)
+        refreshUi()
+    }
 
-        override fun onPreferenceTreeClick(preference: Preference): Boolean {
-            when (preference.key) {
-                KEY_SIMULATED_READING -> {
-                    dismissMoreConfig()
-                    (activity as? ReadBookActivity)?.showSimulatedReading()
-                    return true
-                }
+    private fun changeValue(key: String, value: String) {
+        requireContext().putPrefString(key, value)
+        handlePreferenceChanged(key, null)
+        refreshUi()
+    }
 
-                KEY_IMAGE_STYLE -> {
-                    dismissMoreConfig()
-                    (activity as? ReadBookActivity)?.showImageStyleConfig()
-                    return true
-                }
-
-                "customPageKey" -> PageKeyDialog(requireContext()).show()
-                "clickRegionalConfig" -> {
-                    (activity as? ReadBookActivity)?.showClickRegionalConfig()
-                }
-
-                PreferKey.pageTouchSlop -> {
-                    NumberPickerDialog(requireContext())
-                        .setTitle(getString(R.string.page_touch_slop_dialog_title))
-                        .setMaxValue(9999)
-                        .setMinValue(0)
-                        .setValue(AppConfig.pageTouchSlop)
-                        .show {
-                            AppConfig.pageTouchSlop = it
-                            postEvent(EventBus.UP_CONFIG, arrayListOf(4))
-                        }
-                }
-
-                PreferKey.pageTouchClick -> {
-                    NumberPickerDialog(requireContext())
-                        .setTitle(getString(R.string.page_touch_click_dialog_title))
-                        .setMaxValue(399)
-                        .setMinValue(0)
-                        .setValue(AppConfig.pageTouchClick)
-                        .show {
-                            AppConfig.pageTouchClick = it
-                            postEvent(EventBus.UP_CONFIG, arrayListOf(12))
-                        }
-                }
+    private fun handlePreferenceChanged(key: String, booleanValue: Boolean?) {
+        when (key) {
+            PreferKey.readBodyToLh -> {
+                ReadBookConfig.readBodyToLh = booleanValue == true
+                activity?.recreate()
             }
-            return super.onPreferenceTreeClick(preference)
-        }
 
-        private fun dismissMoreConfig() {
-            (parentFragment as? MoreConfigDialog)?.dismissAllowingStateLoss()
-        }
+            PreferKey.hideStatusBar -> {
+                ReadBookConfig.hideStatusBar = booleanValue == true
+                postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
+            }
 
-        private fun upBookPreferenceSummaries() {
-            val book = ReadBook.book ?: return
-            findPreference<Preference>(KEY_SIMULATED_READING)?.summary =
-                if (book.config.readSimulating) {
-                    getString(R.string.simulated_reading_enabled_summary, book.config.dailyChapters)
+            PreferKey.hideNavigationBar -> {
+                ReadBookConfig.hideNavigationBar = booleanValue == true
+                postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
+            }
+
+            PreferKey.keepLight -> postEvent(key, true)
+            PreferKey.textSelectAble -> postEvent(key, booleanValue == true)
+            PreferKey.screenOrientation -> readActivity?.setOrientation()
+
+            PreferKey.textFullJustify,
+            PreferKey.textBottomJustify,
+            PreferKey.useZhLayout,
+            PreferKey.adaptSpecialStyle -> {
+                postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+            }
+
+            PreferKey.showBrightnessView -> {
+                postEvent(PreferKey.showBrightnessView, "")
+            }
+
+            PreferKey.expandTextMenu -> readActivity?.textActionMenu?.upMenu()
+
+            PreferKey.doublePageHorizontal -> {
+                ChapterProvider.upLayout()
+                ReadBook.loadContent(false)
+            }
+
+            PreferKey.showReadTitleAddition,
+            PreferKey.readBarStyleFollowPage -> {
+                postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
+            }
+
+            PreferKey.progressBarBehavior -> postEvent(EventBus.UP_SEEK_BAR, true)
+            PreferKey.noAnimScrollPage -> ReadBook.callBack?.upPageAnim()
+
+            PreferKey.optimizeRender -> {
+                ChapterProvider.upStyle()
+                ReadBook.callBack?.upPageAnim(true)
+                ReadBook.loadContent(false)
+            }
+
+            PreferKey.paddingDisplayCutouts -> {
+                postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+            }
+        }
+    }
+
+    private fun handleAction(key: String) {
+        when (key) {
+            ReadMoreConfigKeys.SIMULATED_READING -> {
+                dismissAllowingStateLoss()
+                readActivity?.showSimulatedReading()
+            }
+
+            ReadMoreConfigKeys.BOOK_IMAGE_STYLE -> {
+                dismissAllowingStateLoss()
+                readActivity?.showImageStyleConfig()
+            }
+
+            ReadMoreConfigKeys.CUSTOM_PAGE_KEY -> PageKeyDialog(requireContext()).show()
+
+            ReadMoreConfigKeys.CLICK_REGIONAL_CONFIG -> {
+                readActivity?.showClickRegionalConfig()
+            }
+
+            PreferKey.pageTouchSlop -> showPageTouchSlopDialog()
+            PreferKey.pageTouchClick -> showPageTouchClickDialog()
+        }
+    }
+
+    private fun showPageTouchSlopDialog() {
+        showThresholdSliderDialog(
+            title = getString(R.string.page_touch_slop_dialog_title),
+            maxValue = 9999,
+            initialValue = AppConfig.pageTouchSlop,
+            valueLabel = {
+                if (it == 0) {
+                    getString(R.string.read_settings_system_default)
                 } else {
-                    getString(R.string.disabled)
+                    getString(R.string.read_settings_pixels, it)
                 }
-            findPreference<Preference>(KEY_IMAGE_STYLE)?.summary = when {
+            },
+            onSave = {
+                AppConfig.pageTouchSlop = it
+                postEvent(EventBus.UP_CONFIG, arrayListOf(4))
+                refreshUi()
+            },
+        )
+    }
+
+    private fun showPageTouchClickDialog() {
+        showThresholdSliderDialog(
+            title = getString(R.string.page_touch_click_dialog_title),
+            maxValue = 399,
+            initialValue = AppConfig.pageTouchClick,
+            valueLabel = { getString(R.string.read_settings_pixels, it) },
+            onSave = {
+                AppConfig.pageTouchClick = it
+                postEvent(EventBus.UP_CONFIG, arrayListOf(12))
+                refreshUi()
+            },
+        )
+    }
+
+    private fun showThresholdSliderDialog(
+        title: String,
+        maxValue: Int,
+        initialValue: Int,
+        valueLabel: (Int) -> String,
+        onSave: (Int) -> Unit,
+    ) {
+        val context = requireContext()
+        val safeInitialValue = initialValue.coerceIn(0, maxValue)
+        var pendingValue = safeInitialValue
+        val sliderDialog = ComponentDialog(context).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            setCanceledOnTouchOutside(true)
+            setOnDismissListener {
+                if (pendingValue != safeInitialValue) {
+                    onSave(pendingValue)
+                }
+            }
+        }
+        val contentView = ComposeView(context).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnDetachedFromWindow
+            )
+            setContent {
+                NgAppTheme(
+                    snapshot = ReadDrawerStyle.themeSnapshot(context),
+                    updateSystemBars = false,
+                ) {
+                    ReadThresholdSliderDialog(
+                        title = title,
+                        initialValue = safeInitialValue,
+                        maxValue = maxValue,
+                        valueLabel = valueLabel,
+                        onDismiss = sliderDialog::dismiss,
+                        onValueChanged = { pendingValue = it },
+                    )
+                }
+            }
+        }
+        sliderDialog.setContentView(contentView)
+        sliderDialog.show()
+        sliderDialog.applyNgWindow(marginDp = 20, dimAmount = 0.14f)
+        view?.let {
+            ReadDrawerStyle.positionDialogAbove(sliderDialog, it, gapDp = 12)
+        }
+    }
+
+    private fun refreshUi() {
+        if (!isAdded) return
+        val context = requireContext()
+        val booleanDefaults = linkedMapOf(
+            PreferKey.hideStatusBar to false,
+            PreferKey.hideNavigationBar to false,
+            PreferKey.readBodyToLh to true,
+            PreferKey.paddingDisplayCutouts to false,
+            PreferKey.showBrightnessView to true,
+            PreferKey.showReadTitleAddition to true,
+            PreferKey.readBarStyleFollowPage to false,
+            PreferKey.mouseWheelPage to true,
+            PreferKey.volumeKeyPage to true,
+            // Keep the legacy Preference UI default until its runtime default is discussed.
+            PreferKey.volumeKeyPageOnPlay to false,
+            PreferKey.keyPageOnLongPress to false,
+            PreferKey.noAnimScrollPage to false,
+            ReadMoreConfigKeys.DISABLE_RETURN_KEY to false,
+            PreferKey.useZhLayout to false,
+            PreferKey.textFullJustify to true,
+            PreferKey.textBottomJustify to true,
+            PreferKey.adaptSpecialStyle to true,
+            PreferKey.autoChangeSource to true,
+            PreferKey.textSelectAble to true,
+            PreferKey.expandTextMenu to false,
+            PreferKey.optimizeRender to false,
+        )
+        val values = mapOf(
+            PreferKey.screenOrientation to context.getPrefString(
+                PreferKey.screenOrientation,
+                "0",
+            ).orEmpty(),
+            PreferKey.keepLight to context.getPrefString(PreferKey.keepLight, "0").orEmpty(),
+            PreferKey.progressBarBehavior to context.getPrefString(
+                PreferKey.progressBarBehavior,
+                "page",
+            ).orEmpty(),
+            PreferKey.doublePageHorizontal to context.getPrefString(
+                PreferKey.doublePageHorizontal,
+                "0",
+            ).orEmpty(),
+            PreferKey.clickImgWay to context.getPrefString(PreferKey.clickImgWay, "0").orEmpty(),
+        )
+        screenState = ReadMoreConfigUiState(
+            booleans = booleanDefaults.mapValues { (key, default) ->
+                context.getPrefBoolean(key, default)
+            },
+            values = values,
+            options = mapOf(
+                PreferKey.screenOrientation to options(
+                    R.array.screen_direction_title,
+                    R.array.screen_direction_value,
+                ),
+                PreferKey.keepLight to options(
+                    R.array.screen_time_out,
+                    R.array.screen_time_out_value,
+                ),
+                PreferKey.progressBarBehavior to options(
+                    R.array.progress_bar_behavior_title,
+                    R.array.progress_bar_behavior_value,
+                ),
+                PreferKey.doublePageHorizontal to options(
+                    R.array.double_page_title,
+                    R.array.double_page_value,
+                ),
+                PreferKey.clickImgWay to options(
+                    R.array.click_image_way_title,
+                    R.array.click_image_way_value,
+                ),
+            ),
+            actionValues = buildActionValues(),
+            optimizeRenderSupported = CanvasRecorderFactory.isSupport,
+        )
+    }
+
+    private fun options(entriesRes: Int, valuesRes: Int): List<ReadMoreConfigOption> {
+        val entries = resources.getStringArray(entriesRes)
+        val values = resources.getStringArray(valuesRes)
+        return List(minOf(entries.size, values.size)) { index ->
+            ReadMoreConfigOption(values[index], entries[index])
+        }
+    }
+
+    private fun buildActionValues(): Map<String, String> {
+        val values = mutableMapOf<String, String>()
+        values[PreferKey.pageTouchSlop] = if (AppConfig.pageTouchSlop == 0) {
+            getString(R.string.read_settings_system_default)
+        } else {
+            getString(R.string.read_settings_pixels, AppConfig.pageTouchSlop)
+        }
+        values[PreferKey.pageTouchClick] = getString(
+            R.string.read_settings_pixels,
+            AppConfig.pageTouchClick,
+        )
+        ReadBook.book?.let { book ->
+            values[ReadMoreConfigKeys.SIMULATED_READING] = if (book.config.readSimulating) {
+                getString(R.string.simulated_reading_enabled_summary, book.config.dailyChapters)
+            } else {
+                getString(R.string.disabled)
+            }
+            values[ReadMoreConfigKeys.BOOK_IMAGE_STYLE] = when {
                 book.getImageStyle().equals(Book.imgStyleFull, true) ->
                     getString(R.string.image_style_fit_width)
 
@@ -279,15 +420,6 @@ class MoreConfigDialog : BasePrefDialogFragment() {
                 else -> getString(R.string.image_style_original)
             }
         }
-
-        @Suppress("SameParameterValue")
-        private fun upPreferenceSummary(preferenceKey: String, value: String?) {
-            val preference = findPreference<Preference>(preferenceKey) ?: return
-            when (preferenceKey) {
-                PreferKey.pageTouchSlop -> preference.summary =
-                    getString(R.string.page_touch_slop_summary, value)
-            }
-        }
-
+        return values
     }
 }

@@ -27,6 +27,7 @@ import io.legado.app.utils.textHeight
 import kotlinx.coroutines.CoroutineScope
 import splitties.init.appCtx
 import androidx.core.net.toUri
+import java.io.File
 
 /**
  * 解析内容生成章节和页面
@@ -84,6 +85,14 @@ object ChapterProvider {
 
     @JvmStatic
     var lineSpacingExtra = 0f
+        private set
+
+    @JvmStatic
+    var titleLineSpacingExtra = 0f
+        private set
+
+    @JvmStatic
+    var titleLineSpacingSub = 0f
         private set
 
     @JvmStatic
@@ -185,6 +194,8 @@ object ChapterProvider {
         }
         //间距
         lineSpacingExtra = ReadBookConfig.lineSpacingExtra / 10f
+        titleLineSpacingExtra = ReadBookConfig.titleLineSpacingExtra / 10f
+        titleLineSpacingSub = ReadBookConfig.titleLineSpacingSub / 10f
         paragraphSpacing = ReadBookConfig.paragraphSpacing
         titleTopSpacing = ReadBookConfig.titleTopSpacing.dpToPx()
         titleBottomSpacing = ReadBookConfig.titleBottomSpacing.dpToPx()
@@ -208,6 +219,10 @@ object ChapterProvider {
     private fun getTypeface(fontPath: String): Typeface? {
         return kotlin.runCatching {
             when {
+                fontPath.startsWith("assets://") -> Typeface.createFromAsset(
+                    appCtx.assets,
+                    fontPath.removePrefix("assets://"),
+                )
                 fontPath.isContentScheme() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
                     appCtx.contentResolver
                         .openFileDescriptor(fontPath.toUri(), "r")!!
@@ -235,48 +250,93 @@ object ChapterProvider {
     }
 
     private fun getPaints(typeface: Typeface?): Pair<TextPaint, TextPaint> {
-        // 字体统一处理
-        val bold = Typeface.create(typeface, Typeface.BOLD)
-        val normal = Typeface.create(typeface, Typeface.NORMAL)
-        val (titleFont, textFont) = when (ReadBookConfig.textBold) {
-            1 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(Typeface.create(typeface, 900, false), bold)
-                else
-                    Pair(bold, bold)
-            }
-
-            2 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(normal, Typeface.create(typeface, 300, false))
-                else
-                    Pair(normal, normal)
-            }
-
-            else -> Pair(bold, normal)
-        }
+        val titleBaseTypeface = loadOptionalTypeface(ReadBookConfig.titleFont) ?: typeface
+        val textFont = applyFontWeight(typeface, ReadBookConfig.textBold)
+        val titleFont = applyFontWeight(titleBaseTypeface, ReadBookConfig.titleBold)
 
         //标题
         val tPaint = TextPaint()
-        tPaint.color = ReadBookConfig.textColor
+        tPaint.color = ReadBookConfig.resolvedTitleColor
         tPaint.letterSpacing = ReadBookConfig.letterSpacing
         tPaint.typeface = titleFont
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && ReadBookConfig.titleBold in 100..900) {
+            tPaint.setFontVariationSettings("'wght' ${ReadBookConfig.titleBold}")
+        }
         tPaint.textSize = with(ReadBookConfig) { textSize + titleSize }.toFloat().spToPx()
         tPaint.isAntiAlias = true
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q && AppConfig.optimizeRender) {
             tPaint.isLinearText = true
         }
+        if (ReadBookConfig.textItalic) tPaint.textSkewX = -0.25f
+        applyTextShadow(tPaint)
         //正文
         val cPaint = TextPaint()
         cPaint.color = ReadBookConfig.textColor
         cPaint.letterSpacing = ReadBookConfig.letterSpacing
         cPaint.typeface = textFont
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && ReadBookConfig.textBold in 100..900) {
+            cPaint.setFontVariationSettings("'wght' ${ReadBookConfig.textBold}")
+        }
         cPaint.textSize = ReadBookConfig.textSize.toFloat().spToPx()
         cPaint.isAntiAlias = true
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q && AppConfig.optimizeRender) {
             cPaint.isLinearText = true
         }
+        if (ReadBookConfig.textItalic) cPaint.textSkewX = -0.25f
+        applyTextShadow(cPaint)
         return Pair(tPaint, cPaint)
+    }
+
+    private fun applyFontWeight(typeface: Typeface?, weight: Int): Typeface {
+        val resolvedWeight = when (weight) {
+            0 -> 400
+            1 -> 900
+            2 -> 300
+            else -> weight.coerceIn(100, 900)
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Typeface.create(typeface ?: Typeface.DEFAULT, resolvedWeight, false)
+        } else if (resolvedWeight >= 700) {
+            Typeface.create(typeface, Typeface.BOLD)
+        } else {
+            Typeface.create(typeface, Typeface.NORMAL)
+        }
+    }
+
+    fun loadOptionalTypeface(fontPath: String): Typeface? = runCatching {
+        when {
+            fontPath.startsWith("assets://") -> Typeface.createFromAsset(
+                appCtx.assets,
+                fontPath.removePrefix("assets://"),
+            )
+            fontPath.isContentScheme() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                appCtx.contentResolver.openFileDescriptor(fontPath.toUri(), "r")?.use {
+                    Typeface.Builder(it.fileDescriptor).build()
+                }
+            }
+            fontPath.isNotBlank() -> Typeface.createFromFile(File(fontPath))
+            else -> null
+        }
+    }.getOrNull()
+
+    fun resolveStyledTypeface(fontPath: String, fontWeight: Int, italic: Boolean): Typeface? {
+        if (fontPath.isBlank() && fontWeight == 400 && !italic) return null
+        val base = loadOptionalTypeface(fontPath) ?: if (fontPath.isBlank()) typeface else return null
+        val weighted = applyFontWeight(base, fontWeight)
+        return if (italic) Typeface.create(weighted, Typeface.ITALIC) else weighted
+    }
+
+    private fun applyTextShadow(paint: TextPaint) {
+        if (ReadBookConfig.textShadow) {
+            paint.setShadowLayer(
+                ReadBookConfig.shadowRadius,
+                ReadBookConfig.shadowDx,
+                ReadBookConfig.shadowDy,
+                ReadBookConfig.textShadowColor,
+            )
+        } else {
+            paint.clearShadowLayer()
+        }
     }
 
     /**

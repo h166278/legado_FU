@@ -160,6 +160,44 @@
         <item name="android:textSize">18sp</item>
     </style>
 
+    <style name="Ng.ReadInfoRow" parent="android:Widget">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+    </style>
+
+    <style name="Ng.ReadInfoRowLabel" parent="android:Widget.TextView">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="Ng.ReadInfoRowValue" parent="android:Widget.TextView">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">end</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="ReadStyleShortcut">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:drawablePadding">2dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:paddingHorizontal">2dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="isBottomBackground">true</item>
+        <item name="radius">12dp</item>
+    </style>
+
     <style name="dialog_style" parent="@android:style/Theme.Dialog">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>

@@ -6,21 +6,31 @@
     android:background="?android:attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="5dp">
+    android:minHeight="52dp"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="8dp">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/iv_font"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_interface_setting" />
 
     <TextView
         android:id="@+id/tv_font"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
         android:layout_weight="1"
-        android:padding="5dp"
-        android:textColor="@color/primaryText" />
+        android:textColor="@color/primaryText"
+        android:textSize="16sp" />
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/iv_checked"
         android:layout_width="24dp"
         android:layout_height="24dp"
-        android:src="@drawable/ic_check"
+        android:src="@drawable/ng_ic_popup_selected"
         android:visibility="invisible"
         app:tint="@color/primaryText" />
 

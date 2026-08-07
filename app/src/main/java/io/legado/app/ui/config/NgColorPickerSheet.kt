@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -83,6 +84,8 @@ internal fun NgColorPickerSheet(
     show: Boolean,
     initialColor: Int,
     initialTopBarTextMode: NgTopBarTextMode? = null,
+    resetColor: Int? = AndroidColor.TRANSPARENT,
+    showAlphaSlider: Boolean = true,
     onDismissRequest: () -> Unit,
     onSelectionConfirmed: (Int, NgTopBarTextMode?) -> Unit
 ) {
@@ -155,20 +158,24 @@ internal fun NgColorPickerSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    NgPickerActionButton(
-                        onClick = {
-                            currentColor = AndroidColor.TRANSPARENT
-                            hexInput = "#00000000"
-                            isHexInputError = false
-                        },
-                        contentDescription = stringResource(R.string.ng_reset_color)
-                    ) {
-                        Icon(
-                            Icons.Rounded.Restore,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = Color(snapshot.colors.onSurface)
-                        )
+                    if (resetColor != null) {
+                        NgPickerActionButton(
+                            onClick = {
+                                currentColor = resetColor
+                                hexInput = formatNgColor(resetColor)
+                                isHexInputError = false
+                            },
+                            contentDescription = stringResource(R.string.ng_reset_color)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Restore,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = Color(snapshot.colors.onSurface)
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.size(48.dp))
                     }
                     Text(
                         text = stringResource(R.string.ng_select_color),
@@ -196,15 +203,17 @@ internal fun NgColorPickerSheet(
                         isHexInputError = false
                     }
                 )
-                Spacer(Modifier.height(10.dp))
-                NgAlphaSlider(
-                    color = currentColor,
-                    onAlphaChanged = { alpha ->
-                        currentColor = (currentColor and 0x00FFFFFF) or (alpha shl 24)
-                        hexInput = formatNgColor(currentColor)
-                        isHexInputError = false
-                    }
-                )
+                if (showAlphaSlider) {
+                    Spacer(Modifier.height(10.dp))
+                    NgAlphaSlider(
+                        color = currentColor,
+                        onAlphaChanged = { alpha ->
+                            currentColor = (currentColor and 0x00FFFFFF) or (alpha shl 24)
+                            hexInput = formatNgColor(currentColor)
+                            isHexInputError = false
+                        }
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -254,6 +263,122 @@ internal fun NgColorPickerSheet(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * 嵌入现有 NG 容器的颜色编辑页，不创建新的 Dialog 或 BottomSheet。
+ */
+@Composable
+internal fun NgInlineColorPicker(
+    title: String,
+    initialColor: Int,
+    onBack: () -> Unit,
+    onColorChanged: (Int) -> Unit,
+    onReset: () -> Unit,
+) {
+    var currentColor by remember { mutableIntStateOf(initialColor) }
+    var hexInput by remember { mutableStateOf(formatNgColor(initialColor)) }
+    var isHexInputError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialColor) {
+        currentColor = initialColor
+        hexInput = formatNgColor(initialColor)
+        isHexInputError = false
+    }
+
+    val colors = NgTheme.colors
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            NgPickerActionButton(
+                onClick = onBack,
+                contentDescription = stringResource(R.string.back),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = Color(colors.onSurface),
+                )
+            }
+            Text(
+                text = title,
+                color = Color(colors.onSurface),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            NgPickerActionButton(
+                onClick = onReset,
+                contentDescription = stringResource(R.string.ng_reset_color),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Restore,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = Color(colors.onSurface),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        NgColorPalette(
+            color = currentColor,
+            onColorChanged = { selected ->
+                currentColor = selected
+                hexInput = formatNgColor(selected)
+                isHexInputError = false
+                onColorChanged(selected)
+            },
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Color(currentColor), RoundedCornerShape(14.dp))
+                    .border(
+                        1.dp,
+                        Color(colors.outlineVariant),
+                        RoundedCornerShape(14.dp),
+                    ),
+            )
+            Spacer(Modifier.size(12.dp))
+            NgFormField(
+                label = stringResource(R.string.ng_color_value),
+                value = hexInput,
+                onValueChange = { value ->
+                    hexInput = normalizeHexInput(value)
+                    val color = parseNgColor(hexInput)
+                    if (color != null) {
+                        currentColor = color
+                        isHexInputError = false
+                        onColorChanged(color)
+                    } else {
+                        isHexInputError = hexInput.isNotBlank()
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                isError = isHexInputError,
+                supportingText = if (isHexInputError) {
+                    stringResource(R.string.ng_color_value_hint)
+                } else {
+                    null
+                },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                ),
+            )
         }
     }
 }

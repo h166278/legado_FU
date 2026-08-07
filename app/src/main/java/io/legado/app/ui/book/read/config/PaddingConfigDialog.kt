@@ -1,37 +1,42 @@
 package io.legado.app.ui.book.read.config
 
 import android.content.DialogInterface
+import android.graphics.Color
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
-import android.view.WindowManager
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.databinding.DialogReadPaddingBinding
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.design.components.view.NgFloatingTabItem
+import io.legado.app.ui.widget.dialog.applyNgDialogWindow
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
+
+    private companion object {
+        const val SECTION_HEADER = 0
+        const val SECTION_BODY = 1
+        const val SECTION_FOOTER = 2
+    }
 
     private val binding by viewBinding(DialogReadPaddingBinding::bind)
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.let {
-            it.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            val attr = it.attributes
-            attr.dimAmount = 0.0f
-            it.attributes = attr
-        }
-        setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
+        applyNgDialogWindow(marginDp = 20, dimAmount = 0.4f)
+        binding.rootView.post { repositionAboveDrawer() }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        initDialogStyle()
         initData()
         initView()
+        showSection(SECTION_BODY)
     }
 
     override fun onDismiss(dialog: DialogInterface) {
@@ -55,11 +60,21 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
         dsbFooterPaddingBottom.progress = ReadBookConfig.footerPaddingBottom
         dsbFooterPaddingLeft.progress = ReadBookConfig.footerPaddingLeft
         dsbFooterPaddingRight.progress = ReadBookConfig.footerPaddingRight
-        cbShowTopLine.isChecked = ReadBookConfig.showHeaderLine
-        cbShowBottomLine.isChecked = ReadBookConfig.showFooterLine
+        switchHeaderLine.isChecked = ReadBookConfig.showHeaderLine
+        switchFooterLine.isChecked = ReadBookConfig.showFooterLine
     }
 
     private fun initView() = binding.run {
+        paddingSectionTabs.setItems(
+            items = listOf(
+                NgFloatingTabItem(text = getString(R.string.header)),
+                NgFloatingTabItem(text = getString(R.string.main_body)),
+                NgFloatingTabItem(text = getString(R.string.footer)),
+            ),
+            selectedIndex = SECTION_BODY,
+        ) { section ->
+            showSection(section)
+        }
         //正文
         dsbPaddingTop.onChanged = {
             ReadBookConfig.paddingTop = it
@@ -111,13 +126,78 @@ class PaddingConfigDialog : BaseDialogFragment(R.layout.dialog_read_padding) {
             ReadBookConfig.footerPaddingRight = it
             postEvent(EventBus.UP_CONFIG, arrayListOf(2))
         }
-        cbShowTopLine.onCheckedChangeListener = { _, isChecked ->
+        switchHeaderLine.setOnUserCheckedChangeListener { isChecked ->
             ReadBookConfig.showHeaderLine = isChecked
             postEvent(EventBus.UP_CONFIG, arrayListOf(2))
         }
-        cbShowBottomLine.onCheckedChangeListener = { _, isChecked ->
+        switchFooterLine.setOnUserCheckedChangeListener { isChecked ->
             ReadBookConfig.showFooterLine = isChecked
             postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+        }
+    }
+
+    private fun initDialogStyle() = binding.run {
+        val contentColor = ReadDrawerStyle.contentColor(requireContext())
+        rootView.setBackgroundColor(Color.TRANSPARENT)
+        ReadDrawerStyle.applyGlassBackground(
+            view = ngDialogBackground,
+            radiusDp = 24,
+        )
+        tvTitle.setTextColor(contentColor)
+        tvHeaderLine.setTextColor(contentColor)
+        tvFooterLine.setTextColor(contentColor)
+        val selectedColor = ReadDrawerStyle.accentColor(requireContext())
+        paddingSectionTabs.setSurfaceAlpha(0.28f)
+        paddingSectionTabs.setContentColors(
+            unselectedContentColor = contentColor,
+            selectedContentColor = if (ColorUtils.isColorLight(selectedColor)) {
+                Color.BLACK
+            } else {
+                Color.WHITE
+            },
+            selectedContainerColor = selectedColor,
+        )
+        listOf(
+            dsbPaddingTop,
+            dsbPaddingBottom,
+            dsbPaddingLeft,
+            dsbPaddingRight,
+            dsbHeaderPaddingTop,
+            dsbHeaderPaddingBottom,
+            dsbHeaderPaddingLeft,
+            dsbHeaderPaddingRight,
+            dsbFooterPaddingTop,
+            dsbFooterPaddingBottom,
+            dsbFooterPaddingLeft,
+            dsbFooterPaddingRight,
+        ).forEach {
+            it.setContentColor(contentColor)
+            it.useSliderOnlyLayout()
+        }
+    }
+
+    private fun showSection(section: Int) = binding.run {
+        llHeaderPadding.visibility = if (section == SECTION_HEADER) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        llBodyPadding.visibility = if (section == SECTION_BODY) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        llFooterPadding.visibility = if (section == SECTION_FOOTER) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        rootView.post { repositionAboveDrawer() }
+    }
+
+    private fun repositionAboveDrawer() {
+        parentFragment?.view?.let {
+            ReadDrawerStyle.positionDialogAbove(dialog, it)
         }
     }
 

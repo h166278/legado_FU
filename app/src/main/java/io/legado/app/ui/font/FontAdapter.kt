@@ -4,20 +4,23 @@ import android.content.Context
 import android.graphics.Typeface
 import android.os.Build
 import android.view.ViewGroup
+import androidx.annotation.ColorInt
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ItemFontBinding
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.utils.*
 import java.io.File
 import java.net.URLDecoder
 
-class FontAdapter(context: Context, curFilePath: String, val callBack: CallBack) :
+class FontAdapter(
+    context: Context,
+    private val currentFilePath: () -> String,
+    @ColorInt private val contentColor: Int,
+    val callBack: CallBack,
+) :
     RecyclerAdapter<FileDoc, ItemFontBinding>(context) {
-
-    private val curName = kotlin.runCatching {
-        URLDecoder.decode(curFilePath, "utf-8")
-    }.getOrNull()?.substringAfterLast(File.separator)
 
     override fun getViewBinding(parent: ViewGroup): ItemFontBinding {
         return ItemFontBinding.inflate(inflater, parent, false)
@@ -49,8 +52,11 @@ class FontAdapter(context: Context, curFilePath: String, val callBack: CallBack)
                 AppLog.put("读取字体 ${item.name} 出错\n${it.localizedMessage}", it, true)
             }
             tvFont.text = item.name
+            tvFont.setTextColor(contentColor)
+            ivFont.setColorFilter(contentColor)
+            ivChecked.setColorFilter(context.accentColor)
             root.setOnClickListener { callBack.onFontSelect(item) }
-            if (item.name == curName) {
+            if (item.name == currentFontName()) {
                 ivChecked.visible()
             } else {
                 ivChecked.invisible()
@@ -68,5 +74,13 @@ class FontAdapter(context: Context, curFilePath: String, val callBack: CallBack)
 
     interface CallBack {
         fun onFontSelect(docItem: FileDoc)
+    }
+
+    private fun currentFontName(): String? {
+        val path = currentFilePath()
+        if (path.isEmpty()) return null
+        return kotlin.runCatching {
+            URLDecoder.decode(path, "utf-8")
+        }.getOrNull()?.substringAfterLast(File.separator)
     }
 }

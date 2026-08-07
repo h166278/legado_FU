@@ -35,23 +35,17 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.databinding.ViewReadMenuBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.NgColorConfigStore
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.theme.NgAppTheme
-import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
@@ -113,14 +107,8 @@ class ReadMenu @JvmOverloads constructor(
         get() = !AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme(context)
     private var readMenuThemeSnapshot: NgThemeSnapshot = resolveReadMenuThemeSnapshot()
 
-    private fun resolveReadMenuThemeSnapshot(): NgThemeSnapshot {
-        if (AppConfig.isEInkMode) return NgThemeResolver.resolve(context)
-        return NgThemeResolver.resolve(
-            context = context,
-            colors = NgColorConfigStore.current(context),
-            isDark = ReadBookConfig.isNightTheme
-        )
-    }
+    private fun resolveReadMenuThemeSnapshot(): NgThemeSnapshot =
+        ReadDrawerStyle.themeSnapshot(context)
 
     internal fun currentThemeSnapshot(): NgThemeSnapshot = readMenuThemeSnapshot
 
@@ -129,20 +117,20 @@ class ReadMenu @JvmOverloads constructor(
     } else if (immersiveMenu) {
         kotlin.runCatching {
             ReadBookConfig.durConfig.curBgStr().toColorInt()
-        }.getOrDefault(context.bottomBackground)
+        }.getOrDefault(readMenuThemeSnapshot.colors.surface)
     } else {
-        context.bottomBackground
+        readMenuThemeSnapshot.colors.surface
     }
     private var textColor: Int = if (useGradientThemeMenu) {
         readMenuThemeSnapshot.colors.onSurface
     } else if (immersiveMenu) {
         ReadBookConfig.durConfig.curTextColor()
     } else {
-        context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+        readMenuThemeSnapshot.colors.onSurface
     }
 
     private var onMenuOutEnd: (() -> Unit)? = null
-    private val showBrightnessView
+    private val showFloatingTools
         get() = context.getPrefBoolean(
             PreferKey.showBrightnessView,
             true
@@ -152,7 +140,7 @@ class ReadMenu @JvmOverloads constructor(
             binding.tvCustomBtn.isGone = ReadBook.isLocalBook ||
                     ReadBook.bookSource?.customButton != true
             callBack.upSystemUiVisibility()
-            binding.readFloatingTools.visible()
+            upFloatingToolVisibility()
         }
 
         @SuppressLint("RtlHardcoded")
@@ -210,7 +198,7 @@ class ReadMenu @JvmOverloads constructor(
         toolbarView.setPadding(0, 0, 0, 0)
     }
 
-    private fun initView(reset: Boolean = false) = binding.run {
+    private fun initView() = binding.run {
         initAnimation()
         tvCustomBtn.setColorFilter(readMenuThemeSnapshot.colors.primary)
         if (useGradientThemeMenu) {
@@ -225,14 +213,11 @@ class ReadMenu @JvmOverloads constructor(
             titleBar.setColorFilter(textColor)
             tvChapterName.setTextColor(lightTextColor)
             tvChapterUrl.setTextColor(lightTextColor)
-        } else if (reset) {
-            val bgColor = context.primaryColor
-            val textColor = context.primaryTextColor
+        } else {
             titleBar.setTextColor(textColor)
-            titleBar.setBackgroundColor(bgColor)
             titleBar.setColorFilter(textColor)
-            tvChapterName.setTextColor(textColor)
-            tvChapterUrl.setTextColor(textColor)
+            tvChapterName.setTextColor(readMenuThemeSnapshot.colors.onSurfaceVariant)
+            tvChapterUrl.setTextColor(readMenuThemeSnapshot.colors.onSurfaceVariant)
         }
         tvBookTitle.setTextColor(textColor)
         updateSourceStateStyle()
@@ -288,7 +273,7 @@ class ReadMenu @JvmOverloads constructor(
         upColorConfig()
         initGlassSurfaces()
         initFloatingToolRail()
-        initView(true)
+        initView()
     }
 
     fun refreshMenuColorFilter() {
@@ -330,16 +315,16 @@ class ReadMenu @JvmOverloads constructor(
         } else if (immersiveMenu) {
             kotlin.runCatching {
                 ReadBookConfig.durConfig.curBgStr().toColorInt()
-            }.getOrDefault(context.bottomBackground)
+            }.getOrDefault(readMenuThemeSnapshot.colors.surface)
         } else {
-            context.bottomBackground
+            readMenuThemeSnapshot.colors.surface
         }
         textColor = if (useGradientThemeMenu) {
             readMenuThemeSnapshot.colors.onSurface
         } else if (immersiveMenu) {
             ReadBookConfig.durConfig.curTextColor()
         } else {
-            context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+            readMenuThemeSnapshot.colors.onSurface
         }
     }
 
@@ -380,7 +365,6 @@ class ReadMenu @JvmOverloads constructor(
             NgAppTheme(snapshot = snapshot, updateSystemBars = false) {
                 ReadFloatingToolRail(
                     dockSide = floatingToolDock,
-                    showBrightness = showBrightnessView,
                     expansion = floatingToolExpansion,
                     brightness = floatingBrightness,
                     brightnessAutomatic = floatingBrightnessAutomatic,
@@ -467,6 +451,13 @@ class ReadMenu @JvmOverloads constructor(
         floatingBrightnessAutomatic = brightnessAuto()
         floatingBrightness = AppConfig.readBrightness
         setScreenBrightness(AppConfig.readBrightness.toFloat())
+    }
+
+    fun upFloatingToolVisibility() {
+        if (!showFloatingTools) {
+            floatingToolExpansion = null
+        }
+        binding.readFloatingTools.isVisible = showFloatingTools && isVisible
     }
 
     /**
@@ -586,7 +577,7 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     private fun brightnessAuto(): Boolean {
-        return context.getPrefBoolean("brightnessAuto", true) || !showBrightnessView
+        return context.getPrefBoolean("brightnessAuto", true)
     }
 
     private fun bindEvent() = binding.run {

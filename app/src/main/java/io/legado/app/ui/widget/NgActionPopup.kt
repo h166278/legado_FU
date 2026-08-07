@@ -46,6 +46,7 @@ class NgActionPopup(
     context: Context,
     items: List<NgActionPopupItem>,
     private val widthDp: Int = 152,
+    private val themeSnapshot: NgThemeSnapshot? = null,
     onItemClick: (NgActionPopupItem) -> Unit
 ) : PopupWindow(
     resolveWidth(context, items, widthDp),
@@ -57,7 +58,10 @@ class NgActionPopup(
             orientation = LinearLayout.VERTICAL
             setPadding(0, 6.dpToPx(), 0, 6.dpToPx())
             background = GradientDrawable().apply {
-                setColor(context.getCompatColor(R.color.ng_surface_soft))
+                setColor(
+                    themeSnapshot?.colors?.surfaceContainerHigh
+                        ?: context.getCompatColor(R.color.ng_surface_soft)
+                )
                 cornerRadius = 18.dpToPx().toFloat()
             }
         }
@@ -117,7 +121,8 @@ class NgActionPopup(
         item: NgActionPopupItem,
         onClick: () -> Unit
     ): View {
-        val color = context.getCompatColor(R.color.ng_on_surface)
+        val color = themeSnapshot?.colors?.onSurface
+            ?: context.getCompatColor(R.color.ng_on_surface)
         val textMaxWidth = (
             width - 12.dpToPx() - 20.dpToPx() - 10.dpToPx() - 12.dpToPx() -
                 (if (item.checked) 30.dpToPx() else 0)
@@ -169,7 +174,10 @@ class NgActionPopup(
 
     private fun createDivider(context: Context): View {
         return View(context).apply {
-            setBackgroundColor(context.getCompatColor(R.color.ng_outline))
+            setBackgroundColor(
+                themeSnapshot?.colors?.outline
+                    ?: context.getCompatColor(R.color.ng_outline)
+            )
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 1

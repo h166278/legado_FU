@@ -4,7 +4,9 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import androidx.annotation.Keep
+import androidx.core.graphics.drawable.toDrawable
 import androidx.core.graphics.toColorInt
+import com.google.gson.annotations.SerializedName
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PageAnim
@@ -14,8 +16,6 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
-import io.legado.app.utils.compress.ZipUtils
-import io.legado.app.utils.createFolderReplace
 import io.legado.app.utils.externalCache
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
@@ -32,7 +32,6 @@ import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.resizeAndRecycle
 import splitties.init.appCtx
 import java.io.File
-import androidx.core.graphics.drawable.toDrawable
 
 /**
  * 阅读界面配置
@@ -60,6 +59,11 @@ object ReadBookConfig {
     var bgMeanColor: Int = 0
     val textColor: Int get() = durConfig.curTextColor()
     val textAccentColor: Int get() = durConfig.curTextAccentColor()
+    val resolvedTitleColor: Int get() = config.curTitleColor()
+    val textShadowColor: Int get() = config.curShadowColor()
+    val tipHeaderColor: Int get() = config.curTipHeaderColor()
+    val tipFooterColor: Int get() = config.curTipFooterColor()
+    val resolvedUnderlineColor: Int get() = config.curUnderlineColor()
     var isNineBgImg = false
 
     init {
@@ -69,7 +73,7 @@ object ReadBookConfig {
 
     @Synchronized
     fun getConfig(index: Int): Config {
-        if (configList.size < 5) {
+        if (configList.isEmpty()) {
             resetAll()
         }
         return configList.getOrNull(index) ?: configList[0]
@@ -154,18 +158,12 @@ object ReadBookConfig {
     }
 
     fun deleteDur(): Boolean {
-        if (configList.size > 5) {
-            val removeIndex = styleSelect
-            configList.removeAt(removeIndex)
-            if (removeIndex <= readStyleSelect) {
-                readStyleSelect -= 1
-            }
-            if (removeIndex <= comicStyleSelect) {
-                comicStyleSelect -= 1
-            }
-            return true
-        }
-        return false
+        if (configList.size <= 1) return false
+        val removeIndex = styleSelect.takeIf(configList.indices::contains) ?: 0
+        configList.removeAt(removeIndex)
+        readStyleSelect = 0
+        comicStyleSelect = 0
+        return true
     }
 
     fun clearBgAndCache() {
@@ -225,10 +223,10 @@ object ReadBookConfig {
                 appCtx.putPrefInt(PreferKey.comicStyleSelect, value)
             }
         }
-    var shareLayout = appCtx.getPrefBoolean(PreferKey.shareLayout)
+    var shareLayout = appCtx.getPrefBoolean(PreferKey.shareLayout, false)
         set(value) {
             field = value
-            if (appCtx.getPrefBoolean(PreferKey.shareLayout) != value) {
+            if (appCtx.getPrefBoolean(PreferKey.shareLayout, false) != value) {
                 appCtx.putPrefBoolean(PreferKey.shareLayout, value)
             }
         }
@@ -274,6 +272,18 @@ object ReadBookConfig {
             config.textFont = value
         }
 
+    var titleFont: String
+        get() = config.titleFont
+        set(value) {
+            config.titleFont = value
+        }
+
+    val headerFont: String get() = config.headerFont
+    val footerFont: String get() = config.footerFont
+    val headerFontSize: Int get() = config.headerFontSize
+    val footerFontSize: Int get() = config.footerFontSize
+    val applyHeaderStyle: Boolean get() = config.applyHeaderStyle
+
     var textBold: Int
         get() = config.textBold
         set(value) {
@@ -285,6 +295,12 @@ object ReadBookConfig {
         set(value) {
             config.textSize = value
         }
+
+    val textItalic: Boolean get() = config.textItalic
+    val textShadow: Boolean get() = config.textShadow
+    val shadowRadius: Float get() = config.shadowRadius
+    val shadowDx: Float get() = config.shadowDx
+    val shadowDy: Float get() = config.shadowDy
 
     var letterSpacing: Float
         get() = config.letterSpacing
@@ -318,6 +334,14 @@ object ReadBookConfig {
             config.titleSize = value
         }
 
+    val titleBold: Int get() = config.titleBold
+    val titleLineSpacingExtra: Int get() = config.titleLineSpacingExtra
+    val titleLineSpacingSub: Int get() = config.titleLineSpacingSub
+    val titleSegType: Int get() = config.titleSegType
+    val titleSegScaling: Float get() = config.titleSegScaling
+    val titleSegDistance: Int get() = config.titleSegDistance
+    val titleSegFlag: String get() = config.titleSegFlag
+
     /**
      * 是否标题居中
      */
@@ -341,11 +365,53 @@ object ReadBookConfig {
             config.paragraphIndent = value
         }
 
-    var underlineMode: Int
-        get() = config.underlineMode
+    var fullLineUnderlineEnabled: Boolean
+        get() = config.underline
         set(value) {
-            config.underlineMode = value
+            config.underline = value
         }
+
+    var underlinePadding: Int
+        get() = config.underlinePadding
+        set(value) {
+            config.underlinePadding = value
+        }
+
+    var underlineHeight: Int
+        get() = config.underlineHeight
+        set(value) {
+            config.underlineHeight = value
+        }
+
+    var underlineExtend: Boolean
+        get() = config.underlineExtend
+        set(value) {
+            config.underlineExtend = value
+        }
+
+    var dottedLine: Boolean
+        get() = config.dottedLine
+        set(value) {
+            config.dottedLine = value
+        }
+
+    var dottedBase: Float
+        get() = config.dottedBase
+        set(value) {
+            config.dottedBase = value
+        }
+
+    var dottedRatio: Float
+        get() = config.dottedRatio
+        set(value) {
+            config.dottedRatio = value
+        }
+    val highlightRules: List<ReadHighlightRule>
+        get() = config.highlightRules
+            .asSequence()
+            .filter(ReadHighlightRule::enabled)
+            .sortedBy(ReadHighlightRule::position)
+            .toList()
 
     var paddingBottom: Int
         get() = config.paddingBottom
@@ -444,6 +510,15 @@ object ReadBookConfig {
             exportConfig.titleSize = shareConfig.titleSize
             exportConfig.titleTopSpacing = shareConfig.titleTopSpacing
             exportConfig.titleBottomSpacing = shareConfig.titleBottomSpacing
+            exportConfig.underline = shareConfig.underline
+            exportConfig.underlinePadding = shareConfig.underlinePadding
+            exportConfig.underlineHeight = shareConfig.underlineHeight
+            exportConfig.underlineExtend = shareConfig.underlineExtend
+            exportConfig.copyUnderlineColorsFrom(shareConfig)
+            exportConfig.dottedLine = shareConfig.dottedLine
+            exportConfig.dottedBase = shareConfig.dottedBase
+            exportConfig.dottedRatio = shareConfig.dottedRatio
+            exportConfig.highlightRules = ArrayList(shareConfig.highlightRules)
             exportConfig.paddingBottom = shareConfig.paddingBottom
             exportConfig.paddingLeft = shareConfig.paddingLeft
             exportConfig.paddingRight = shareConfig.paddingRight
@@ -471,75 +546,10 @@ object ReadBookConfig {
         return exportConfig
     }
 
-    fun import(byteArray: ByteArray): Config {
-        val configZipPath = FileUtils.getPath(appCtx.externalCache, "readConfig.zip")
-        FileUtils.delete(configZipPath)
-        val zipFile = FileUtils.createFileIfNotExist(configZipPath)
-        zipFile.writeBytes(byteArray)
-        val configDir = appCtx.externalCache.getFile("readConfig")
-        configDir.createFolderReplace()
-        ZipUtils.unZipToPath(zipFile, configDir)
-        val configFile = configDir.getFile(configFileName)
-        val config: Config = GSON.fromJsonObject<Config>(configFile.readText()).getOrThrow()
-        if (config.textFont.isNotEmpty()) {
-            val fontName = config.textFont
-            val fontPath =
-                FileUtils.getPath(appCtx.externalFiles, "font", fontName)
-            val fontFile = configDir.getFile(fontName)
-            if (fontFile.exists()) {
-                if (!FileUtils.exist(fontPath)) {
-                    fontFile.copyTo(File(fontPath))
-                }
-                config.textFont = fontPath
-            } else {
-                config.textFont = ""
-            }
-        }
-        if (config.bgType == 2) {
-            val bgName = FileUtils.getName(config.bgStr)
-            config.bgStr = bgName
-            val bgPath = FileUtils.getPath(appCtx.externalFiles, "bg", bgName)
-            if (!FileUtils.exist(bgPath)) {
-                val bgFile = configDir.getFile(bgName)
-                if (bgFile.exists()) {
-                    bgFile.copyTo(File(bgPath))
-                }
-            }
-            config.bgStr = bgPath
-        } else if (config.bgType == 0) {
-            config.bgStr.toColorInt()
-        }
-        if (config.bgTypeNight == 2) {
-            val bgName = FileUtils.getName(config.bgStrNight)
-            config.bgStrNight = bgName
-            val bgPath = FileUtils.getPath(appCtx.externalFiles, "bg", bgName)
-            if (!FileUtils.exist(bgPath)) {
-                val bgFile = configDir.getFile(bgName)
-                if (bgFile.exists()) {
-                    bgFile.copyTo(File(bgPath))
-                }
-            }
-            config.bgStrNight = bgPath
-        } else if (config.bgTypeNight == 0) {
-            config.bgStrNight.toColorInt()
-        }
-        if (config.bgTypeEInk == 2) {
-            val bgName = FileUtils.getName(config.bgStrEInk)
-            config.bgStrEInk = bgName
-            val bgPath = FileUtils.getPath(appCtx.externalFiles, "bg", bgName)
-            if (!FileUtils.exist(bgPath)) {
-                val bgFile = configDir.getFile(bgName)
-                if (bgFile.exists()) {
-                    bgFile.copyTo(File(bgPath))
-                }
-            }
-            config.bgStrEInk = bgPath
-        } else if (config.bgTypeEInk == 0) {
-            config.bgStrEInk.toColorInt()
-        }
-        config.curTextColor()
-        config.curTextAccentColor()
-        return config
+    fun import(byteArray: ByteArray): Config = importWithReport(byteArray).config
+
+    internal fun importWithReport(byteArray: ByteArray): ReadStylePackageManager.ImportResult {
+        return ReadStylePackageManager.import(byteArray)
     }
 
     @Keep
@@ -564,8 +574,21 @@ object ReadBookConfig {
         private var pageAnim: Int = 0,//翻页动画
         private var pageAnimEInk: Int = 4,
         var textFont: String = "",//字体
+        @SerializedName("titleFont") var titleFont: String = "",//标题字体
+        @SerializedName("headerFont") var headerFont: String = "",//页眉字体
+        @SerializedName("footerFont") var footerFont: String = "",//页脚字体
+        @SerializedName("headerFontSize") var headerFontSize: Int = 12,
+        @SerializedName("footerFontSize") var footerFontSize: Int = 12,
+        @SerializedName("applyHeaderStyle") var applyHeaderStyle: Boolean = true,
         var textBold: Int = 0,//是否粗体字 0:正常, 1:粗体, 2:细体
         var textSize: Int = 20,//文字大小
+        @SerializedName("textItalic") var textItalic: Boolean = false,
+        @SerializedName("textShadow") var textShadow: Boolean = false,
+        @SerializedName("shadowRadius") var shadowRadius: Float = 16f,
+        @SerializedName("shadowDx") var shadowDx: Float = 1f,
+        @SerializedName("shadowDy") var shadowDy: Float = 1f,
+        @SerializedName("shadowColor") private var shadowColor: String = "#3E3D3B",
+        @SerializedName("shadowColorN") private var shadowColorNight: String = "#3E3D3B",
         var letterSpacing: Float = 0.1f,//字间距
         var lineSpacingExtra: Int = 12,//行间距
         var paragraphSpacing: Int = 2,//段距
@@ -573,8 +596,26 @@ object ReadBookConfig {
         var titleSize: Int = 0,
         var titleTopSpacing: Int = 0,
         var titleBottomSpacing: Int = 0,
+        @SerializedName("titleColor") var titleColor: Int = 0,
+        @SerializedName("titleColorNight") var titleColorNight: Int = 0,
+        @SerializedName("titleBold") var titleBold: Int = 0,
+        @SerializedName("titleLineSpacingExtra") var titleLineSpacingExtra: Int = 12,
+        @SerializedName("titleLineSpacingSub") var titleLineSpacingSub: Int = 12,
+        @SerializedName("titleSegType") var titleSegType: Int = 0,
+        @SerializedName("titleSegScaling") var titleSegScaling: Float = 1f,
+        @SerializedName("titleSegDistance") var titleSegDistance: Int = 4,
+        @SerializedName("titleSegFlag") var titleSegFlag: String = "",
         var paragraphIndent: String = "　　",//段落缩进
         var underlineMode: Int = 0, //下划线
+        @SerializedName("underline") var underline: Boolean = false,
+        @SerializedName("underlinePadding") var underlinePadding: Int = 10,
+        @SerializedName("underlineHeight") var underlineHeight: Int = 1,
+        @SerializedName("underlineExtend") var underlineExtend: Boolean = false,
+        @SerializedName("underlineColor") var underlineColor: String = "#3E3D3B",
+        @SerializedName("underlineColorNight") var underlineColorNight: String = "#ADADAD",
+        @SerializedName("dottedLine") var dottedLine: Boolean = false,
+        @SerializedName("dottedBase") var dottedBase: Float = 6f,
+        @SerializedName("dottedRatio") var dottedRatio: Float = 6f,
         var paddingBottom: Int = 6,
         var paddingLeft: Int = 16,
         var paddingRight: Int = 16,
@@ -596,9 +637,16 @@ object ReadBookConfig {
         var tipFooterMiddle: Int = ReadTipConfig.none,
         var tipFooterRight: Int = ReadTipConfig.pageAndTotal,
         var tipColor: Int = 0,
+        @SerializedName("tipHeaderColor") var tipHeaderColor: Int = 0,
+        @SerializedName("tipHeaderColorNight") var tipHeaderColorNight: Int = 0,
+        @SerializedName("tipFooterColor") var tipFooterColor: Int = 0,
+        @SerializedName("tipFooterColorNight") var tipFooterColorNight: Int = 0,
         var tipDividerColor: Int = -1,
-        var headerMode: Int = 0,
-        var footerMode: Int = 0
+        var headerMode: Int = 2,
+        var footerMode: Int = 0,
+        @SerializedName("highlightRules") var highlightRules: ArrayList<ReadHighlightRule> = arrayListOf(),
+        @SerializedName("ngReadStyleSource") var ngReadStyleSource: String? = null,
+        @SerializedName("ngUnknownFields") var ngUnknownFields: Map<String, String> = emptyMap(),
     ) {
 
         @Transient
@@ -699,21 +747,52 @@ object ReadBookConfig {
             }
         }
 
-        fun setCurStatusIconDark(isDark: Boolean) {
-            when {
-                AppConfig.isEInkMode -> darkStatusIconEInk = isDark
-                ReadBookConfig.isNightTheme -> darkStatusIconNight = isDark
-                else -> darkStatusIcon = isDark
+        fun curShadowColor(): Int {
+            return runCatching {
+                if (ReadBookConfig.isNightTheme) shadowColorNight.toColorInt()
+                else shadowColor.toColorInt()
+            }.getOrDefault(curTextColor())
+        }
+
+        fun curTitleColor(): Int = when {
+            ReadBookConfig.isNightTheme && titleColorNight != 0 -> titleColorNight
+            titleColor != 0 -> titleColor
+            else -> curTextColor()
+        }
+
+        fun curTipHeaderColor(): Int = when {
+            ReadBookConfig.isNightTheme && tipHeaderColorNight != 0 -> tipHeaderColorNight
+            tipHeaderColor != 0 -> tipHeaderColor
+            tipColor != 0 -> tipColor
+            else -> curTextColor()
+        }
+
+        fun curTipFooterColor(): Int = when {
+            ReadBookConfig.isNightTheme && tipFooterColorNight != 0 -> tipFooterColorNight
+            tipFooterColor != 0 -> tipFooterColor
+            tipColor != 0 -> tipColor
+            else -> curTextColor()
+        }
+
+        fun curUnderlineColor(): Int = runCatching {
+            if (ReadBookConfig.isNightTheme) underlineColorNight.toColorInt()
+            else underlineColor.toColorInt()
+        }.getOrDefault(curTextColor())
+
+        fun setCurUnderlineColor(color: Int) {
+            if (ReadBookConfig.isNightTheme) {
+                underlineColorNight = "#${color.hexString}"
+            } else {
+                underlineColor = "#${color.hexString}"
             }
         }
 
-        fun curStatusIconDark(): Boolean {
-            return when {
-                AppConfig.isEInkMode -> darkStatusIconEInk
-                ReadBookConfig.isNightTheme -> darkStatusIconNight
-                else -> darkStatusIcon
-            }
+        fun copyUnderlineColorsFrom(source: Config) {
+            underlineColor = source.underlineColor
+            underlineColorNight = source.underlineColorNight
         }
+
+        fun curStatusIconDark(): Boolean = !ReadBookConfig.isNightTheme
 
         fun setCurPageAnim(@PageAnim.Anim anim: Int) {
             when {

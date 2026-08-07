@@ -281,6 +281,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
         nextPage.upStatusBar()
     }
 
+    fun upTipVisibility(readerOverlayVisible: Boolean) {
+        curPage.upTipVisibility(readerOverlayVisible)
+        prevPage.upTipVisibility(readerOverlayVisible)
+        nextPage.upTipVisibility(readerOverlayVisible)
+    }
+
     /**
      * 保存开始位置
      */

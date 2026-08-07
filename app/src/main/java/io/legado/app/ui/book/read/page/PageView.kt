@@ -42,6 +42,7 @@ class PageView(context: Context) : FrameLayout(context) {
 
     private val binding = ViewBookPageBinding.inflate(LayoutInflater.from(context), this, true)
     private val readBookActivity get() = activity as? ReadBookActivity
+    private var readerOverlayVisible = false
     private var battery = 100
     private var tvTitle: BatteryView? = null
     private var tvTime: BatteryView? = null
@@ -85,9 +86,6 @@ class PageView(context: Context) : FrameLayout(context) {
         upTipStyle()
         ReadBookConfig.let {
             val textColor = it.textColor
-            val tipColor = with(ReadTipConfig) {
-                if (tipColor == 0) textColor else tipColor
-            }
             val tipDividerColor = with(ReadTipConfig) {
                 when (tipDividerColor) {
                     -1 -> ContextCompat.getColor(context, R.color.divider)
@@ -95,12 +93,12 @@ class PageView(context: Context) : FrameLayout(context) {
                     else -> tipDividerColor
                 }
             }
-            tvHeaderLeft.setColor(tipColor)
-            tvHeaderMiddle.setColor(tipColor)
-            tvHeaderRight.setColor(tipColor)
-            tvFooterLeft.setColor(tipColor)
-            tvFooterMiddle.setColor(tipColor)
-            tvFooterRight.setColor(tipColor)
+            tvHeaderLeft.setColor(it.tipHeaderColor)
+            tvHeaderMiddle.setColor(it.tipHeaderColor)
+            tvHeaderRight.setColor(it.tipHeaderColor)
+            tvFooterLeft.setColor(it.tipFooterColor)
+            tvFooterMiddle.setColor(it.tipFooterColor)
+            tvFooterRight.setColor(it.tipFooterColor)
             vwTopDivider.backgroundColor = tipDividerColor
             vwBottomDivider.backgroundColor = tipDividerColor
             upStatusBar()
@@ -169,11 +167,7 @@ class PageView(context: Context) : FrameLayout(context) {
         tvFooterLeft.tag = null
         tvFooterMiddle.tag = null
         tvFooterRight.tag = null
-        llHeader.isGone = when (ReadTipConfig.headerMode) {
-            1 -> false
-            2 -> true
-            else -> !ReadBookConfig.hideStatusBar
-        }
+        upTipVisibility()
         llFooter.isGone = when (ReadTipConfig.footerMode) {
             1 -> true
             else -> false
@@ -251,6 +245,32 @@ class PageView(context: Context) : FrameLayout(context) {
             typeface = ChapterProvider.typeface
             textSize = 12f
         }
+        val headerTypeface = ChapterProvider.loadOptionalTypeface(ReadBookConfig.headerFont)
+            ?: ChapterProvider.typeface
+        val footerTypeface = if (ReadBookConfig.applyHeaderStyle) {
+            headerTypeface
+        } else {
+            ChapterProvider.loadOptionalTypeface(ReadBookConfig.footerFont)
+                ?: ChapterProvider.typeface
+        }
+        listOf(tvHeaderLeft, tvHeaderMiddle, tvHeaderRight).forEach { view ->
+            view.typeface = headerTypeface
+            view.textSize = ReadBookConfig.headerFontSize.toFloat()
+        }
+        listOf(tvFooterLeft, tvFooterMiddle, tvFooterRight).forEach { view ->
+            view.typeface = footerTypeface
+            view.textSize = if (ReadBookConfig.applyHeaderStyle) {
+                ReadBookConfig.headerFontSize.toFloat()
+            } else {
+                ReadBookConfig.footerFontSize.toFloat()
+            }
+        }
+    }
+
+    fun upTipVisibility(readerOverlayVisible: Boolean = this.readerOverlayVisible) {
+        this.readerOverlayVisible = readerOverlayVisible
+        binding.llHeader.isGone = ReadTipConfig.headerMode != 1 ||
+                !ReadBookConfig.hideStatusBar || readerOverlayVisible
     }
 
     /**

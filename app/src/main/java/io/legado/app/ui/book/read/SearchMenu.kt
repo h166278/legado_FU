@@ -12,8 +12,6 @@ import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.databinding.ViewSearchMenuBinding
 import io.legado.app.lib.theme.Selector
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.ColorUtils
@@ -35,8 +33,8 @@ class SearchMenu @JvmOverloads constructor(
 
     private val menuBottomIn: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_in)
     private val menuBottomOut: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_out)
-    private val bgColor: Int = context.bottomBackground
-    private val textColor: Int = context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
+    private val bgColor: Int = ReadDrawerStyle.surfaceColor(context)
+    private val textColor: Int = ReadDrawerStyle.contentColor(context)
     private val bottomBackgroundList: ColorStateList =
         Selector.colorBuild().setDefaultColor(bgColor)
             .setPressedColor(ColorUtils.darkenColor(bgColor)).create()

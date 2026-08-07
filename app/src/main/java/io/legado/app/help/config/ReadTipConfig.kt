@@ -1,6 +1,5 @@
 package io.legado.app.help.config
 
-import android.content.Context
 import io.legado.app.R
 import splitties.init.appCtx
 
@@ -90,18 +89,4 @@ object ReadTipConfig {
             ReadBookConfig.config.tipDividerColor = value
         }
 
-    fun getHeaderModes(context: Context): LinkedHashMap<Int, String> {
-        return linkedMapOf(
-            Pair(0, context.getString(R.string.hide_when_status_bar_show)),
-            Pair(1, context.getString(R.string.show)),
-            Pair(2, context.getString(R.string.hide))
-        )
-    }
-
-    fun getFooterModes(context: Context): LinkedHashMap<Int, String> {
-        return linkedMapOf(
-            Pair(0, context.getString(R.string.show)),
-            Pair(1, context.getString(R.string.hide))
-        )
-    }
 }

@@ -20,6 +20,7 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.getBookSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReadHighlightRule
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadBook
@@ -82,8 +83,6 @@ class TextChapterLayout(
     private val paddingTop = ChapterProvider.paddingTop
 
     private val titlePaint = ChapterProvider.titlePaint
-    private val titlePaintTextHeight = ChapterProvider.titlePaintTextHeight
-    private val titlePaintFontMetrics = ChapterProvider.titlePaintFontMetrics
 
     private val contentPaint = ChapterProvider.contentPaint
     private val reviewCharWidth by lazy { contentPaint.measureText(srcReplaceStr) * 1.5556f }
@@ -93,6 +92,7 @@ class TextChapterLayout(
     private val titleTopSpacing = ChapterProvider.titleTopSpacing
     private val titleBottomSpacing = ChapterProvider.titleBottomSpacing
     private val lineSpacingExtra = ChapterProvider.lineSpacingExtra
+    private val titleLineSpacingExtra = ChapterProvider.titleLineSpacingExtra
     private val paragraphSpacing = ChapterProvider.paragraphSpacing
 
     private val visibleHeight = ChapterProvider.visibleHeight
@@ -110,6 +110,9 @@ class TextChapterLayout(
     private val textFullJustify = ReadBookConfig.textFullJustify
     private val adaptSpecialStyle = AppConfig.adaptSpecialStyle
     private val pageAnim = book.getPageAnim()
+    private val compiledHighlightRules = ReadBookConfig.highlightRules.mapNotNull { rule ->
+        runCatching { rule to Regex(rule.pattern) }.getOrNull()
+    }
 
     private var pendingTextPage = TextPage()
 
@@ -221,8 +224,35 @@ class TextChapterLayout(
 
         if (titleMode != 2 || bookChapter.isVolume || contents.isEmpty()) {
             var firstLine = true
+            val titleSegments = displayTitle.splitNotBlank("\n").flatMap { title ->
+                ReadTitleStyleParser.parse(
+                    title,
+                    ReadBookConfig.titleSegType,
+                    ReadBookConfig.titleSegDistance,
+                    ReadBookConfig.titleSegFlag,
+                    ReadBookConfig.titleSegScaling,
+                )
+            }
             //标题非隐藏
-            displayTitle.splitNotBlank("\n").forEach { text ->
+            titleSegments.forEachIndexed { segmentIndex, segment ->
+                val text = segment.text
+                val segmentPaint: TextPaint
+                val segmentMetrics: Paint.FontMetrics
+                val segmentHeight: Float
+                if (segment.main) {
+                    // MD3 主标题沿用正文排版的有效字高；bottom - top 会额外增加字体留白，
+                    // 在页底对齐开启时表现为标题和首段下移、后续正文逐步压缩。
+                    segmentPaint = titlePaint
+                    segmentMetrics = ChapterProvider.titlePaintFontMetrics
+                    segmentHeight = ChapterProvider.titlePaintTextHeight
+                } else {
+                    segmentPaint = TextPaint(titlePaint).apply {
+                        textSize = titlePaint.textSize * segment.scale
+                    }
+                    segmentMetrics = segmentPaint.fontMetrics
+                    segmentHeight = segmentMetrics.bottom - segmentMetrics.top
+                }
+                val firstSegmentLine = pendingTextPage.lines.size
                 val srcList = LinkedList<String>()
                 val clickList = LinkedList<String?>()
                 val titleImg = if (firstLine) {
@@ -300,9 +330,9 @@ class TextChapterLayout(
                 setTypeText(
                     book,
                     if (imgText != null) text + imgText else text,
-                    titlePaint,
-                    titlePaintTextHeight,
-                    titlePaintFontMetrics,
+                    segmentPaint,
+                    segmentHeight,
+                    segmentMetrics,
                     imageStyle,
                     srcList = srcList,
                     clickList = clickList,
@@ -310,8 +340,16 @@ class TextChapterLayout(
                     emptyContent = contents.isEmpty(),
                     isVolumeTitle = bookChapter.isVolume
                 )
+                if (!segment.main) {
+                    pendingTextPage.lines.drop(firstSegmentLine).forEach { line ->
+                        line.titleTextSize = segmentPaint.textSize
+                    }
+                }
                 pendingTextPage.lines.last().isParagraphEnd = true
                 stringBuilder.append("\n")
+                if (segmentIndex < titleSegments.lastIndex) {
+                    durY += segmentHeight * ChapterProvider.titleLineSpacingSub
+                }
             }
             durY += titleBottomSpacing
 
@@ -911,8 +949,10 @@ class TextChapterLayout(
         srcList: LinkedList<String>? = null,
         clickList: LinkedList<String?>?
     ) {
+        val charStyles = createHighlightStyles(text, isTitle)
         val widthsArray = allocateFloatArray(text.length)
         textPaint.getTextWidthsCompat(text, widthsArray, reviewCharWidth)
+        remeasureHighlightFonts(text, charStyles, textPaint, widthsArray)
         val layout = if (useZhLayout) {
             val (words, widths) = measureTextSplit(text, widthsArray)
             val indentSize = if (isFirstLine) paragraphIndent.length else 0
@@ -1010,6 +1050,7 @@ class TextChapterLayout(
                     }
                 }
             }
+            attachHighlightStyles(textLine, charStyles, lineStart)
             if (doublePage) {
                 textLine.isLeftLine = absStartX < viewWidth / 2
             }
@@ -1018,12 +1059,107 @@ class TextChapterLayout(
             textLine.upTopBottom(durY, textHeight, fontMetrics)
             val textPage = pendingTextPage
             textPage.addLine(textLine)
-            durY += textHeight * lineSpacingExtra
+            durY += textHeight * if (isTitle) titleLineSpacingExtra else lineSpacingExtra
             if (textPage.height < durY) {
                 textPage.height = durY
             }
         }
         durY += textHeight * paragraphSpacing / 10f
+    }
+
+    private fun createHighlightStyles(text: String, isTitle: Boolean): Array<ReadCharStyle?>? {
+        if (text.isEmpty() || compiledHighlightRules.isEmpty()) return null
+        var styles: Array<ReadCharStyle?>? = null
+        compiledHighlightRules.forEach { (rule, regex) ->
+            if (!rule.appliesToTitle(isTitle)) return@forEach
+            val style = rule.toReadCharStyle()
+            regex.findAll(text).forEach { match ->
+                val active = styles ?: arrayOfNulls<ReadCharStyle>(text.length).also { styles = it }
+                match.range.forEach { index ->
+                    if (index in active.indices) active[index] = style
+                }
+            }
+        }
+        return styles
+    }
+
+    private fun ReadHighlightRule.toReadCharStyle() = ReadCharStyle(
+        textColor = textColor,
+        bgColor = bgColor,
+        underlineMode = underlineMode,
+        underlineColor = underlineColor,
+        underlineWidth = underlineWidth,
+        underlineOffset = underlineOffset,
+        underlineSvgPath = underlineSvgPath.orEmpty(),
+        bgImage = bgImage.orEmpty(),
+        bgImageFit = bgImageFit,
+        bgImageScale = bgImageScale,
+        fontPath = fontPath.orEmpty(),
+        fontWeight = fontWeight,
+        isItalic = isItalic,
+        npLeft = npLeft,
+        npRight = npRight,
+        npTop = npTop,
+        npBottom = npBottom,
+    )
+
+    private fun remeasureHighlightFonts(
+        text: String,
+        styles: Array<ReadCharStyle?>?,
+        basePaint: TextPaint,
+        widths: FloatArray,
+    ) {
+        if (styles == null || styles.none {
+                it != null && (it.fontPath.isNotBlank() || it.fontWeight != 400 || it.isItalic)
+            }) return
+        val measurePaint = TextPaint(basePaint)
+        var index = 0
+        while (index < text.length) {
+            val style = styles[index]
+            if (style == null || (
+                    style.fontPath.isBlank() && style.fontWeight == 400 && !style.isItalic
+                )) {
+                index++
+                continue
+            }
+            val start = index
+            index++
+            while (index < text.length && styles[index]?.let {
+                    it.fontPath == style.fontPath &&
+                        it.fontWeight == style.fontWeight &&
+                        it.isItalic == style.isItalic
+                } == true
+            ) {
+                index++
+            }
+            val typeface = ChapterProvider.resolveStyledTypeface(
+                style.fontPath,
+                style.fontWeight,
+                style.isItalic,
+            ) ?: continue
+            measurePaint.typeface = typeface
+            val measured = FloatArray(index - start)
+            measurePaint.getTextWidths(text, start, index, measured)
+            measured.copyInto(widths, start)
+        }
+    }
+
+    private fun attachHighlightStyles(
+        line: TextLine,
+        styles: Array<ReadCharStyle?>?,
+        lineStart: Int,
+    ) {
+        if (styles == null) return
+        var sourceIndex = lineStart
+        line.columns.forEach { column ->
+            if (column is TextBaseColumn) {
+                if (column is TextColumn) {
+                    column.readStyle = styles.getOrNull(sourceIndex)
+                    if (column.readStyle != null) line.hasReadStyle = true
+                }
+                sourceIndex += column.charData.length
+            }
+        }
     }
 
     private fun calcTextLinePosition(

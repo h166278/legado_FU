@@ -3,9 +3,11 @@ package io.legado.app.ui.widget
 import android.content.Context
 import android.graphics.PorterDuff
 import android.util.AttributeSet
+import android.view.View
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import android.widget.SeekBar
+import androidx.annotation.ColorInt
 import androidx.appcompat.widget.TooltipCompat
 import io.legado.app.R
 import io.legado.app.databinding.ViewDetailSeekBarBinding
@@ -13,6 +15,7 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.progressAdd
 
 
@@ -52,11 +55,7 @@ class DetailSeekBar @JvmOverloads constructor(
         typedArray.recycle()
         if (isBottomBackground && !isInEditMode) {
             val isLight = ColorUtils.isColorLight(context.bottomBackground)
-            val textColor = context.getPrimaryTextColor(isLight)
-            binding.tvSeekTitle.setTextColor(textColor)
-            binding.ivSeekPlus.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-            binding.ivSeekReduce.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-            binding.tvSeekValue.setTextColor(textColor)
+            setContentColor(context.getPrimaryTextColor(isLight))
         }
         binding.ivSeekPlus.setOnClickListener {
             binding.seekBar.progressAdd(1)
@@ -67,6 +66,29 @@ class DetailSeekBar @JvmOverloads constructor(
             onChanged?.invoke(binding.seekBar.progress)
         }
         binding.seekBar.setOnSeekBarChangeListener(this)
+    }
+
+    fun setContentColor(@ColorInt color: Int) {
+        binding.tvSeekTitle.setTextColor(color)
+        binding.ivSeekPlus.setColorFilter(color, PorterDuff.Mode.SRC_IN)
+        binding.ivSeekReduce.setColorFilter(color, PorterDuff.Mode.SRC_IN)
+        binding.tvSeekValue.setTextColor(color)
+    }
+
+    fun useSliderOnlyLayout() {
+        binding.ivSeekPlus.visibility = View.GONE
+        binding.ivSeekReduce.visibility = View.GONE
+        binding.tvSeekTitle.layoutParams = binding.tvSeekTitle.layoutParams.apply {
+            width = 48.dpToPx()
+        }
+        binding.tvSeekValue.layoutParams = binding.tvSeekValue.layoutParams.apply {
+            width = 36.dpToPx()
+        }
+        binding.seekBar.layoutParams = binding.seekBar.layoutParams.apply {
+            height = 36.dpToPx()
+        }
+        binding.seekBar.minimumHeight = 36.dpToPx()
+        minimumHeight = 44.dpToPx()
     }
 
     private fun upValue(progress: Int = binding.seekBar.progress) {

@@ -45,7 +45,6 @@ import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
 import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.help.tts.TtsSpeedPolicy
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.view.ThemeSwitch
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
@@ -246,7 +245,7 @@ class ReadAloudModeSheet(
 
     private fun applyReadAloudModeCardStyles() = binding.run {
         val safeContext = root.context
-        val activeColor = safeContext.accentColor
+        val activeColor = ReadDrawerStyle.accentColor(safeContext)
         val innerSurfaceColor = ContextCompat.getColor(safeContext, R.color.ng_surface)
         val textColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface)
         val inactiveIconColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface_variant)
@@ -459,7 +458,7 @@ class ReadAloudModeSheet(
 }
 
 private fun SeekBar.applyReadAloudSliderStyle() {
-    val accent = context.accentColor
+    val accent = ReadDrawerStyle.accentColor(context)
     val trackBackgroundTint = ColorStateList.valueOf(ColorUtils.adjustAlpha(accent, 0.18f))
     progressDrawable = ContextCompat.getDrawable(context, R.drawable.ng_read_aloud_progress)?.mutate()
     progressTintList = ColorStateList.valueOf(accent)
@@ -516,7 +515,9 @@ class ReadAloudMoreSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_more_
             notifyReadAloudRuntimeChanged()
         }
         seekWorkerCount.applyReadAloudSliderStyle()
-        seekWorkerCount.tickMarkTintList = ColorStateList.valueOf(view.context.accentColor)
+        seekWorkerCount.tickMarkTintList = ColorStateList.valueOf(
+            ReadDrawerStyle.accentColor(view.context)
+        )
         seekWorkerCount.progress = AppConfig.readAloudWorkerCount - 1
         syncWorkerCount(seekWorkerCount.progress + 1)
         seekWorkerCount.setOnSeekBarChangeListener(object : SeekBarChangeListener {
@@ -596,7 +597,7 @@ class ReadAloudMoreSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_more_
     }
 
     private fun syncWorkerCount(count: Int) = binding.run {
-        val activeColor = seekWorkerCount.context.accentColor
+        val activeColor = ReadDrawerStyle.accentColor(seekWorkerCount.context)
         val inactiveColor = ContextCompat.getColor(
             seekWorkerCount.context,
             R.color.ng_on_surface_variant
@@ -666,7 +667,7 @@ class ReadAloudCatalogSheet(
             setTrackVisible(true)
             setHideScrollbar(false)
             setBubbleVisible(false)
-            setHandleColor(activity.accentColor)
+            setHandleColor(ReadDrawerStyle.accentColor(activity))
             setTrackColor(
                 ColorUtils.adjustAlpha(
                     ContextCompat.getColor(activity, R.color.ng_on_surface_variant),
@@ -691,10 +692,18 @@ class ReadAloudCatalogSheet(
                 arrayOf(
                     GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
-                        setColor(ColorUtils.adjustAlpha(activity.accentColor, 0.12f))
+                        setColor(
+                            ColorUtils.adjustAlpha(
+                                ReadDrawerStyle.accentColor(activity),
+                                0.12f,
+                            )
+                        )
                         setStroke(
                             1.dpToPx(),
-                            ColorUtils.adjustAlpha(activity.accentColor, 0.2f)
+                            ColorUtils.adjustAlpha(
+                                ReadDrawerStyle.accentColor(activity),
+                                0.2f,
+                            )
                         )
                     }
                 )
@@ -703,7 +712,10 @@ class ReadAloudCatalogSheet(
                 setLayerInset(0, inset, inset, inset, inset)
             }
             imageTintList = ColorStateList.valueOf(
-                ColorUtils.adjustAlpha(activity.accentColor, 0.9f)
+                ColorUtils.adjustAlpha(
+                    ReadDrawerStyle.accentColor(activity),
+                    0.9f,
+                )
             )
             elevation = 1.dpToPx().toFloat()
             setPadding(13.dpToPx(), 13.dpToPx(), 13.dpToPx(), 13.dpToPx())
@@ -972,7 +984,7 @@ private class ReadAloudCatalogAdapter(
             titleView.text = chapter.title
             titleView.typeface = if (isCurrent) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             titleView.setTextColor(
-                if (isCurrent) context.accentColor
+                if (isCurrent) ReadDrawerStyle.accentColor(context)
                 else ContextCompat.getColor(context, R.color.ng_on_surface)
             )
             val meta = chapter.tag?.takeIf { it.isNotBlank() }
