@@ -925,10 +925,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         textActionMenu.show(
             binding.textMenuPosition,
             binding.root.height + navigationBarHeight,
-            binding.textMenuPosition.x.toInt(),
             binding.textMenuPosition.y.toInt(),
             binding.cursorLeft.y.toInt() + binding.cursorLeft.height,
-            binding.cursorRight.x.toInt(),
             binding.cursorRight.y.toInt() + binding.cursorRight.height
         )
     }

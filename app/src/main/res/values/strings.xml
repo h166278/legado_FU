@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="switch_selection_read_mode">Switch selected-text read mode</string>
     <string name="book_scan">AI 扫书</string>
     <string name="book_scan_summary">分析书籍是否存在重大雷点</string>
     <!--App-->

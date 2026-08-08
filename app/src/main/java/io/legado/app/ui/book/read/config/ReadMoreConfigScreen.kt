@@ -399,12 +399,6 @@ private fun ContentSettingsPage(
             onCheckedChange = { actions.onBooleanChanged(PreferKey.textSelectAble, it) },
         )
         ReadMoreDivider(contentColor)
-        SwitchSettingRow(
-            title = stringResource(R.string.expand_text_menu),
-            checked = state.boolean(PreferKey.expandTextMenu),
-            onCheckedChange = { actions.onBooleanChanged(PreferKey.expandTextMenu, it) },
-        )
-        ReadMoreDivider(contentColor)
         ChoiceSettingRow(
             title = stringResource(R.string.click_image_way),
             selectedValue = state.value(PreferKey.clickImgWay),

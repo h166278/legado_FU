@@ -175,8 +175,6 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
                 postEvent(PreferKey.showBrightnessView, "")
             }
 
-            PreferKey.expandTextMenu -> readActivity?.textActionMenu?.upMenu()
-
             PreferKey.doublePageHorizontal -> {
                 ChapterProvider.upLayout()
                 ReadBook.loadContent(false)
@@ -331,7 +329,6 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
             PreferKey.adaptSpecialStyle to true,
             PreferKey.autoChangeSource to true,
             PreferKey.textSelectAble to true,
-            PreferKey.expandTextMenu to false,
             PreferKey.optimizeRender to false,
         )
         val values = mapOf(

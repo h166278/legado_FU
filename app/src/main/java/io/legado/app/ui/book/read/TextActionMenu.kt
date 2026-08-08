@@ -2,212 +2,343 @@ package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
 import android.app.SearchManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
+import androidx.activity.ComponentActivity
+import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.appcompat.view.SupportMenuInflater
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
-import androidx.core.view.isVisible
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.graphics.drawable.toBitmap
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.R
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.ItemTextBinding
-import io.legado.app.databinding.PopupActionMenuBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.utils.getPrefBoolean
-import io.legado.app.utils.gone
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.visible
+import kotlin.math.max
 
 @SuppressLint("RestrictedApi")
-class TextActionMenu(private val context: Context, private val callBack: CallBack) :
+class TextActionMenu(private val context: ComponentActivity, private val callBack: CallBack) :
     PopupWindow(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
 
-    private val binding = PopupActionMenuBinding.inflate(LayoutInflater.from(context))
-    private val adapter = Adapter(context).apply {
-        setHasStableIds(true)
+    private val menuItems: List<MenuItemImpl> = buildMenuItems()
+    private val primaryMenuItemIds = setOf(
+        R.id.menu_replace,
+        R.id.menu_ai_purify,
+        R.id.menu_copy,
+        R.id.menu_bookmark,
+    )
+    private val currentPageState = mutableIntStateOf(0)
+    private val moreMenuVisibleState = mutableStateOf(false)
+    private val themeSnapshotState = mutableStateOf(ReadDrawerStyle.themeSnapshot(context))
+    private var moreMenuPopup: PopupWindow? = null
+    private var popupParentView: View? = null
+    private var toolbarX = 0
+    private var toolbarY = 0
+    private var toolbarWidth = 0
+    private var toolbarHeight = 0
+    private var menuSafeLeft = 0
+    private var menuSafeRight = 0
+    private var menuSafeTop = 0
+    private var menuSafeBottom = 0
+    private val actions: List<TextSelectionAction> by lazy {
+        menuItems.map { item ->
+            TextSelectionAction(
+                title = item.title.toString(),
+                iconRes = menuIcon(item.itemId),
+                iconBitmap = item.icon?.let { drawable ->
+                    val iconSize = 24.dpToPx()
+                    runCatching {
+                        drawable.toBitmap(iconSize, iconSize).asImageBitmap()
+                    }.getOrNull()
+                },
+                onClick = { onActionClick(item) },
+            )
+        }
     }
-    private val menuItems: List<MenuItemImpl>
-    private val visibleMenuItems = arrayListOf<MenuItemImpl>()
-    private val moreMenuItems = arrayListOf<MenuItemImpl>()
-    private val expandTextMenu get() = context.getPrefBoolean(PreferKey.expandTextMenu)
+    private val primaryActions: List<TextSelectionAction> by lazy {
+        menuItems.zip(actions)
+            .filter { (item) -> item.itemId in primaryMenuItemIds }
+            .map { (_, action) -> action }
+    }
+    private val moreActions: List<TextSelectionAction> by lazy {
+        menuItems.zip(actions)
+            .filterNot { (item) -> item.itemId in primaryMenuItemIds }
+            .map { (_, action) -> action }
+    }
 
     init {
-        @SuppressLint("InflateParams")
-        contentView = binding.root
-
+        contentView = ComposeView(context).apply {
+            attachViewTreeOwners()
+            setBackgroundColor(Color.TRANSPARENT)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(
+                    snapshot = themeSnapshotState.value,
+                    updateSystemBars = false,
+                ) {
+                    TextSelectionToolbar(
+                        primaryActions = primaryActions,
+                        currentPage = currentPageState.intValue,
+                        onPageChange = {
+                            currentPageState.intValue = it
+                            setMoreMenuVisible(false)
+                        },
+                        moreMenuVisible = moreMenuVisibleState.value,
+                        onMoreMenuVisibleChange = ::setMoreMenuVisible,
+                        onLongClick = ::toggleSelectionReadMode,
+                    )
+                }
+            }
+        }
+        setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        elevation = 0f
         isTouchable = true
         isOutsideTouchable = false
         isFocusable = false
-
-        val myMenu = MenuBuilder(context)
-        val otherMenu = MenuBuilder(context)
-        SupportMenuInflater(context).inflate(R.menu.content_select_action, myMenu)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            onInitializeMenu(otherMenu)
-        }
-        menuItems = myMenu.visibleItems + otherMenu.visibleItems
-        visibleMenuItems.addAll(menuItems.subList(0, 5))
-        moreMenuItems.addAll(menuItems.subList(5, menuItems.size))
-        binding.recyclerView.adapter = adapter
-        binding.recyclerViewMore.adapter = adapter
         setOnDismissListener {
-            if (!context.getPrefBoolean(PreferKey.expandTextMenu)) {
-                binding.ivMenuMore.setImageResource(R.drawable.ic_more_vert)
-                binding.recyclerViewMore.gone()
-                adapter.setItems(visibleMenuItems)
-                binding.recyclerView.visible()
-            }
-        }
-        binding.ivMenuMore.setOnClickListener {
-            if (binding.recyclerView.isVisible) {
-                binding.ivMenuMore.setImageResource(R.drawable.ic_arrow_back)
-                adapter.setItems(moreMenuItems)
-                binding.recyclerView.gone()
-                binding.recyclerViewMore.visible()
-            } else {
-                binding.ivMenuMore.setImageResource(R.drawable.ic_more_vert)
-                binding.recyclerViewMore.gone()
-                adapter.setItems(visibleMenuItems)
-                binding.recyclerView.visible()
-            }
-        }
-        upMenu()
-    }
-
-    fun upMenu() {
-        if (expandTextMenu) {
-            adapter.setItems(menuItems)
-            binding.ivMenuMore.gone()
-        } else {
-            adapter.setItems(visibleMenuItems)
-            binding.ivMenuMore.visible()
+            dismissMoreMenu()
+            currentPageState.intValue = 0
+            popupParentView = null
         }
     }
 
     fun show(
         view: View,
         windowHeight: Int,
-        startX: Int,
         startTopY: Int,
         startBottomY: Int,
-        endX: Int,
-        endBottomY: Int
+        endBottomY: Int,
     ) {
-        if (expandTextMenu) {
-            when {
-                startTopY > 500 -> {
-                    showAtLocation(
-                        view,
-                        Gravity.BOTTOM or Gravity.START,
-                        startX,
-                        windowHeight - startTopY
-                    )
-                }
+        themeSnapshotState.value = ReadDrawerStyle.themeSnapshot(context)
+        currentPageState.intValue = 0
+        dismissMoreMenu()
+        popupParentView = view
 
-                endBottomY - startBottomY > 500 -> {
-                    showAtLocation(view, Gravity.TOP or Gravity.START, startX, startBottomY)
-                }
+        val rootWidth = view.rootView.width.takeIf { it > 0 }
+            ?: context.resources.displayMetrics.widthPixels
+        val insets = ViewCompat.getRootWindowInsets(view)
+            ?.getInsets(WindowInsetsCompat.Type.systemBars())
+        val leftInset = insets?.left ?: 0
+        val rightInset = insets?.right ?: 0
+        val topInset = insets?.top ?: 0
+        val bottomInset = insets?.bottom ?: 0
 
-                else -> {
-                    showAtLocation(view, Gravity.TOP or Gravity.START, endX, endBottomY)
-                }
-            }
+        val horizontalMargin = 16.dpToPx()
+        val safeLeft = leftInset + horizontalMargin
+        val safeRight = rootWidth - rightInset - horizontalMargin
+        val safeWidth = (safeRight - safeLeft).coerceAtLeast(1)
+        val desiredWidth = textSelectionToolbarWidthDp(primaryActions.size).dpToPx()
+        val popupWidth = desiredWidth.coerceAtMost(safeWidth)
+
+        val desiredHeight = TEXT_SELECTION_TOOLBAR_HEIGHT_DP.dpToPx()
+        val verticalMargin = 8.dpToPx()
+        val availableHeight = (
+            windowHeight - topInset - bottomInset - verticalMargin * 2
+        ).coerceAtLeast(1)
+        val popupHeight = desiredHeight.coerceAtMost(availableHeight)
+
+        width = popupWidth
+        height = popupHeight
+
+        val gap = 8.dpToPx()
+        val minTop = topInset + verticalMargin
+        val maxTop = (
+            windowHeight - bottomInset - verticalMargin - popupHeight
+        ).coerceAtLeast(minTop)
+        val above = startTopY - popupHeight - gap
+        val selectionSpan = (endBottomY - startBottomY).coerceAtLeast(0)
+        val below = if (selectionSpan > popupHeight * 2) {
+            startBottomY + gap
         } else {
-            contentView.measure(
-                View.MeasureSpec.UNSPECIFIED,
-                View.MeasureSpec.UNSPECIFIED,
-            )
-            val popupHeight = contentView.measuredHeight
-            when {
-                startBottomY > 500 -> {
-                    showAtLocation(
-                        view,
-                        Gravity.TOP or Gravity.START,
-                        startX,
-                        startTopY - popupHeight
-                    )
-                }
+            max(startBottomY, endBottomY) + gap
+        }
+        val popupY = when {
+            above >= minTop -> above
+            below <= maxTop -> below
+            else -> above.coerceIn(minTop, maxTop)
+        }
+        val popupX = safeLeft + (safeWidth - popupWidth) / 2
 
-                endBottomY - startBottomY > 500 -> {
-                    showAtLocation(
-                        view,
-                        Gravity.TOP or Gravity.START,
-                        startX,
-                        startBottomY
-                    )
-                }
+        toolbarX = popupX
+        toolbarY = popupY
+        toolbarWidth = popupWidth
+        toolbarHeight = popupHeight
+        menuSafeLeft = leftInset + TEXT_SELECTION_MORE_PANEL_SCREEN_MARGIN_DP.dpToPx()
+        menuSafeRight = rootWidth - rightInset -
+            TEXT_SELECTION_MORE_PANEL_SCREEN_MARGIN_DP.dpToPx()
+        menuSafeTop = topInset + TEXT_SELECTION_MORE_PANEL_SCREEN_MARGIN_DP.dpToPx()
+        menuSafeBottom = windowHeight - bottomInset -
+            TEXT_SELECTION_MORE_PANEL_SCREEN_MARGIN_DP.dpToPx()
 
-                else -> {
-                    showAtLocation(
-                        view,
-                        Gravity.TOP or Gravity.START,
-                        endX,
-                        endBottomY
-                    )
-                }
-            }
+        showAtLocation(
+            view,
+            Gravity.TOP or Gravity.START,
+            popupX,
+            popupY,
+        )
+        // PopupWindow 会创建独立 DecorView，必须在下一帧 Compose attach 前补齐 owners。
+        var popupView: View? = contentView
+        while (popupView != null) {
+            popupView.attachViewTreeOwners()
+            popupView = popupView.parent as? View
         }
     }
 
-    inner class Adapter(context: Context) :
-        RecyclerAdapter<MenuItemImpl, ItemTextBinding>(context) {
+    private fun View.attachViewTreeOwners() {
+        setViewTreeLifecycleOwner(this@TextActionMenu.context)
+        setViewTreeViewModelStoreOwner(this@TextActionMenu.context)
+        setViewTreeSavedStateRegistryOwner(this@TextActionMenu.context)
+    }
 
-        override fun getItemId(position: Int): Long {
-            return position.toLong()
+    private fun buildMenuItems(): List<MenuItemImpl> {
+        val appMenu = MenuBuilder(context)
+        val processTextMenu = MenuBuilder(context)
+        SupportMenuInflater(context).inflate(R.menu.content_select_action, appMenu)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            onInitializeMenu(processTextMenu)
+        }
+        return appMenu.visibleItems + processTextMenu.visibleItems
+    }
+
+    private fun onActionClick(item: MenuItemImpl) {
+        dismissMoreMenu()
+        if (!callBack.onMenuItemSelected(item.itemId)) {
+            onMenuItemSelected(item)
+        }
+        callBack.onMenuActionFinally()
+    }
+
+    private fun setMoreMenuVisible(visible: Boolean) {
+        if (!visible) {
+            dismissMoreMenu()
+            return
+        }
+        val parentView = popupParentView ?: return
+        if (moreActions.isEmpty() || !isShowing) return
+
+        dismissMoreMenu()
+        moreMenuVisibleState.value = true
+
+        val gap = TEXT_SELECTION_MORE_PANEL_GAP_DP.dpToPx()
+        val desiredHeight = textSelectionMoreMenuHeightDp(moreActions.size).dpToPx()
+        val availableAbove = (toolbarY - gap - menuSafeTop).coerceAtLeast(0)
+        val availableBelow = (
+            menuSafeBottom - toolbarY - toolbarHeight - gap
+        ).coerceAtLeast(0)
+        val placeAbove = availableAbove >= desiredHeight || availableAbove >= availableBelow
+        val availableHeight = if (placeAbove) availableAbove else availableBelow
+        val panelHeight = desiredHeight.coerceAtMost(availableHeight).coerceAtLeast(1)
+        val safeWidth = (menuSafeRight - menuSafeLeft).coerceAtLeast(1)
+        val panelWidth = TEXT_SELECTION_MORE_PANEL_WIDTH_DP.dpToPx()
+            .coerceAtMost(safeWidth)
+        val maxX = (menuSafeRight - panelWidth).coerceAtLeast(menuSafeLeft)
+        val panelX = (toolbarX + toolbarWidth - panelWidth)
+            .coerceIn(menuSafeLeft, maxX)
+        val panelY = if (placeAbove) {
+            toolbarY - gap - panelHeight
+        } else {
+            toolbarY + toolbarHeight + gap
         }
 
-        override fun getViewBinding(parent: ViewGroup): ItemTextBinding {
-            return ItemTextBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemTextBinding,
-            item: MenuItemImpl,
-            payloads: MutableList<Any>
-        ) {
-            with(binding) {
-                textView.text = item.title
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemTextBinding) {
-            holder.itemView.setOnClickListener {
-                getItem(holder.layoutPosition)?.let {
-                    if (!callBack.onMenuItemSelected(it.itemId)) {
-                        onMenuItemSelected(it)
-                    }
+        val menuView = ComposeView(context).apply {
+            attachViewTreeOwners()
+            setBackgroundColor(Color.TRANSPARENT)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(
+                    snapshot = themeSnapshotState.value,
+                    updateSystemBars = false,
+                ) {
+                    TextSelectionMoreMenu(
+                        actions = moreActions,
+                        onLongClick = ::toggleSelectionReadMode,
+                    )
                 }
-                callBack.onMenuActionFinally()
-            }
-            holder.itemView.setOnLongClickListener {
-                if (AppConfig.contentSelectSpeakMod == 0) {
-                    AppConfig.contentSelectSpeakMod = 1
-                    context.toastOnUi("切换为从选择的地方开始一直朗读")
-                } else {
-                    AppConfig.contentSelectSpeakMod = 0
-                    context.toastOnUi("切换为朗读选择内容")
-                }
-                true
             }
         }
+        val popup = PopupWindow(menuView, panelWidth, panelHeight).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            elevation = 0f
+            isTouchable = true
+            isOutsideTouchable = false
+            isFocusable = false
+        }
+        moreMenuPopup = popup
+        popup.setOnDismissListener {
+            if (moreMenuPopup === popup) {
+                moreMenuPopup = null
+                moreMenuVisibleState.value = false
+            }
+        }
+        popup.showAtLocation(
+            parentView,
+            Gravity.TOP or Gravity.START,
+            panelX,
+            panelY,
+        )
+        var popupView: View? = menuView
+        while (popupView != null) {
+            popupView.attachViewTreeOwners()
+            popupView = popupView.parent as? View
+        }
+    }
+
+    private fun dismissMoreMenu() {
+        val popup = moreMenuPopup
+        moreMenuPopup = null
+        popup?.setOnDismissListener(null)
+        popup?.dismiss()
+        moreMenuVisibleState.value = false
+    }
+
+    private fun toggleSelectionReadMode() {
+        if (AppConfig.contentSelectSpeakMod == 0) {
+            AppConfig.contentSelectSpeakMod = 1
+            context.toastOnUi("切换为从选择的地方开始一直朗读")
+        } else {
+            AppConfig.contentSelectSpeakMod = 0
+            context.toastOnUi("切换为朗读选择内容")
+        }
+    }
+
+    @DrawableRes
+    private fun menuIcon(itemId: Int): Int = when (itemId) {
+        R.id.menu_replace -> R.drawable.ic_cfg_replace
+        R.id.menu_ai_purify -> R.drawable.ic_ai_purify
+        R.id.menu_copy -> R.drawable.ic_copy
+        R.id.menu_bookmark -> R.drawable.ic_bookmark
+        R.id.menu_aloud -> R.drawable.ic_read_aloud
+        R.id.menu_dict -> R.drawable.ic_translate
+        R.id.menu_search_content -> R.drawable.ic_search
+        R.id.menu_browser -> R.drawable.ic_web_outline
+        R.id.menu_share_str -> R.drawable.ic_share
+        else -> R.drawable.ic_ai_capability_text
     }
 
     private fun onMenuItemSelected(item: MenuItemImpl) {
@@ -237,8 +368,8 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
                     kotlin.runCatching {
                         it.putExtra(Intent.EXTRA_PROCESS_TEXT, callBack.selectedText)
                         context.startActivity(it)
-                    }.onFailure { e ->
-                        AppLog.put("执行文本菜单操作出错\n$e", e, true)
+                    }.onFailure { error ->
+                        AppLog.put("执行文本菜单操作出错\n$error", error, true)
                     }
                 }
             }
@@ -265,20 +396,20 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
             .setClassName(info.activityInfo.packageName, info.activityInfo.name)
     }
 
-    /**
-     * Start with a menu Item order value that is high enough
-     * so that your "PROCESS_TEXT" menu items appear after the
-     * standard selection menu items like Cut, Copy, Paste.
-     */
     @RequiresApi(Build.VERSION_CODES.M)
     private fun onInitializeMenu(menu: Menu) {
         kotlin.runCatching {
             var menuItemOrder = 100
             for (resolveInfo in getSupportedActivities()) {
                 menu.add(
-                    Menu.NONE, Menu.NONE,
-                    menuItemOrder++, resolveInfo.loadLabel(context.packageManager)
-                ).intent = createProcessTextIntentForResolveInfo(resolveInfo)
+                    Menu.NONE,
+                    Menu.NONE,
+                    menuItemOrder++,
+                    resolveInfo.loadLabel(context.packageManager),
+                ).apply {
+                    intent = createProcessTextIntentForResolveInfo(resolveInfo)
+                    icon = resolveInfo.loadIcon(context.packageManager)
+                }
             }
         }.onFailure {
             context.toastOnUi("获取文字操作菜单出错:${it.localizedMessage}")
