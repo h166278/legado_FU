@@ -604,6 +604,13 @@
     <string name="interface_setting">Interface</string>
     <string name="brightness">Brightness</string>
     <string name="chapter_list">Chapters</string>
+    <string name="read_catalog_search_chapters">Search chapters</string>
+    <string name="read_catalog_search_bookmarks">Search bookmarks</string>
+    <string name="read_catalog_bookmark_count">%1$d bookmarks</string>
+    <string name="read_catalog_current">Current</string>
+    <string name="read_catalog_no_bookmarks">No bookmarks</string>
+    <string name="read_catalog_ascending">Ascending</string>
+    <string name="read_catalog_descending">Descending</string>
     <string name="next_chapter">Next</string>
     <string name="previous_chapter">Prior</string>
     <string name="pt_hide_status_bar">Hide status bar</string>
@@ -1448,7 +1455,7 @@
     <string name="toc_src">Chapters source code</string>
     <string name="content_src">Content source code</string>
     <string name="list_src">List source code</string>
-    <string name="title_font_size">Font size</string>
+    <string name="title_font_size">Font size increment</string>
     <string name="title_margin_top">Margin top</string>
     <string name="title_margin_bottom">Margin bottom</string>
     <string name="show">Show</string>

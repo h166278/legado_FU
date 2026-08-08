@@ -213,8 +213,14 @@ object ReadBookConfig {
         return true
     }
 
-    private fun defaultConfig(name: String): Config? =
-        DefaultData.readConfigs.firstOrNull { it.name == name }
+    private fun defaultConfig(name: String): Config? {
+        val defaultName = when (name) {
+            "预设1" -> "经典纯白"
+            "预设2" -> "暖纸书香"
+            else -> name
+        }
+        return DefaultData.readConfigs.firstOrNull { it.name == defaultName }
+    }
 
     private fun Config.detachedCopy(): Config = copy(
         highlightRules = ArrayList(highlightRules.map { it.copy() }),
@@ -656,7 +662,7 @@ object ReadBookConfig {
         @SerializedName("footerFontSize") var footerFontSize: Int = 12,
         @SerializedName("applyHeaderStyle") var applyHeaderStyle: Boolean = true,
         var textBold: Int = 0,//是否粗体字 0:正常, 1:粗体, 2:细体
-        var textSize: Int = 20,//文字大小
+        var textSize: Int = 18,//文字大小
         @SerializedName("textItalic") var textItalic: Boolean = false,
         @SerializedName("textShadow") var textShadow: Boolean = false,
         @SerializedName("shadowRadius") var shadowRadius: Float = 16f,
@@ -668,7 +674,7 @@ object ReadBookConfig {
         var lineSpacingExtra: Int = 12,//行间距
         var paragraphSpacing: Int = 2,//段距
         var titleMode: Int = 0,//标题位置 0:居左 1:居中 2:隐藏
-        var titleSize: Int = 0,
+        var titleSize: Int = 4,
         var titleTopSpacing: Int = 0,
         var titleBottomSpacing: Int = 0,
         @SerializedName("titleColor") var titleColor: Int = 0,

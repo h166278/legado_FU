@@ -111,7 +111,6 @@ import io.legado.app.ui.book.searchContent.SearchContentActivity
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
-import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.book.toc.rule.TxtTocRuleDialog
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.config.AiConfigFragment
@@ -195,12 +194,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     protected override val bindNgToolbarMenu: Boolean = false
 
-    private val tocActivity =
-        registerForActivityResult(TocActivityResult()) {
-            it?.let {
-                viewModel.openChapter(it[0] as Int, it[1] as Int)
-            }
-        }
     private val sourceEditActivity =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
@@ -2927,9 +2920,8 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 打开目录
      */
     override fun openChapterList() {
-        ReadBook.book?.let {
-            tocActivity.launch(it.bookUrl)
-        }
+        if (ReadBook.book == null) return
+        ReadCatalogDialog().show(supportFragmentManager, "readCatalog")
     }
 
     /**

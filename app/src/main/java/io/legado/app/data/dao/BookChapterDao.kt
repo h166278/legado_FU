@@ -22,6 +22,23 @@ interface BookChapterDao {
     @Query("select * from chapters where bookUrl = :bookUrl and `index` >= :start and `index` <= :end order by `index`")
     fun getChapterList(bookUrl: String, start: Int, end: Int): List<BookChapter>
 
+    @Query("select * from chapters where bookUrl = :bookUrl order by `index` limit :limit offset :offset")
+    fun getChapterPage(bookUrl: String, offset: Int, limit: Int): List<BookChapter>
+
+    @Query("select * from chapters where bookUrl = :bookUrl order by `index` desc limit :limit offset :offset")
+    fun getChapterPageDescending(bookUrl: String, offset: Int, limit: Int): List<BookChapter>
+
+    @Query("SELECT * FROM chapters where bookUrl = :bookUrl and title like '%'||:key||'%' order by `index` limit :limit offset :offset")
+    fun searchPage(bookUrl: String, key: String, offset: Int, limit: Int): List<BookChapter>
+
+    @Query("SELECT * FROM chapters where bookUrl = :bookUrl and title like '%'||:key||'%' order by `index` desc limit :limit offset :offset")
+    fun searchPageDescending(
+        bookUrl: String,
+        key: String,
+        offset: Int,
+        limit: Int,
+    ): List<BookChapter>
+
     @Query("select * from chapters where bookUrl = :bookUrl and `index` = :index")
     fun getChapter(bookUrl: String, index: Int): BookChapter?
 
@@ -30,6 +47,12 @@ interface BookChapterDao {
 
     @Query("select count(url) from chapters where bookUrl = :bookUrl")
     fun getChapterCount(bookUrl: String): Int
+
+    @Query("select count(url) from chapters where bookUrl = :bookUrl and title like '%'||:key||'%'")
+    fun getChapterCount(bookUrl: String, key: String): Int
+
+    @Query("select count(url) from chapters where bookUrl = :bookUrl and `index` < :chapterIndex")
+    fun getChapterPosition(bookUrl: String, chapterIndex: Int): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg bookChapter: BookChapter)

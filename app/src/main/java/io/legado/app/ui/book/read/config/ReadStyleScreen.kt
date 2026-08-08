@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -74,6 +75,7 @@ import kotlin.math.abs
 
 private val StandardPageHeight = 336.dp
 private val EditorPageHeight = 500.dp
+private val PresetInitialScrollOffset = 10.dp
 
 internal enum class ReadStylePage {
     PRESET,
@@ -350,6 +352,12 @@ private fun PresetPage(
     accentColor: Color,
     actions: ReadStyleActions,
 ) {
+    val density = LocalDensity.current
+    val presetListState = rememberLazyListState(
+        initialFirstVisibleItemScrollOffset = with(density) {
+            PresetInitialScrollOffset.roundToPx()
+        },
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -365,6 +373,7 @@ private fun PresetPage(
     }
 
     LazyRow(
+        state = presetListState,
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp),

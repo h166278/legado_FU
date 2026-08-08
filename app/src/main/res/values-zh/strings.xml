@@ -600,6 +600,13 @@
     <string name="interface_setting">界面</string>
     <string name="brightness">亮度</string>
     <string name="chapter_list">目录</string>
+    <string name="read_catalog_search_chapters">搜索章节</string>
+    <string name="read_catalog_search_bookmarks">搜索书签</string>
+    <string name="read_catalog_bookmark_count">共 %1$d 条书签</string>
+    <string name="read_catalog_current">当前阅读</string>
+    <string name="read_catalog_no_bookmarks">暂无书签</string>
+    <string name="read_catalog_ascending">正序</string>
+    <string name="read_catalog_descending">倒序</string>
     <string name="next_chapter">下一章</string>
     <string name="previous_chapter">上一章</string>
     <string name="pt_hide_status_bar">隐藏状态栏</string>
@@ -1444,7 +1451,7 @@
     <string name="bookshelf_author_unread">%1$s · %2$d章未读</string>
     <string name="use_default_cover">总是使用默认封面</string>
     <string name="use_default_cover_s">总是显示默认封面（不显示网络封面）</string>
-    <string name="title_font_size">字号</string>
+    <string name="title_font_size">字号增量</string>
     <string name="title_margin_top">上边距</string>
     <string name="title_margin_bottom">下边距</string>
     <string name="show">显示</string>
