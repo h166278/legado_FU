@@ -153,6 +153,7 @@ object PreferKey {
     const val textBottomJustify = "textBottomJustify"
     const val adaptSpecialStyle = "adaptSpecialStyle"
     const val autoReadSpeed = "autoReadSpeed"
+    const val autoReadPageMode = "autoReadPageMode"
     const val defaultCover = "defaultCover"
     const val defaultCoverDark = "defaultCoverDark"
     const val replaceEnableDefault = "replaceEnableDefault"

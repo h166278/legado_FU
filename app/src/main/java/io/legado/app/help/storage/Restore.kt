@@ -317,7 +317,14 @@ object Restore {
             shareLayout = appCtx.getPrefBoolean(PreferKey.shareLayout)
             hideStatusBar = appCtx.getPrefBoolean(PreferKey.hideStatusBar)
             hideNavigationBar = appCtx.getPrefBoolean(PreferKey.hideNavigationBar)
-            autoReadSpeed = appCtx.getPrefInt(PreferKey.autoReadSpeed, 46)
+            autoReadSpeed = appCtx.getPrefInt(
+                PreferKey.autoReadSpeed,
+                ReadBookConfig.defaultAutoReadSpeed,
+            )
+            autoReadPageMode = appCtx.getPrefInt(
+                PreferKey.autoReadPageMode,
+                ReadBookConfig.defaultAutoReadPageMode,
+            )
         }
         appCtx.toastOnUi(R.string.restore_success)
         withContext(Main) {

@@ -13,7 +13,9 @@ import android.graphics.drawable.Drawable
 import android.view.View
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
@@ -106,6 +108,17 @@ object ReadDrawerStyle {
     fun accentColor(context: Context): Int = themeSnapshot(context).colors.primary
 
     fun surfaceColor(context: Context): Int = themeSnapshot(context).colors.surface
+
+    /** 与 View 版浮动 Dock 对齐，但按阅读页自己的日夜快照取色。 */
+    @Composable
+    fun dockSurfaceColor(alpha: Float = 0.28f): ComposeColor {
+        val baseColor = if (NgTheme.snapshot.isDark) {
+            ComposeColor(0xFF1F1F1F)
+        } else {
+            ComposeColor.White
+        }
+        return baseColor.copy(alpha = alpha)
+    }
 
     fun positionDialogAbove(dialog: Dialog?, avoidView: View, gapDp: Int = 16) {
         val window = dialog?.window ?: return

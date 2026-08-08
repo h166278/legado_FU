@@ -528,9 +528,16 @@ class ReadView(context: Context, attrs: AttributeSet) :
      * 更新翻页动画
      */
     fun upPageAnim(upRecorder: Boolean = false) {
-        isScroll = ReadBook.pageAnim() == 3
+        upPageAnim(ReadBook.pageAnim(), upRecorder)
+    }
+
+    /**
+     * 临时应用指定翻页动画，不修改阅读配置
+     */
+    fun upPageAnim(@PageAnim.Anim pageAnim: Int, upRecorder: Boolean = false) {
+        isScroll = pageAnim == PageAnim.scrollPageAnim
         ChapterProvider.upLayout()
-        when (ReadBook.pageAnim()) {
+        when (pageAnim) {
             PageAnim.coverPageAnim -> if (pageDelegate !is CoverPageDelegate) {
                 pageDelegate = CoverPageDelegate(this)
             }

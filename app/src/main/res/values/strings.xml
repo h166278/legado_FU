@@ -1306,7 +1306,9 @@
     <string name="auto_change_source">Change source automatically</string>
     <string name="text_full_justify">Text justified</string>
     <string name="text_bottom_justify">Text align bottom</string>
-    <string name="auto_page_speed">Auto scroll speed</string>
+    <string name="auto_page_speed">Page speed</string>
+    <string name="auto_page_slow">Slow</string>
+    <string name="auto_page_fast">Fast</string>
     <string name="sort_by_url">Sort by URL</string>
     <string name="backup_summary">Backup the local and WebDav simultaneously</string>
     <string name="restore_summary">Restore from WebDAV first, Restore form the local backup on long click</string>

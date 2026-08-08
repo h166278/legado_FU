@@ -42,6 +42,8 @@ import java.io.OutputStream
 object ReadBookConfig {
     const val configFileName = "readConfig.json"
     const val shareConfigFileName = "shareReadConfig.json"
+    const val defaultAutoReadSpeed = 40
+    const val defaultAutoReadPageMode = PageAnim.scrollPageAnim
     val configFilePath = FileUtils.getPath(appCtx.filesDir, configFileName)
     val shareConfigFilePath = FileUtils.getPath(appCtx.filesDir, shareConfigFileName)
     val configList: ArrayList<Config> = arrayListOf()
@@ -225,10 +227,17 @@ object ReadBookConfig {
 
     //配置写入读取
     var readBodyToLh = appCtx.getPrefBoolean(PreferKey.readBodyToLh, true)
-    var autoReadSpeed = appCtx.getPrefInt(PreferKey.autoReadSpeed, 10)
+    var autoReadSpeed = appCtx.getPrefInt(PreferKey.autoReadSpeed, defaultAutoReadSpeed)
         set(value) {
             field = value
             appCtx.putPrefInt(PreferKey.autoReadSpeed, value)
+        }
+    var autoReadPageMode = normalizeAutoReadPageMode(
+        appCtx.getPrefInt(PreferKey.autoReadPageMode, defaultAutoReadPageMode)
+    )
+        set(value) {
+            field = normalizeAutoReadPageMode(value)
+            appCtx.putPrefInt(PreferKey.autoReadPageMode, field)
         }
     var styleSelect: Int
         get() = if (isComic) comicStyleSelect else readStyleSelect
@@ -260,6 +269,11 @@ object ReadBookConfig {
                 appCtx.putPrefBoolean(PreferKey.shareLayout, value)
             }
         }
+
+    private fun normalizeAutoReadPageMode(value: Int): Int = when (value) {
+        PageAnim.coverPageAnim -> PageAnim.coverPageAnim
+        else -> PageAnim.scrollPageAnim
+    }
     var isNightTheme = appCtx.getPrefBoolean(PreferKey.readNightTheme, false)
         set(value) {
             field = value
@@ -632,7 +646,7 @@ object ReadBookConfig {
         private var textAccentColor: String = "#E53935",//白天强调文字颜色
         private var textAccentColorNight: String = "#FE4D55",//夜间强调文字颜色
         private var textAccentColorEInk: String = "#000000",
-        private var pageAnim: Int = 0,//翻页动画
+        private var pageAnim: Int = PageAnim.simulationPageAnim,//翻页动画
         private var pageAnimEInk: Int = 4,
         var textFont: String = "",//字体
         @SerializedName("titleFont") var titleFont: String = "",//标题字体

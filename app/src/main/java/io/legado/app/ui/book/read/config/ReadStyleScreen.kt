@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.ReadHighlightRule
+import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSlider
@@ -1560,13 +1561,13 @@ private fun ReadStyleDock(
     fontSize: androidx.compose.ui.unit.TextUnit = 15.sp,
 ) {
     val shape = RoundedCornerShape(12.dp)
+    val dockSurfaceColor = ReadDrawerStyle.dockSurfaceColor()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
             .clip(shape)
-            .background(Color(NgTheme.colors.surface).copy(alpha = 0.26f))
-            .border(0.7.dp, contentColor.copy(alpha = 0.12f), shape)
+            .background(dockSurfaceColor)
             .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

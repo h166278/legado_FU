@@ -37,6 +37,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
+import io.legado.app.constant.PageAnim
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Status
 import io.legado.app.data.appDb
@@ -2860,6 +2861,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (isAutoPage) {
             autoPageStop()
         } else {
+            applyAutoPageMode()
             binding.readView.autoPager.start()
             binding.readMenu.setAutoPage(true)
             screenTimeOut = -1L
@@ -2867,9 +2869,25 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
+    internal fun applyAutoPageMode(
+        @PageAnim.Anim pageAnim: Int = ReadBookConfig.autoReadPageMode,
+    ) {
+        val mode = if (pageAnim == PageAnim.coverPageAnim) {
+            PageAnim.coverPageAnim
+        } else {
+            PageAnim.scrollPageAnim
+        }
+        ReadBookConfig.autoReadPageMode = mode
+        binding.readView.autoPager.reset()
+        binding.readView.upPageAnim(mode)
+        ReadBook.loadContent(false)
+    }
+
     override fun autoPageStop() {
         if (isAutoPage) {
             binding.readView.autoPager.stop()
+            binding.readView.upPageAnim()
+            ReadBook.loadContent(false)
             binding.readMenu.setAutoPage(false)
             dismissDialogFragment<AutoReadDialog>()
             upScreenTimeOut()

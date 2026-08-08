@@ -144,7 +144,7 @@ class AutoPager(private val readView: ReadView) : Runnable {
             progress += scrollOffset
             if (progress >= height) {
                 if (!readView.fillPage(PageDirection.NEXT)) {
-                    stop()
+                    readView.callBack.autoPageStop()
                 } else {
                     reset()
                 }
@@ -158,7 +158,7 @@ class AutoPager(private val readView: ReadView) : Runnable {
         }
 
         if (!readView.fillPage(PageDirection.NEXT)) {
-            stop()
+            readView.callBack.autoPageStop()
         } else {
             readView.postDelayed(this, ReadBookConfig.autoReadSpeed * 1000L)
         }
