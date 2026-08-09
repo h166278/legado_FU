@@ -1,6 +1,5 @@
 package io.legado.app.ui.book.searchContent
 
-
 import android.app.Application
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
@@ -25,17 +24,15 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
     var searchResultCounts = 0
     val cacheChapterNames = hashSetOf<String>()
     val searchResultList: MutableList<SearchResult> = mutableListOf()
+    val searchResultBatches: MutableList<SearchResultBatch> = mutableListOf()
 
-    fun initBook(bookUrl: String, success: () -> Unit) {
+    suspend fun initBook(bookUrl: String): Book? {
         this.bookUrl = bookUrl
-        execute {
-            book = appDb.bookDao.getBook(bookUrl)
-            book?.let {
-                contentProcessor = ContentProcessor.get(it.name, it.origin)
-            }
-        }.onSuccess {
-            success.invoke()
+        book = appDb.bookDao.getBook(bookUrl)
+        contentProcessor = book?.let {
+            ContentProcessor.get(it.name, it.origin)
         }
+        return book
     }
 
     suspend fun searchChapter(
@@ -52,7 +49,8 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
             else -> chapter.title
         }
         currentCoroutineContext().ensureActive()
-        val mContent = contentProcessor!!.getContent(
+        val processor = contentProcessor ?: return searchResultsWithinChapter
+        val mContent = processor.getContent(
             book, chapter, chapterContent, useReplace = replaceEnabled
         ).toString()
         val positions = searchPosition(mContent, query)
@@ -71,7 +69,6 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
             )
             searchResultsWithinChapter.add(result)
         }
-        searchResultCounts += searchResultsWithinChapter.size
         return searchResultsWithinChapter
     }
 
@@ -121,3 +118,9 @@ class SearchContentViewModel(application: Application) : BaseViewModel(applicati
     }
 
 }
+
+data class SearchResultBatch(
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val results: List<SearchResult>,
+)

@@ -1,232 +1,374 @@
 package io.legado.app.ui.book.read
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.ColorStateList
-import android.graphics.PorterDuff
 import android.util.AttributeSet
-import android.view.LayoutInflater
-import android.view.animation.Animation
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.isVisible
 import io.legado.app.R
-import io.legado.app.databinding.ViewSearchMenuBinding
-import io.legado.app.lib.theme.Selector
-import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.searchContent.SearchResult
-import io.legado.app.utils.ColorUtils
+import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
+import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.utils.activity
-import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.invisible
-import io.legado.app.utils.loadAnimation
 import io.legado.app.utils.visible
 
-/**
- * 搜索界面菜单
- */
+/** 阅读页内的全文搜索结果控制层。 */
 class SearchMenu @JvmOverloads constructor(
-    context: Context, attrs: AttributeSet? = null
+    context: Context,
+    attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
 
     private val callBack: CallBack get() = activity as CallBack
-    private val binding = ViewSearchMenuBinding.inflate(LayoutInflater.from(context), this, true)
+    private var searchResults by mutableStateOf<List<SearchResult>>(emptyList())
+    private var currentSearchResultIndex by mutableStateOf(-1)
+    private var controlsVisible by mutableStateOf(false)
+    private var themeSnapshot by mutableStateOf(ReadDrawerStyle.themeSnapshot(context))
 
-    private val menuBottomIn: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_in)
-    private val menuBottomOut: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_out)
-    private val bgColor: Int = ReadDrawerStyle.surfaceColor(context)
-    private val textColor: Int = ReadDrawerStyle.contentColor(context)
-    private val bottomBackgroundList: ColorStateList =
-        Selector.colorBuild().setDefaultColor(bgColor)
-            .setPressedColor(ColorUtils.darkenColor(bgColor)).create()
-    private var onMenuOutEnd: (() -> Unit)? = null
-    private var isMenuOutAnimating = false
-
-    private val searchResultList: MutableList<SearchResult> = mutableListOf()
-    private var currentSearchResultIndex: Int = -1
-    private var lastSearchResultIndex: Int = -1
-    private val hasSearchResult: Boolean
-        get() = searchResultList.isNotEmpty()
     val selectedSearchResult: SearchResult?
-        get() = searchResultList.getOrNull(currentSearchResultIndex)
-    val previousSearchResult: SearchResult?
-        get() = searchResultList.getOrNull(lastSearchResultIndex)
-    val bottomMenuVisible get() = isVisible && binding.llBottomMenu.isVisible
+        get() = searchResults.getOrNull(currentSearchResultIndex)
+    val bottomMenuVisible: Boolean
+        get() = isVisible && controlsVisible
 
     init {
-        initAnimation()
-        initView()
-        bindEvent()
-        updateSearchInfo()
+        addView(
+            ComposeView(context).apply {
+                layoutParams = LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setViewCompositionStrategy(
+                    ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+                )
+                setContent {
+                    NgAppTheme(snapshot = themeSnapshot, updateSystemBars = false) {
+                        if (controlsVisible) {
+                            SearchResultControls(
+                                searchResults = searchResults,
+                                currentIndex = currentSearchResultIndex,
+                                onDismissControls = { runMenuOut() },
+                                onAllResults = {
+                                    runMenuOut {
+                                        callBack.openSearchDrawer(selectedSearchResult?.query)
+                                    }
+                                },
+                                onRestoreOrigin = {
+                                    runMenuOut { callBack.restoreSearchOrigin() }
+                                },
+                                onPrevious = { navigateTo(currentSearchResultIndex - 1) },
+                                onNext = { navigateTo(currentSearchResultIndex + 1) },
+                                onExit = { callBack.exitSearchMenu() },
+                            )
+                        }
+                    }
+                }
+            },
+        )
     }
 
     fun upSearchResultList(resultList: List<SearchResult>) {
-        searchResultList.clear()
-        searchResultList.addAll(resultList)
-        updateSearchInfo()
+        searchResults = resultList.toList()
+        if (searchResults.isEmpty()) {
+            currentSearchResultIndex = -1
+        } else if (currentSearchResultIndex !in searchResults.indices) {
+            currentSearchResultIndex = 0
+        }
     }
-
-    private fun initView() = binding.run {
-        llSearchBaseInfo.setBackgroundColor(bgColor)
-        tvCurrentSearchInfo.setTextColor(bottomBackgroundList)
-        llBottomBg.setBackgroundColor(bgColor)
-        fabLeft.backgroundTintList = bottomBackgroundList
-        fabLeft.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        fabRight.backgroundTintList = bottomBackgroundList
-        fabRight.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvMainMenu.setTextColor(textColor)
-        tvSearchResults.setTextColor(textColor)
-        tvSearchExit.setTextColor(textColor)
-        ivMainMenu.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        ivSearchResults.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        ivSearchExit.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        ivSearchContentUp.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        ivSearchContentDown.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvCurrentSearchInfo.setTextColor(textColor)
-        applyNavigationBarPadding()
-    }
-
 
     fun runMenuIn() {
-        this.visible()
-        binding.llBottomMenu.visible()
-        binding.vwMenuBg.visible()
-        binding.llBottomMenu.startAnimation(menuBottomIn)
+        themeSnapshot = ReadDrawerStyle.themeSnapshot(context)
+        controlsVisible = true
+        visible()
+        callBack.upSystemUiVisibility()
     }
 
     fun runMenuOut(onMenuOutEnd: (() -> Unit)? = null) {
-        if (isMenuOutAnimating) {
-            return
-        }
-        this.onMenuOutEnd = onMenuOutEnd
-        if (this.isVisible) {
-            binding.llBottomMenu.startAnimation(menuBottomOut)
-        }
+        controlsVisible = false
+        invisible()
+        onMenuOutEnd?.invoke()
+        callBack.upSystemUiVisibility()
     }
 
-    @SuppressLint("SetTextI18n")
     fun updateSearchInfo() {
-        ReadBook.curTextChapter?.let {
-            binding.tvCurrentSearchInfo.text =
-                """${context.getString(R.string.search_content_size)}: ${searchResultList.size} / 当前章节: ${it.title}"""
-        }
+        themeSnapshot = ReadDrawerStyle.themeSnapshot(context)
     }
 
     fun updateSearchResultIndex(updateIndex: Int) {
-        lastSearchResultIndex = currentSearchResultIndex
-        currentSearchResultIndex = when {
-            updateIndex < 0 -> 0
-            updateIndex >= searchResultList.size -> searchResultList.size - 1
-            else -> updateIndex
+        currentSearchResultIndex = if (searchResults.isEmpty()) {
+            -1
+        } else {
+            updateIndex.coerceIn(searchResults.indices)
         }
     }
 
-    private fun bindEvent() = binding.run {
-        //搜索结果
-        llSearchResults.setOnClickListener {
-            runMenuOut {
-                callBack.openSearchActivity(selectedSearchResult?.query)
-            }
-        }
-
-        //主菜单
-        llMainMenu.setOnClickListener {
-            runMenuOut {
-                callBack.cancelSelect()
-                callBack.showMenuBar()
-                this@SearchMenu.invisible()
-            }
-        }
-
-        //退出
-        llSearchExit.setOnClickListener {
-            runMenuOut {
-                callBack.exitSearchMenu()
-            }
-        }
-
-        fabLeft.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex - 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
-        }
-
-        ivSearchContentUp.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex - 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
-        }
-
-        ivSearchContentDown.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex + 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
-        }
-
-        fabRight.setOnClickListener {
-            updateSearchResultIndex(currentSearchResultIndex + 1)
-            callBack.navigateToSearch(
-                searchResultList[currentSearchResultIndex],
-                currentSearchResultIndex
-            )
-        }
-    }
-
-    private fun initAnimation() {
-        //显示菜单
-        menuBottomIn.setAnimationListener(object : Animation.AnimationListener {
-            override fun onAnimationStart(animation: Animation) {
-                callBack.upSystemUiVisibility()
-                binding.fabLeft.visible(hasSearchResult)
-                binding.fabRight.visible(hasSearchResult)
-            }
-
-            @SuppressLint("RtlHardcoded")
-            override fun onAnimationEnd(animation: Animation) {
-                binding.vwMenuBg.setOnClickListener { runMenuOut() }
-                callBack.upSystemUiVisibility()
-            }
-
-            override fun onAnimationRepeat(animation: Animation) = Unit
-        })
-
-        //隐藏菜单
-        menuBottomOut.setAnimationListener(object : Animation.AnimationListener {
-            override fun onAnimationStart(animation: Animation) {
-                isMenuOutAnimating = true
-                binding.vwMenuBg.setOnClickListener(null)
-            }
-
-            override fun onAnimationEnd(animation: Animation) {
-                isMenuOutAnimating = false
-                binding.llBottomMenu.invisible()
-                binding.vwMenuBg.invisible()
-                binding.vwMenuBg.setOnClickListener { runMenuOut() }
-
-                onMenuOutEnd?.invoke()
-                callBack.upSystemUiVisibility()
-            }
-
-            override fun onAnimationRepeat(animation: Animation) = Unit
-        })
+    private fun navigateTo(index: Int) {
+        if (index !in searchResults.indices) return
+        updateSearchResultIndex(index)
+        callBack.navigateToSearch(searchResults[index], index)
     }
 
     interface CallBack {
-        var isShowingSearchResult: Boolean
-        fun openSearchActivity(searchWord: String?)
-        fun showSearchSetting()
+        fun openSearchDrawer(searchWord: String?)
+        fun restoreSearchOrigin()
         fun upSystemUiVisibility()
         fun exitSearchMenu()
-        fun showMenuBar()
         fun navigateToSearch(searchResult: SearchResult, index: Int)
-        fun onMenuShow()
-        fun onMenuHide()
-        fun cancelSelect()
     }
+}
 
+@Composable
+private fun SearchResultControls(
+    searchResults: List<SearchResult>,
+    currentIndex: Int,
+    onDismissControls: () -> Unit,
+    onAllResults: () -> Unit,
+    onRestoreOrigin: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onExit: () -> Unit,
+) {
+    val selected = searchResults.getOrNull(currentIndex)
+    val contentColor = Color(NgTheme.colors.onSurface)
+    val mutedColor = Color(NgTheme.colors.onSurfaceVariant)
+    val backgroundInteraction = remember { MutableInteractionSource() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = backgroundInteraction,
+                    indication = null,
+                    onClick = onDismissControls,
+                ),
+        )
+
+        NgGlassSurface(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(start = 36.dp, top = 8.dp, end = 36.dp)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            style = NgGlassDefaults.floatingStyle(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable(onClick = onRestoreOrigin),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_restore),
+                        contentDescription = stringResource(R.string.search_restore_origin),
+                        modifier = Modifier.size(19.dp),
+                        tint = mutedColor.copy(alpha = 0.86f),
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = selected?.query?.let {
+                            stringResource(R.string.search_result_title, it)
+                        } ?: stringResource(R.string.search_content),
+                        color = contentColor,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = selected?.let {
+                            stringResource(
+                                R.string.search_result_position,
+                                currentIndex + 1,
+                                searchResults.size,
+                                it.chapterTitle,
+                            )
+                        }.orEmpty(),
+                        color = mutedColor.copy(alpha = 0.82f),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable(onClick = onExit),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = stringResource(R.string.close),
+                        modifier = Modifier.size(18.dp),
+                        tint = mutedColor.copy(alpha = 0.82f),
+                    )
+                }
+            }
+        }
+
+        NgGlassSurface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 28.dp, vertical = 8.dp)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            style = NgGlassDefaults.floatingStyle(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .padding(horizontal = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SearchDockAction(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.search_all_results),
+                    enabled = searchResults.isNotEmpty(),
+                    contentColor = contentColor,
+                    mutedColor = mutedColor,
+                    onClick = onAllResults,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                SearchDockDivider(mutedColor)
+                SearchDockAction(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.search_previous_result),
+                    enabled = currentIndex > 0,
+                    contentColor = contentColor,
+                    mutedColor = mutedColor,
+                    onClick = onPrevious,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
+                SearchDockDivider(mutedColor)
+                SearchDockAction(
+                    modifier = Modifier.weight(1f),
+                    label = stringResource(R.string.search_next_result),
+                    enabled = currentIndex in 0 until searchResults.lastIndex,
+                    contentColor = contentColor,
+                    mutedColor = mutedColor,
+                    onClick = onNext,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchDockAction(
+    modifier: Modifier,
+    label: String,
+    enabled: Boolean,
+    contentColor: Color,
+    mutedColor: Color,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    val color = if (enabled) contentColor else mutedColor.copy(alpha = 0.42f)
+    Row(
+        modifier = modifier
+            .clickable(enabled = enabled, onClick = onClick)
+            .height(40.dp)
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.material3.LocalContentColor provides color,
+            ) {
+                icon()
+            }
+        }
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = label,
+            color = color,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun SearchDockDivider(color: Color) {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(20.dp)
+            .background(color.copy(alpha = 0.14f)),
+    )
 }

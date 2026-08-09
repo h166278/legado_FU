@@ -416,6 +416,8 @@
     <string name="ai_purify_chapter_sample_range">选择采样范围</string>
     <string name="ai_purify_sample_current_chapter">当前章</string>
     <string name="ai_purify_sample_custom_range">自定义</string>
+    <string name="ai_purify_sample_current_hint">采样当前章节，生成可选净化规则</string>
+    <string name="ai_purify_start">开始净化</string>
     <string name="ai_purify_sample_range_start">起始章</string>
     <string name="ai_purify_sample_range_end">结束章</string>
     <string name="ai_purify_sample_range_hint">请输入 1-%1$d 之间的章节序号，最多 %2$d 章</string>
@@ -691,7 +693,6 @@
     <string name="mouse_wheel_page">鼠标滚轮翻页</string>
     <string name="click_turn_page">点击翻页</string>
     <string name="page_anim">翻页动画</string>
-    <string name="book_page_anim">翻页动画（本书）</string>
     <string name="keep_light">屏幕超时</string>
     <string name="back">返回</string>
     <string name="menu">菜单</string>
@@ -799,6 +800,9 @@
     <string name="group_yf">养肥区</string>
     <string name="bookmark">书签</string>
     <string name="bookmark_add">添加书签</string>
+    <string name="bookmark_content">书签内容</string>
+    <string name="bookmark_note">备注</string>
+    <string name="bookmark_note_hint">添加备注（可选）</string>
     <string name="action_del">删除</string>
     <string name="load_over_time">加载超时</string>
     <string name="join_group">关注：%s</string>
@@ -1376,6 +1380,22 @@
     <string name="search_content">全文搜索</string>
     <string name="search_content_size">搜索结果</string>
     <string name="search_content_empty">搜索内容为空，请检查净化或简繁设置</string>
+    <string name="search_input_hint">搜索全书内容</string>
+    <string name="search_apply_replace">应用替换</string>
+    <string name="search_support_regex">支持正则</string>
+    <string name="search_invalid_regex">正则表达式无效</string>
+    <string name="search_failed">搜索失败</string>
+    <string name="search_result_count">搜索结果：%1$d</string>
+    <string name="search_result_summary">%1$d 个结果 · %2$d 个章节</string>
+    <string name="search_chapter_result_count">%1$d 处</string>
+    <string name="search_all_results">全部结果</string>
+    <string name="search_all_results_shown">已显示全部结果</string>
+    <string name="search_previous_result">上一个</string>
+    <string name="search_next_result">下一个</string>
+    <string name="search_restore_origin">返回原阅读位置</string>
+    <string name="search_chapter_fast_navigator">章节快速定位</string>
+    <string name="search_result_title">本书包含“%1$s”的结果</string>
+    <string name="search_result_position">%1$d / %2$d · %3$s</string>
     <string name="rss_source_empty">RSS 源目前为空！</string>
     <string name="explore_empty">当前没有发现源！</string>
     <string name="page_key_set_help">将焦点放到输入框按下物理按键会自动录入键值，多个按键会自动用英文逗号隔开。</string>
@@ -1720,6 +1740,7 @@
     <string name="bookshelf_px_4">综合排序</string>
     <string name="bookshelf_px_5">按作者</string>
     <string name="effective_replaces">起效的替换</string>
+    <string name="no_effective_replace_rules">暂无生效的规则</string>
     <string name="export_book">导出书籍</string>
     <string name="export_book_notification_content">正在导出(%1$s),还有%2$d本待导出</string>
     <string name="export_md">导出(MD)</string>
@@ -1756,6 +1777,7 @@
     <string name="start_from">开始日期</string>
     <string name="daily_chapters">日更章数</string>
     <string name="start_chapter">起始章节</string>
+    <string name="end_chapter">结束章节</string>
     <string name="update_to_variant_title">检查更新查找版本</string>
     <string name="update_to_variant_summary">切换正式版/测试版</string>
     <string name="default_version">当前</string>

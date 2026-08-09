@@ -420,6 +420,8 @@
     <string name="ai_purify_chapter_sample_range">Select sample range</string>
     <string name="ai_purify_sample_current_chapter">Current chapter</string>
     <string name="ai_purify_sample_custom_range">Custom</string>
+    <string name="ai_purify_sample_current_hint">Sample the current chapter and generate optional clean rules</string>
+    <string name="ai_purify_start">Start clean</string>
     <string name="ai_purify_sample_range_start">Start chapter</string>
     <string name="ai_purify_sample_range_end">End chapter</string>
     <string name="ai_purify_sample_range_hint">Enter chapter numbers from 1-%1$d. Max %2$d chapters.</string>
@@ -695,7 +697,6 @@
     <string name="mouse_wheel_page">Mouse wheel to turn page</string>
     <string name="click_turn_page">Tap screen to turn page</string>
     <string name="page_anim">Flip animation</string>
-    <string name="book_page_anim">Flip animation (book)</string>
     <string name="disable_manga_page_anim">Disable flip animation</string>
     <string name="keep_light">Keep screen awake</string>
     <string name="back">Back</string>
@@ -802,6 +803,9 @@
     <string name="group_yf">Awaiting more</string>
     <string name="bookmark">Bookmarks</string>
     <string name="bookmark_add">Add to Bookmarks</string>
+    <string name="bookmark_content">Bookmark content</string>
+    <string name="bookmark_note">Note</string>
+    <string name="bookmark_note_hint">Add a note (optional)</string>
     <string name="action_del">Delete</string>
     <string name="load_over_time">Loading timeout</string>
     <string name="join_group">Follow:%s</string>
@@ -1528,6 +1532,22 @@
     <string name="ng_font_scale_follow_system">Follow system</string>
     <string name="search_content_size">search result</string>
     <string name="search_content_empty">Empty search result, check conversation settings</string>
+    <string name="search_input_hint">Search the whole book</string>
+    <string name="search_apply_replace">Apply replacements</string>
+    <string name="search_support_regex">Support regex</string>
+    <string name="search_invalid_regex">Invalid regular expression</string>
+    <string name="search_failed">Search failed</string>
+    <string name="search_result_count">Results: %1$d</string>
+    <string name="search_result_summary">%1$d results · %2$d chapters</string>
+    <string name="search_chapter_result_count">%1$d matches</string>
+    <string name="search_all_results">All results</string>
+    <string name="search_all_results_shown">All results shown</string>
+    <string name="search_previous_result">Previous</string>
+    <string name="search_next_result">Next</string>
+    <string name="search_restore_origin">Return to original reading position</string>
+    <string name="search_chapter_fast_navigator">Quick chapter navigation</string>
+    <string name="search_result_title">Results in this book for “%1$s”</string>
+    <string name="search_result_position">%1$d / %2$d · %3$s</string>
     <string name="tts_speech_reduce">Decrease speech speed</string>
     <string name="tts_speech_add">Increase speech speed</string>
     <string name="open_sys_dir_picker_error">Error opening system folder selector, automatically open application folder selector</string>
@@ -1730,6 +1750,7 @@
     <string name="bookshelf_px_4">Comprehensive</string>
     <string name="bookshelf_px_5">Sort by author</string>
     <string name="effective_replaces">Effective replacement</string>
+    <string name="no_effective_replace_rules">No effective rules</string>
     <string name="export_book">Export Book</string>
     <string name="export_book_notification_content">Exporting (%1$s), with %2$d to be exported.</string>
     <string name="export_md">Export(MD)</string>
@@ -1764,6 +1785,7 @@
     <string name="start_from">Start from</string>
     <string name="daily_chapters">Daily Chapters</string>
     <string name="start_chapter">Start Chapter</string>
+    <string name="end_chapter">End Chapter</string>
     <string name="update_to_variant_title">检查更新查找版本</string>
     <string name="update_to_variant_summary">切换正式版/测试版</string>
     <string name="default_version">当前</string>

@@ -353,10 +353,14 @@ private fun ContentSettingsPage(
             onClick = { actions.onAction(ReadMoreConfigKeys.SIMULATED_READING) },
         )
         ReadMoreDivider(contentColor)
-        ActionSettingRow(
+        ChoiceSettingRow(
             title = stringResource(R.string.image_style),
-            value = state.actionValue(ReadMoreConfigKeys.BOOK_IMAGE_STYLE),
-            onClick = { actions.onAction(ReadMoreConfigKeys.BOOK_IMAGE_STYLE) },
+            selectedValue = state.value(ReadMoreConfigKeys.BOOK_IMAGE_STYLE),
+            options = state.options(ReadMoreConfigKeys.BOOK_IMAGE_STYLE),
+            preferPopupBelow = true,
+            onSelected = {
+                actions.onValueChanged(ReadMoreConfigKeys.BOOK_IMAGE_STYLE, it)
+            },
         )
         ReadMoreDivider(contentColor)
         ReadMoreSectionLabel(
@@ -482,6 +486,7 @@ private fun ChoiceSettingRow(
     selectedValue: String,
     options: List<ReadMoreConfigOption>,
     onSelected: (String) -> Unit,
+    preferPopupBelow: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.value == selectedValue }?.label
@@ -490,8 +495,12 @@ private fun ChoiceSettingRow(
     val density = LocalDensity.current
     val gapPx = with(density) { 6.dp.roundToPx() }
     val marginPx = with(density) { 8.dp.roundToPx() }
-    val popupPositionProvider = remember(gapPx, marginPx) {
-        EndAbovePopupPositionProvider(gapPx = gapPx, marginPx = marginPx)
+    val popupPositionProvider = remember(gapPx, marginPx, preferPopupBelow) {
+        EndAnchoredPopupPositionProvider(
+            gapPx = gapPx,
+            marginPx = marginPx,
+            preferBelow = preferPopupBelow,
+        )
     }
     Row(
         modifier = Modifier
@@ -579,9 +588,10 @@ private fun ChoiceSettingRow(
     }
 }
 
-private class EndAbovePopupPositionProvider(
+private class EndAnchoredPopupPositionProvider(
     private val gapPx: Int,
     private val marginPx: Int,
+    private val preferBelow: Boolean,
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -601,7 +611,11 @@ private class EndAbovePopupPositionProvider(
         val belowY = anchorBounds.bottom + gapPx
         val maxY = (windowSize.height - popupContentSize.height - marginPx)
             .coerceAtLeast(marginPx)
-        val y = if (aboveY >= marginPx) aboveY else belowY.coerceAtMost(maxY)
+        val y = if (preferBelow) {
+            if (belowY <= maxY) belowY else aboveY.coerceAtLeast(marginPx)
+        } else {
+            if (aboveY >= marginPx) aboveY else belowY.coerceAtMost(maxY)
+        }
         return IntOffset(x, y)
     }
 }

@@ -39,9 +39,9 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
+import io.legado.app.ui.book.read.config.showReadConfirmDialog
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
@@ -391,7 +391,7 @@ class ReadMenu @JvmOverloads constructor(
                     },
                     onSearch = {
                         floatingToolExpansion = null
-                        runMenuOut { callBack.openSearchActivity(null) }
+                        runMenuOut { callBack.openSearchDrawer(null) }
                     },
                     onReplace = {
                         floatingToolExpansion = null
@@ -617,15 +617,19 @@ class ReadMenu @JvmOverloads constructor(
             if (ReadBook.isLocalBook) {
                 return@OnLongClickListener true
             }
-            context.alert(R.string.open_fun) {
-                setMessage(R.string.use_browser_open)
-                okButton {
+            showReadConfirmDialog(
+                context = context,
+                title = context.getString(R.string.open_fun),
+                message = context.getString(R.string.use_browser_open),
+                confirmLabel = context.getString(R.string.yes),
+                cancelLabel = context.getString(R.string.no),
+                onConfirm = {
                     AppConfig.readUrlInBrowser = true
-                }
-                noButton {
+                },
+                onCancel = {
                     AppConfig.readUrlInBrowser = false
-                }
-            }
+                },
+            )
             true
         }
         tvChapterName.setOnClickListener(chapterViewClickListener)
@@ -696,18 +700,23 @@ class ReadMenu @JvmOverloads constructor(
                         if (confirmSkipToChapter) {
                             callBack.skipToChapter(seekBar.progress)
                         } else {
-                            context.alert("章节跳转确认", "确定要跳转章节吗？") {
-                                yesButton {
+                            showReadConfirmDialog(
+                                context = context,
+                                title = "章节跳转确认",
+                                message = "确定要跳转章节吗？",
+                                confirmLabel = context.getString(R.string.yes),
+                                cancelLabel = context.getString(R.string.no),
+                                onConfirm = {
                                     confirmSkipToChapter = true
                                     callBack.skipToChapter(seekBar.progress)
-                                }
-                                noButton {
+                                },
+                                onCancel = {
                                     upSeekBar()
-                                }
-                                onCancelled {
+                                },
+                                onOutsideDismiss = {
                                     upSeekBar()
-                                }
-                            }
+                                },
+                            )
                         }
                     }
                 }
@@ -901,7 +910,7 @@ class ReadMenu @JvmOverloads constructor(
         fun autoPage()
         fun openReplaceRule()
         fun openChapterList()
-        fun openSearchActivity(searchWord: String?)
+        fun openSearchDrawer(searchWord: String?)
         fun openSourceEditActivity()
         fun openBookInfoActivity()
         fun showReadStyle()

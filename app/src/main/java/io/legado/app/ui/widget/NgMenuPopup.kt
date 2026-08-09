@@ -432,7 +432,6 @@ object NgMenuPopup {
             R.id.menu_upload -> R.drawable.ic_outline_cloud_24
             R.id.menu_export_folder -> R.drawable.ic_folder_open
             R.id.menu_export_pics_file,
-            R.id.menu_image_style,
             R.id.menu_manga_color_filter -> R.drawable.ic_image
             R.id.menu_export_charset,
             R.id.menu_set_charset -> R.drawable.ic_translate
@@ -445,7 +444,6 @@ object NgMenuPopup {
 
             R.id.menu_add_bookmark,
             R.id.menu_bookmark -> R.drawable.ic_bookmark
-            R.id.menu_page_anim,
             R.id.menu_switch_layout -> R.drawable.ic_view_quilt
             R.id.menu_get_progress,
             R.id.menu_cover_progress,

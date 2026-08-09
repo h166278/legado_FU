@@ -4,23 +4,27 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
+import android.view.Window
+import androidx.activity.ComponentDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogClickActionConfigBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.ui.book.read.ReadBookActivity
-import io.legado.app.utils.getCompatColor
+import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.putPrefInt
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 点击区域设置
  */
-class ClickActionConfigDialog : BaseDialogFragment(R.layout.dialog_click_action_config) {
-    private val binding by viewBinding(DialogClickActionConfigBinding::bind)
+class ClickActionConfigDialog : BaseComposeDialogFragment() {
     private val actions by lazy {
         linkedMapOf(
             Pair(-1, getString(R.string.non_action)),
@@ -40,6 +44,20 @@ class ClickActionConfigDialog : BaseDialogFragment(R.layout.dialog_click_action_
             Pair(13, getString(R.string.read_aloud_pause_resume))
         )
     }
+    private val preferenceKeys = listOf(
+        PreferKey.clickActionTL,
+        PreferKey.clickActionTC,
+        PreferKey.clickActionTR,
+        PreferKey.clickActionML,
+        PreferKey.clickActionMC,
+        PreferKey.clickActionMR,
+        PreferKey.clickActionBL,
+        PreferKey.clickActionBC,
+        PreferKey.clickActionBR,
+    )
+    private var currentActions by mutableStateOf<List<Int>>(emptyList())
+    private var actionSelectorDialog: ComponentDialog? = null
+    private var bottomDialogRegistered = false
 
     override fun onStart() {
         super.onStart()
@@ -51,95 +69,100 @@ class ClickActionConfigDialog : BaseDialogFragment(R.layout.dialog_click_action_
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        (activity as ReadBookActivity).bottomDialog--
+        if (bottomDialogRegistered) {
+            (activity as? ReadBookActivity)?.let {
+                it.bottomDialog = (it.bottomDialog - 1).coerceAtLeast(0)
+            }
+            bottomDialogRegistered = false
+        }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        (activity as ReadBookActivity).bottomDialog++
-        view.setBackgroundColor(getCompatColor(R.color.translucent))
-        initData()
-        initViewEvent()
-    }
-
-    private fun initData() = binding.run {
-        tvTopLeft.text = actions[AppConfig.clickActionTL]
-        tvTopCenter.text = actions[AppConfig.clickActionTC]
-        tvTopRight.text = actions[AppConfig.clickActionTR]
-        tvMiddleLeft.text = actions[AppConfig.clickActionML]
-        tvMiddleCenter.text = actions[AppConfig.clickActionMC]
-        tvMiddleRight.text = actions[AppConfig.clickActionMR]
-        tvBottomLeft.text = actions[AppConfig.clickActionBL]
-        tvBottomCenter.text = actions[AppConfig.clickActionBC]
-        tvBottomRight.text = actions[AppConfig.clickActionBR]
-    }
-
-    private fun initViewEvent() {
-        binding.ivClose.setOnClickListener {
-            dismissAllowingStateLoss()
-        }
-        binding.tvTopLeft.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionTL, action)
-                (it as? TextView)?.text = actions[action]
+        if (!bottomDialogRegistered) {
+            (activity as? ReadBookActivity)?.let {
+                it.bottomDialog++
+                bottomDialogRegistered = true
             }
         }
-        binding.tvTopCenter.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionTC, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvTopRight.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionTR, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvMiddleLeft.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionML, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvMiddleCenter.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionMC, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvMiddleRight.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionMR, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvBottomLeft.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionBL, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvBottomCenter.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionBC, action)
-                (it as? TextView)?.text = actions[action]
-            }
-        }
-        binding.tvBottomRight.setOnClickListener {
-            selectAction { action ->
-                putPrefInt(PreferKey.clickActionBR, action)
-                (it as? TextView)?.text = actions[action]
+        currentActions = readCurrentActions()
+        (view as ComposeView).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+            )
+            setContent {
+                NgAppTheme(
+                    snapshot = ReadDrawerStyle.themeSnapshot(requireContext()),
+                    updateSystemBars = false,
+                ) {
+                    ClickActionConfigScreen(
+                        actionLabels = currentActions.map { actions[it].orEmpty() },
+                        onCellClick = ::selectAction,
+                        onClose = { dismissAllowingStateLoss() },
+                    )
+                }
             }
         }
     }
 
-    private fun selectAction(success: (action: Int) -> Unit) {
-        context?.selector(
-            getString(R.string.select_action),
-            actions.values.toList()
-        ) { _, index ->
-            success.invoke(actions.keys.toList()[index])
+    override fun onDestroyView() {
+        actionSelectorDialog?.dismiss()
+        actionSelectorDialog = null
+        super.onDestroyView()
+    }
+
+    private fun readCurrentActions() = listOf(
+        AppConfig.clickActionTL,
+        AppConfig.clickActionTC,
+        AppConfig.clickActionTR,
+        AppConfig.clickActionML,
+        AppConfig.clickActionMC,
+        AppConfig.clickActionMR,
+        AppConfig.clickActionBL,
+        AppConfig.clickActionBC,
+        AppConfig.clickActionBR,
+    )
+
+    private fun selectAction(cellIndex: Int) {
+        if (cellIndex !in preferenceKeys.indices) return
+        actionSelectorDialog?.dismiss()
+        val context = requireContext()
+        var selectorDialog: ComponentDialog? = null
+        val contentView = ComposeView(context).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(
+                    snapshot = ReadDrawerStyle.themeSnapshot(context),
+                    updateSystemBars = false,
+                ) {
+                    ClickActionSelectorDialog(
+                        title = getString(R.string.select_action),
+                        options = actions.map { (value, label) ->
+                            ClickActionOption(value, label)
+                        },
+                        onSelected = { action ->
+                            putPrefInt(preferenceKeys[cellIndex], action)
+                            currentActions = currentActions.toMutableList().apply {
+                                this[cellIndex] = action
+                            }
+                            selectorDialog?.dismiss()
+                        },
+                    )
+                }
+            }
         }
+        selectorDialog = ComponentDialog(context).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            setContentView(contentView)
+            setCanceledOnTouchOutside(true)
+            setOnDismissListener {
+                if (actionSelectorDialog === this) actionSelectorDialog = null
+            }
+            show()
+            applyNgWindow(marginDp = 20, dimAmount = 0.14f)
+        }
+        actionSelectorDialog = selectorDialog
     }
 
     override fun onDestroy() {

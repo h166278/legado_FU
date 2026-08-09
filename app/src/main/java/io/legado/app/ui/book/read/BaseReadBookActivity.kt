@@ -10,6 +10,9 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
@@ -18,20 +21,19 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst.charsets
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.ActivityBookReadBinding
-import io.legado.app.databinding.DialogDownloadChoiceBinding
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogSimulatedReadingBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.ClickActionConfigDialog
 import io.legado.app.ui.book.read.config.PaddingConfigDialog
 import io.legado.app.ui.book.read.config.PageKeyDialog
+import io.legado.app.ui.book.read.config.ReadCharsetDialogContent
+import io.legado.app.ui.book.read.config.ReadOfflineCacheDialogContent
+import io.legado.app.ui.book.read.config.ReadSimulatedReadingDialogContent
+import io.legado.app.ui.book.read.config.showReadComposeDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileDoc
@@ -259,27 +261,29 @@ abstract class BaseReadBookActivity :
         }
     }
 
-    @SuppressLint("InflateParams", "SetTextI18n")
     fun showDownloadDialog() {
         ReadBook.book?.let { book ->
-            alert(titleResource = R.string.offline_cache) {
-                val alertBinding = DialogDownloadChoiceBinding.inflate(layoutInflater).apply {
-                    editStart.setText((book.durChapterIndex + 1).toString())
-                    editEnd.setText(book.totalChapterNum.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
-                    alertBinding.run {
-                        val start = editStart.text!!.toString().let {
-                            if (it.isEmpty()) 0 else it.toInt()
-                        }
-                        val end = editEnd.text!!.toString().let {
-                            if (it.isEmpty()) book.totalChapterNum else it.toInt()
-                        }
+            var startText by mutableStateOf((book.durChapterIndex + 1).toString())
+            var endText by mutableStateOf(book.totalChapterNum.toString())
+            showReadComposeDialog(this, marginDp = 28) { dismiss ->
+                ReadOfflineCacheDialogContent(
+                    title = getString(R.string.offline_cache),
+                    startLabel = getString(R.string.start_chapter),
+                    endLabel = getString(R.string.end_chapter),
+                    start = startText,
+                    end = endText,
+                    cancelLabel = getString(R.string.cancel),
+                    confirmLabel = getString(R.string.ok),
+                    onStartChanged = { startText = it },
+                    onEndChanged = { endText = it },
+                    onCancel = dismiss,
+                    onConfirm = {
+                        val start = startText.toIntOrNull() ?: 0
+                        val end = endText.toIntOrNull() ?: book.totalChapterNum
+                        dismiss()
                         CacheBook.start(this@BaseReadBookActivity, book, start - 1, end - 1)
-                    }
-                }
-                cancelButton()
+                    },
+                )
             }
         }
     }
@@ -287,87 +291,80 @@ abstract class BaseReadBookActivity :
     fun showSimulatedReading() {
         val book = ReadBook.book ?: return
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val alertBinding = DialogSimulatedReadingBinding.inflate(layoutInflater).apply {
-            srEnabled.isChecked = book.getReadSimulating()
-            editStart.setText(book.getStartChapter().toString())
-            editNum.setText(book.getDailyChapters().toString())
-            startDate.setText(book.getStartDate()?.format(dateFormatter))
-            startDate.isFocusable = false // 设置为false，不允许获得焦点
-            startDate.isCursorVisible = false // 不显示光标
-            startDate.setOnClickListener {
-                // 获取当前日期
-                val localStartDate = LocalDate.parse(startDate.text)
-                // 创建 DatePickerDialog
-                val datePickerDialog = DatePickerDialog(
-                    root.context,
-                    { _, yy, mm, dayOfMonth ->
-                        // 使用Java 8的日期和时间API来格式化日期
-                        val date = LocalDate.of(yy, mm + 1, dayOfMonth) // Java 8的LocalDate，月份从1开始
-                        val formattedDate = date.format(dateFormatter)
-                        startDate.setText(formattedDate)
-                    }, localStartDate.year,
-                    localStartDate.monthValue - 1,
-                    localStartDate.dayOfMonth
-                )
-                datePickerDialog.show()
-            }
-        }
-        alert(titleResource = R.string.simulated_reading) {
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.run {
-                    val start = editStart.text!!.toString().let {
-                        if (it.isEmpty()) 0 else it.toInt()
-                    }
-                    val num = editNum.text!!.toString().let {
-                        if (it.isEmpty()) book.totalChapterNum else it.toInt()
-                    }
-                    val enabled = srEnabled.isChecked
-                    val date = startDate.text!!.toString().let {
-                        if (it.isEmpty()) LocalDate.now()
-                        else LocalDate.parse(it, dateFormatter)
-                    }
+        var enabled by mutableStateOf(book.getReadSimulating())
+        var startChapter by mutableStateOf(book.getStartChapter().toString())
+        var dailyChapters by mutableStateOf(book.getDailyChapters().toString())
+        var startDate by mutableStateOf(
+            (book.getStartDate() ?: LocalDate.now()).format(dateFormatter)
+        )
+        showReadComposeDialog(this, marginDp = 28) { dismiss ->
+            ReadSimulatedReadingDialogContent(
+                title = getString(R.string.simulated_reading),
+                enabledLabel = getString(R.string.enable),
+                startDateLabel = getString(R.string.start_from),
+                startChapterLabel = getString(R.string.start_chapter),
+                dailyChaptersLabel = getString(R.string.daily_chapters),
+                enabled = enabled,
+                startDate = startDate,
+                startChapter = startChapter,
+                dailyChapters = dailyChapters,
+                cancelLabel = getString(R.string.cancel),
+                confirmLabel = getString(R.string.ok),
+                onEnabledChanged = { enabled = it },
+                onStartDateClick = {
+                    val localStartDate = runCatching {
+                        LocalDate.parse(startDate, dateFormatter)
+                    }.getOrDefault(LocalDate.now())
+                    DatePickerDialog(
+                        this,
+                        { _, year, month, dayOfMonth ->
+                            startDate = LocalDate.of(year, month + 1, dayOfMonth)
+                                .format(dateFormatter)
+                        },
+                        localStartDate.year,
+                        localStartDate.monthValue - 1,
+                        localStartDate.dayOfMonth,
+                    ).show()
+                },
+                onStartChapterChanged = { startChapter = it },
+                onDailyChaptersChanged = { dailyChapters = it },
+                onCancel = dismiss,
+                onConfirm = {
+                    val start = startChapter.toIntOrNull() ?: 0
+                    val num = dailyChapters.toIntOrNull() ?: book.totalChapterNum
+                    val date = runCatching {
+                        LocalDate.parse(startDate, dateFormatter)
+                    }.getOrDefault(LocalDate.now())
                     book.setStartDate(date)
                     book.setDailyChapters(num)
                     book.setStartChapter(start)
                     book.setReadSimulating(enabled)
                     book.save()
+                    dismiss()
                     ReadBook.clearTextChapter()
                     viewModel.initData(intent)
-                }
-            }
-            cancelButton()
+                },
+            )
         }
     }
 
     fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset"
-                editView.setFilterValues(charsets)
-                editView.setText(ReadBook.book?.charset)
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    ReadBook.setCharset(it)
-                }
-            }
-            cancelButton()
-        }
-    }
-
-    fun showPageAnimConfig(success: () -> Unit) {
-        val items = arrayListOf<String>()
-        items.add(getString(R.string.btn_default_s))
-        items.add(getString(R.string.page_anim_cover))
-        items.add(getString(R.string.page_anim_slide))
-        items.add(getString(R.string.page_anim_simulation))
-        items.add(getString(R.string.page_anim_scroll))
-        items.add(getString(R.string.page_anim_none))
-        selector(R.string.page_anim, items) { _, i ->
-            ReadBook.book?.setPageAnim(i - 1)
-            success()
+        var charset by mutableStateOf(ReadBook.book?.charset.orEmpty())
+        showReadComposeDialog(this, marginDp = 28) { dismiss ->
+            ReadCharsetDialogContent(
+                title = getString(R.string.set_charset),
+                value = charset,
+                hint = "charset",
+                options = charsets.toList(),
+                cancelLabel = getString(R.string.cancel),
+                confirmLabel = getString(R.string.ok),
+                onValueChanged = { charset = it },
+                onCancel = dismiss,
+                onConfirm = {
+                    ReadBook.setCharset(charset)
+                    dismiss()
+                },
+            )
         }
     }
 

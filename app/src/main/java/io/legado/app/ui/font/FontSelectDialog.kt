@@ -1,33 +1,62 @@
 package io.legado.app.ui.font
 
-import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.graphics.Color as AndroidColor
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.view.isVisible
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogFontSelectBinding
-import io.legado.app.databinding.ItemFontBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.book.read.ReadDrawerStyle
-import io.legado.app.ui.design.components.view.NgFloatingTabItem
+import io.legado.app.ui.book.read.config.ReadConfigDialogSurface
+import io.legado.app.ui.book.read.config.ReadConfigDialogTitle
+import io.legado.app.ui.book.read.config.ReadConfigDock
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.widget.dialog.applyNgDialogWindow
-import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
+import io.legado.app.utils.RealPathUtil
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
@@ -37,41 +66,24 @@ import io.legado.app.utils.list
 import io.legado.app.utils.listFileDocs
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.invisible
-import io.legado.app.utils.visible
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.io.File
+import java.net.URLDecoder
 
-/**
- * 字体选择对话框
- */
-class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
-    FontAdapter.CallBack {
+/** 字体选择对话框。内容使用 Compose，目录读取与字体应用行为保持不变。 */
+class FontSelectDialog : BaseComposeDialogFragment() {
+
     private companion object {
         const val MODE_SYSTEM = 0
         const val MODE_CUSTOM = 1
     }
 
     private val fontRegex = Regex("(?i).*\\.[ot]tf")
-    private val binding by viewBinding(DialogFontSelectBinding::bind)
-    private var fontMode = MODE_SYSTEM
-    private val adapter by lazy {
-        FontAdapter(
-            context = requireContext(),
-            currentFilePath = { callBack?.curFontPath.orEmpty() },
-            contentColor = ReadDrawerStyle.contentColor(requireContext()),
-            callBack = this,
-        )
-    }
-    private val systemFontAdapter by lazy {
-        SystemFontAdapter(
-            context = requireContext(),
-            contentColor = ReadDrawerStyle.contentColor(requireContext()),
-            onSelect = ::selectSystemFont,
-        ).apply {
-            setItems(resources.getStringArray(R.array.system_typefaces).indices.toList())
-        }
-    }
+    private lateinit var composeView: ComposeView
+    private var fontMode by mutableIntStateOf(MODE_SYSTEM)
+    private var customFonts by mutableStateOf<List<FileDoc>>(emptyList())
+    private var selectedFontPath by mutableStateOf("")
+    private var selectedSystemFont by mutableIntStateOf(0)
+
     private val selectFontDir = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let {
             kotlin.runCatching {
@@ -102,58 +114,208 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        val contentColor = ReadDrawerStyle.contentColor(requireContext())
-        binding.rootView.setBackgroundColor(Color.TRANSPARENT)
-        ReadDrawerStyle.applyGlassBackground(
-            view = binding.ngDialogBackground,
-            radiusDp = 24,
+        composeView = view as ComposeView
+        composeView.setBackgroundColor(AndroidColor.TRANSPARENT)
+        selectedFontPath = callBack?.curFontPath.orEmpty()
+        selectedSystemFont = AppConfig.systemTypefaces
+        fontMode = if (selectedFontPath.isEmpty()) MODE_SYSTEM else MODE_CUSTOM
+        composeView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
-        binding.tvTitle.setTextColor(contentColor)
-        binding.tvEmpty.setTextColor(contentColor)
-        binding.tvAddDirectory.setTextColor(contentColor)
-        binding.ivAddDirectory.setColorFilter(contentColor)
-        binding.ivAddDirectoryChevron.setColorFilter(contentColor)
-        binding.addDirectoryRow.setOnClickListener { openFolder() }
-        binding.recyclerView.layoutManager = LinearLayoutManager(context)
-        val selectedColor = requireContext().accentColor
-        binding.fontModeTabs.setSurfaceAlpha(0.28f)
-        binding.fontModeTabs.setContentColors(
-            unselectedContentColor = contentColor,
-            selectedContentColor = if (ColorUtils.isColorLight(selectedColor)) {
-                Color.BLACK
-            } else {
-                Color.WHITE
-            },
-            selectedContainerColor = selectedColor,
-        )
-        fontMode = if (callBack?.curFontPath.isNullOrEmpty()) MODE_SYSTEM else MODE_CUSTOM
-        binding.fontModeTabs.setItems(
-            items = listOf(
-                NgFloatingTabItem(text = getString(R.string.font_mode_system)),
-                NgFloatingTabItem(text = getString(R.string.font_mode_custom)),
-            ),
-            selectedIndex = fontMode,
-        ) { mode ->
-            showFontMode(mode)
+        composeView.setContent {
+            NgAppTheme(
+                snapshot = ReadDrawerStyle.themeSnapshot(requireContext()),
+                updateSystemBars = false,
+            ) {
+                FontSelectContent()
+            }
         }
-        showFontMode(fontMode)
+        loadConfiguredFonts()
+    }
 
+    @Composable
+    private fun FontSelectContent() {
+        val systemNames = resources.getStringArray(R.array.system_typefaces).toList()
+        ReadConfigDialogSurface(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 18.dp,
+                top = 18.dp,
+                end = 18.dp,
+                bottom = 12.dp,
+            ),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ReadConfigDialogTitle(getString(R.string.body_font))
+            }
+            Spacer(Modifier.height(8.dp))
+            ReadConfigDock(
+                labels = listOf(
+                    getString(R.string.font_mode_system),
+                    getString(R.string.font_mode_custom),
+                ),
+                selectedIndex = fontMode,
+                onSelected = { fontMode = it },
+                accessibilityLabel = getString(R.string.body_font),
+            )
+            Spacer(Modifier.height(8.dp))
+            if (fontMode == MODE_CUSTOM) {
+                FontDirectoryRow(onClick = ::openFolder)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                if (fontMode == MODE_SYSTEM) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 6.dp),
+                    ) {
+                        itemsIndexed(systemNames) { index, name ->
+                            val typeface = when (index) {
+                                1 -> Typeface.SERIF
+                                2 -> Typeface.MONOSPACE
+                                else -> Typeface.SANS_SERIF
+                            }
+                            FontRow(
+                                name = name,
+                                typeface = typeface,
+                                selected = selectedFontPath.isEmpty() &&
+                                    selectedSystemFont == index,
+                                onClick = { selectSystemFont(index) },
+                            )
+                        }
+                    }
+                } else if (customFonts.isEmpty()) {
+                    Text(
+                        text = getString(R.string.font_folder_empty),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
+                        color = Color(NgTheme.colors.onSurfaceVariant),
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 6.dp),
+                    ) {
+                        itemsIndexed(
+                            items = customFonts,
+                            key = { _, item -> item.uri.toString() },
+                        ) { _, item ->
+                            val typeface = remember(item) { loadTypeface(item) }
+                            FontRow(
+                                name = item.name,
+                                typeface = typeface,
+                                selected = item.name == currentFontName(),
+                                onClick = { selectCustomFont(item) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun FontDirectoryRow(onClick: () -> Unit) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_create_folder_outline),
+                contentDescription = null,
+                tint = Color(NgTheme.colors.onSurface),
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                text = getString(R.string.add_font_directory),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 16.sp,
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right_20),
+                contentDescription = null,
+                tint = Color(NgTheme.colors.onSurface),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+
+    @Composable
+    private fun FontRow(
+        name: String,
+        typeface: Typeface?,
+        selected: Boolean,
+        onClick: () -> Unit,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_interface_setting),
+                contentDescription = null,
+                tint = Color(NgTheme.colors.onSurface),
+                modifier = Modifier.size(24.dp),
+            )
+            Text(
+                text = name,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 16.sp,
+                fontFamily = typeface?.let(::FontFamily),
+            )
+            if (selected) {
+                Icon(
+                    painter = painterResource(R.drawable.ng_ic_popup_selected),
+                    contentDescription = null,
+                    tint = Color(NgTheme.colors.primary),
+                    modifier = Modifier.size(24.dp),
+                )
+            } else {
+                Spacer(Modifier.size(24.dp))
+            }
+        }
+    }
+
+    private fun loadConfiguredFonts() {
         val fontPath = getPrefString(PreferKey.fontFolder)
         if (fontPath.isNullOrEmpty()) {
             loadFontFiles()
-        } else {
-            if (fontPath.isContentScheme()) {
-                val doc = DocumentFile.fromTreeUri(requireContext(), Uri.parse(fontPath))
-                if (doc?.canRead() == true) {
-                    loadFontFiles(FileDoc.fromDocumentFile(doc))
-                } else {
-                    loadFontFiles()
-                }
+        } else if (fontPath.isContentScheme()) {
+            val doc = DocumentFile.fromTreeUri(requireContext(), Uri.parse(fontPath))
+            if (doc?.canRead() == true) {
+                loadFontFiles(FileDoc.fromDocumentFile(doc))
             } else {
-                File(fontPath).takeIf { it.canRead() }?.let {
-                    loadFontFiles(FileDoc.fromFile(it))
-                } ?: loadFontFiles()
+                loadFontFiles()
             }
+        } else {
+            File(fontPath).takeIf { it.canRead() }?.let {
+                loadFontFiles(FileDoc.fromFile(it))
+            } ?: loadFontFiles()
         }
     }
 
@@ -166,22 +328,15 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
 
     private fun getLocalFonts(): ArrayList<FileDoc> {
         val path = FileUtils.getPath(requireContext().externalFiles, "font")
-        return File(path).listFileDocs {
-            it.name.matches(fontRegex)
-        }
+        return File(path).listFileDocs { it.name.matches(fontRegex) }
     }
 
     private fun loadFontFiles(fileDoc: FileDoc? = null) {
         execute {
-            val fontItems = fileDoc?.list {
-                it.name.matches(fontRegex)
-            } ?: ArrayList()
+            val fontItems = fileDoc?.list { it.name.matches(fontRegex) } ?: ArrayList()
             mergeFontItems(fontItems, getLocalFonts())
         }.onSuccess {
-            adapter.setItems(it)
-            if (fontMode == MODE_CUSTOM) {
-                binding.tvEmpty.isVisible = it.isEmpty()
-            }
+            customFonts = it
         }.onError {
             AppLog.put("加载字体文件失败\n${it.localizedMessage}", it)
             toastOnUi("getFontFiles:${it.localizedMessage}")
@@ -190,44 +345,48 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
 
     private fun mergeFontItems(
         items1: ArrayList<FileDoc>,
-        items2: ArrayList<FileDoc>
+        items2: ArrayList<FileDoc>,
     ): List<FileDoc> {
         val items = ArrayList(items1)
         items2.forEach { item2 ->
-            var isInFirst = false
-            items1.forEach for1@{ item1 ->
-                if (item2.name == item1.name) {
-                    isInFirst = true
-                    return@for1
-                }
-            }
-            if (!isInFirst) {
-                items.add(item2)
-            }
+            if (items1.none { it.name == item2.name }) items.add(item2)
         }
-        return items.sortedWith { o1, o2 ->
-            o1.name.cnCompare(o2.name)
-        }
+        return items.sortedWith { first, second -> first.name.cnCompare(second.name) }
     }
 
-    override fun onFontSelect(docItem: FileDoc) {
-        callBack?.selectFont(docItem.toString())
-        adapter.notifyDataSetChanged()
-        systemFontAdapter.notifyDataSetChanged()
+    private fun loadTypeface(item: FileDoc): Typeface? = runCatching {
+        if (item.isContentScheme) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                requireContext().contentResolver.openFileDescriptor(item.uri, "r")?.use {
+                    Typeface.Builder(it.fileDescriptor).build()
+                }
+            } else {
+                Typeface.createFromFile(RealPathUtil.getPath(requireContext(), item.uri))
+            }
+        } else {
+            Typeface.createFromFile(item.uri.path!!)
+        }
+    }.onFailure {
+        AppLog.put("读取字体 ${item.name} 出错\n${it.localizedMessage}", it, true)
+    }.getOrNull()
+
+    private fun selectCustomFont(item: FileDoc) {
+        selectedFontPath = item.toString()
+        callBack?.selectFont(selectedFontPath)
     }
 
     private fun selectSystemFont(index: Int) {
+        selectedSystemFont = index
+        selectedFontPath = ""
         AppConfig.systemTypefaces = index
         callBack?.selectFont("")
-        systemFontAdapter.notifyDataSetChanged()
-        adapter.notifyDataSetChanged()
     }
 
-    private fun showFontMode(mode: Int) {
-        fontMode = mode
-        binding.addDirectoryRow.isVisible = mode == MODE_CUSTOM
-        binding.recyclerView.adapter = if (mode == MODE_SYSTEM) systemFontAdapter else adapter
-        binding.tvEmpty.isVisible = mode == MODE_CUSTOM && adapter.itemCount == 0
+    private fun currentFontName(): String? {
+        if (selectedFontPath.isEmpty()) return null
+        return runCatching { URLDecoder.decode(selectedFontPath, "utf-8") }
+            .getOrNull()
+            ?.substringAfterLast(File.separator)
     }
 
     private val callBack: CallBack?
@@ -236,44 +395,5 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
     interface CallBack {
         fun selectFont(path: String)
         val curFontPath: String
-    }
-
-    private inner class SystemFontAdapter(
-        context: Context,
-        private val contentColor: Int,
-        private val onSelect: (Int) -> Unit,
-    ) : RecyclerAdapter<Int, ItemFontBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemFontBinding {
-            return ItemFontBinding.inflate(inflater, parent, false)
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemFontBinding) {
-            binding.root.setOnClickListener {
-                getItem(holder.layoutPosition)?.let(onSelect)
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemFontBinding,
-            item: Int,
-            payloads: MutableList<Any>,
-        ) = binding.run {
-            tvFont.text = resources.getStringArray(R.array.system_typefaces)[item]
-            tvFont.setTextColor(contentColor)
-            tvFont.typeface = when (item) {
-                1 -> Typeface.SERIF
-                2 -> Typeface.MONOSPACE
-                else -> Typeface.SANS_SERIF
-            }
-            ivChecked.setColorFilter(requireContext().accentColor)
-            ivFont.setColorFilter(contentColor)
-            if (callBack?.curFontPath.isNullOrEmpty() && AppConfig.systemTypefaces == item) {
-                ivChecked.visible()
-            } else {
-                ivChecked.invisible()
-            }
-        }
     }
 }

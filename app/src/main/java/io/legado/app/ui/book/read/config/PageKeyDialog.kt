@@ -1,65 +1,81 @@
 package io.legado.app.ui.book.read.config
 
-import android.app.Dialog
 import android.content.Context
 import android.view.KeyEvent
 import android.view.ViewGroup
+import android.view.Window
+import androidx.activity.ComponentDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogPageKeyBinding
-import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.setLayout
-import splitties.views.onClick
 
 
-class PageKeyDialog(context: Context) : Dialog(context) {
+class PageKeyDialog(context: Context) : ComponentDialog(context) {
 
-    private val binding = DialogPageKeyBinding.inflate(layoutInflater)
+    private var prevKeys by mutableStateOf(context.getPrefString(PreferKey.prevKeys).orEmpty())
+    private var nextKeys by mutableStateOf(context.getPrefString(PreferKey.nextKeys).orEmpty())
+    private var focusedField: FocusedField? = null
 
     override fun onStart() {
         super.onStart()
+        window?.run {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            decorView.setPadding(0, 0, 0, 0)
+        }
         setLayout(0.9f, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     init {
-        setContentView(binding.root)
-        binding.run {
-            contentView.setBackgroundColor(context.backgroundColor)
-            etPrev.setText(context.getPrefString(PreferKey.prevKeys))
-            etNext.setText(context.getPrefString(PreferKey.nextKeys))
-            tvReset.onClick {
-                etPrev.setText("")
-                etNext.setText("")
+        requestWindowFeature(Window.FEATURE_NO_TITLE)
+        setContentView(
+            ComposeView(context).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+                setContent {
+                    NgAppTheme(
+                        snapshot = ReadDrawerStyle.themeSnapshot(context),
+                        updateSystemBars = false,
+                    ) {
+                        PageKeyDialogContent(
+                            prevKeys = prevKeys,
+                            nextKeys = nextKeys,
+                            onPrevKeysChanged = { prevKeys = it },
+                            onNextKeysChanged = { nextKeys = it },
+                            onPrevFocusChanged = { updateFocus(FocusedField.PREV, it) },
+                            onNextFocusChanged = { updateFocus(FocusedField.NEXT, it) },
+                            onReset = {
+                                prevKeys = ""
+                                nextKeys = ""
+                            },
+                            onConfirm = {
+                                context.putPrefString(PreferKey.prevKeys, prevKeys)
+                                context.putPrefString(PreferKey.nextKeys, nextKeys)
+                                dismiss()
+                            },
+                        )
+                    }
+                }
             }
-            tvOk.setOnClickListener {
-                context.putPrefString(PreferKey.prevKeys, etPrev.text?.toString())
-                context.putPrefString(PreferKey.nextKeys, etNext.text?.toString())
-                dismiss()
-            }
-        }
+        )
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_DEL) {
-            if (binding.etPrev.hasFocus()) {
-                val editableText = binding.etPrev.editableText
-                if (editableText.isEmpty() or editableText.endsWith(",")) {
-                    editableText.append(keyCode.toString())
-                } else {
-                    editableText.append(",").append(keyCode.toString())
-                }
-                return true
-            } else if (binding.etNext.hasFocus()) {
-                val editableText = binding.etNext.editableText
-                if (editableText.isEmpty() or editableText.endsWith(",")) {
-                    editableText.append(keyCode.toString())
-                } else {
-                    editableText.append(",").append(keyCode.toString())
-                }
-                return true
+            when (focusedField) {
+                FocusedField.PREV -> prevKeys = appendKeyCode(prevKeys, keyCode)
+                FocusedField.NEXT -> nextKeys = appendKeyCode(nextKeys, keyCode)
+                null -> return super.onKeyDown(keyCode, event)
             }
+            return true
         }
         return super.onKeyDown(keyCode, event)
     }
@@ -67,6 +83,27 @@ class PageKeyDialog(context: Context) : Dialog(context) {
     override fun dismiss() {
         super.dismiss()
         currentFocus?.hideSoftInput()
+    }
+
+    private fun updateFocus(field: FocusedField, focused: Boolean) {
+        if (focused) {
+            focusedField = field
+        } else if (focusedField == field) {
+            focusedField = null
+        }
+    }
+
+    private fun appendKeyCode(value: String, keyCode: Int): String {
+        return if (value.isEmpty() || value.endsWith(",")) {
+            value + keyCode
+        } else {
+            "$value,$keyCode"
+        }
+    }
+
+    private enum class FocusedField {
+        PREV,
+        NEXT,
     }
 
 }

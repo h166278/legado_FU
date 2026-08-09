@@ -5,7 +5,6 @@ import android.app.Dialog
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Looper
 import android.os.SystemClock
@@ -16,17 +15,9 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.Window
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import android.widget.CheckBox
-import android.widget.EditText
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
 import androidx.core.view.get
 import androidx.core.view.size
 import androidx.lifecycle.lifecycleScope
@@ -48,7 +39,6 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
-import io.legado.app.help.IntentData
 import io.legado.app.help.TTS
 import io.legado.app.help.ai.AiConfig
 import io.legado.app.help.ai.AiPurifyHelper
@@ -71,8 +61,6 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.getSourceType
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
@@ -96,8 +84,18 @@ import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.aloud.ReadAloudLauncher
 import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
 import io.legado.app.ui.book.read.config.AutoReadDialog
+import io.legado.app.ui.book.read.config.AiPurifyChapterConfirmDialogContent
+import io.legado.app.ui.book.read.config.AiPurifyChapterSummaryUi
+import io.legado.app.ui.book.read.config.AiPurifyPreviewDialogContent
+import io.legado.app.ui.book.read.config.AiPurifyPreviewUi
+import io.legado.app.ui.book.read.config.AiPurifyProgressDialogContent
+import io.legado.app.ui.book.read.config.AiPurifyRangeDialogContent
+import io.legado.app.ui.book.read.config.AiPurifyRuleDetailDialogContent
+import io.legado.app.ui.book.read.config.AiPurifyRuleUi
 import io.legado.app.ui.book.read.config.MoreConfigDialog
 import io.legado.app.ui.book.read.config.ReadStyleDialog
+import io.legado.app.ui.book.read.config.showReadConfirmDialog
+import io.legado.app.ui.book.read.config.showReadComposeDialog
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_COLOR
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_DIVIDER_COLOR
 import io.legado.app.ui.book.read.page.ContentTextView
@@ -107,7 +105,7 @@ import io.legado.app.ui.book.read.page.entities.PageDirection
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
-import io.legado.app.ui.book.searchContent.SearchContentActivity
+import io.legado.app.ui.book.searchContent.ReadSearchDialog
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
@@ -127,8 +125,6 @@ import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.dialog.PhotoDialog
-import io.legado.app.ui.widget.dialog.WaitDialog
-import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.ACache
 import io.legado.app.utils.Debounce
 import io.legado.app.utils.LogUtils
@@ -208,26 +204,6 @@ class ReadBookActivity : BaseReadBookActivity(),
                 viewModel.replaceRuleChanged()
             }
         }
-    private val searchContentActivity =
-        registerForActivityResult(StartActivityContract(SearchContentActivity::class.java)) {
-            val data = it.data ?: return@registerForActivityResult
-            val key = data.getLongExtra("key", System.currentTimeMillis())
-            val index = data.getIntExtra("index", 0)
-            val searchResult = IntentData.get<SearchResult>("searchResult$key")
-            val searchResultList = IntentData.get<List<SearchResult>>("searchResultList$key")
-            if (searchResult != null && searchResultList != null) {
-                viewModel.searchContentQuery = searchResult.query
-                binding.searchMenu.upSearchResultList(searchResultList)
-                isShowingSearchResult = true
-                viewModel.searchResultIndex = index
-                binding.searchMenu.updateSearchResultIndex(index)
-                binding.searchMenu.selectedSearchResult?.let { currentResult ->
-                    ReadBook.saveCurrentBookProgress() //退出全文搜索恢复此时进度
-                    skipToSearch(currentResult)
-                    showActionMenu()
-                }
-            }
-        }
     private val bookInfoActivity =
         registerForActivityResult(StartActivityContract(BookInfoActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
@@ -256,7 +232,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     override val isInitFinish: Boolean get() = viewModel.isInitFinish
     override val isScroll: Boolean get() = binding.readView.isScroll
     private val isAutoPage get() = binding.readView.isAutoPage
-    override var isShowingSearchResult = false
+    var isShowingSearchResult = false
     override var isSelectingSearchResult = false
         set(value) {
             field = value && isShowingSearchResult
@@ -288,7 +264,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         NetworkChangedListener(this)
     }
     private var justInitData: Boolean = false
-    private var syncDialog: AlertDialog? = null
+    private var syncDialog: Dialog? = null
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -591,11 +567,6 @@ class ReadBookActivity : BaseReadBookActivity(),
                 refreshContentAll(it)
             }
 
-            R.id.menu_page_anim -> showPageAnimConfig {
-                binding.readView.upPageAnim()
-                ReadBook.loadContent(false)
-            }
-
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_network_log -> showDialogFragment<NetworkLogDialog>()
             R.id.menu_toc_regex -> showDialogFragment(
@@ -607,7 +578,6 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_set_charset -> showCharsetConfig()
-            R.id.menu_image_style -> showImageStyleConfig()
 
             R.id.menu_get_progress -> ReadBook.book?.let {
                 viewModel.syncBookProgress(it) { progress ->
@@ -631,29 +601,14 @@ class ReadBookActivity : BaseReadBookActivity(),
         return super.onCompatOptionsItemSelected(item)
     }
 
-    fun showImageStyleConfig() {
-        val imageStyles = listOf(
-            Book.imgStyleDefault,
-            Book.imgStyleFull,
-            Book.imgStyleText,
-            Book.imgStyleSingle
-        )
-        val imageStyleTitles = listOf(
-            getString(R.string.image_style_original),
-            getString(R.string.image_style_fit_width),
-            getString(R.string.image_style_inline),
-            getString(R.string.image_style_single_page)
-        )
-        selector(R.string.image_style, imageStyleTitles) { _, index ->
-            val imageStyle = imageStyles[index]
-            ReadBook.book?.setImageStyle(imageStyle)
-            if (imageStyle == Book.imgStyleSingle) {
-                ReadBook.book?.setPageAnim(0)
-                binding.readView.upPageAnim()
-            }
-            ReadBook.saveRead()
-            ReadBook.loadContent(false)
+    fun applyImageStyleConfig(imageStyle: String) {
+        ReadBook.book?.setImageStyle(imageStyle)
+        if (imageStyle == Book.imgStyleSingle) {
+            ReadBook.book?.setPageAnim(0)
+            binding.readView.upPageAnim()
         }
+        ReadBook.saveRead()
+        ReadBook.loadContent(false)
     }
 
     private fun showBookChangeSource() {
@@ -978,7 +933,7 @@ class ReadBookActivity : BaseReadBookActivity(),
 
             R.id.menu_search_content -> {
                 viewModel.searchContentQuery = selectedText
-                openSearchActivity(selectedText)
+                openSearchDrawer(selectedText)
                 return true
             }
 
@@ -997,13 +952,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         aiPurifyJob?.cancel()
-        val waitDialog = WaitDialog(this).apply {
-            setText(R.string.ai_purify)
-            setOnCancelListener {
-                aiPurifyJob?.cancel()
-            }
-            show()
-        }
+        val waitDialog = showAiPurifyProgressDialog(getString(R.string.ai_purify))
         aiPurifyJob = lifecycleScope.launch {
             try {
                 val startedAt = SystemClock.elapsedRealtime()
@@ -1025,62 +974,39 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun showAiPurifyConfirmDialog(result: AiPurifyResult, elapsedMs: Long) {
-        val view = layoutInflater.inflate(R.layout.dialog_ai_purify_confirm, null)
-        view.findViewById<TextView>(R.id.tv_purify_deleted_count).text = result.deletedCount.toString()
-        view.findViewById<TextView>(R.id.tv_purify_rule_count).text = "1"
-        view.findViewById<TextView>(R.id.tv_purify_elapsed).text = formatAiPurifyElapsed(elapsedMs)
-        view.findViewById<TextView>(R.id.tv_purify_model).text = formatAiPurifyModel(result.model)
-        view.findViewById<TextView>(R.id.tv_original).text = result.original
-        view.findViewById<TextView>(R.id.tv_cleaned).text = result.cleaned
-        view.findViewById<TextView>(R.id.tv_deleted).text = formatAiPurifyInlineChangeSummary(result)
-        view.prepareAiPurifyDialogSize(R.id.scroll_ai_purify_content)
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(view)
-            .create()
-        view.findViewById<View>(R.id.btn_apply).setOnClickListener {
-            dialog.dismiss()
-            applyAiPurifyResult(result)
+        showReadComposeDialog(this) { dismiss ->
+            AiPurifyPreviewDialogContent(
+                title = getString(R.string.ai_purify_confirm),
+                preview = AiPurifyPreviewUi(
+                    deletedCount = result.deletedCount.toString(),
+                    ruleCount = "1",
+                    elapsed = formatAiPurifyElapsed(elapsedMs),
+                    model = formatAiPurifyModel(result.model),
+                    original = result.original,
+                    cleaned = result.cleaned,
+                    deleted = formatAiPurifyInlineChangeSummary(result),
+                ),
+                originalLabel = getString(R.string.original_text),
+                cleanedLabel = getString(R.string.ai_purify_cleaned_text),
+                deletedLabel = getString(R.string.ai_purify_deleted_content),
+                deletedCountLabel = getString(R.string.ai_purify_chapter_deleted_count),
+                ruleCountLabel = getString(R.string.ai_purify_chapter_rule_count),
+                elapsedLabel = getString(R.string.ai_purify_api_elapsed),
+                modelLabel = getString(R.string.ai_purify_model),
+                retryLabel = getString(R.string.ai_purify_retry),
+                cancelLabel = getString(R.string.cancel),
+                applyLabel = getString(R.string.ai_purify_apply),
+                onRetry = {
+                    dismiss()
+                    startAiPurifySelectedText(result.original)
+                },
+                onCancel = dismiss,
+                onApply = {
+                    dismiss()
+                    applyAiPurifyResult(result)
+                },
+            )
         }
-        view.findViewById<View>(R.id.btn_retry).setOnClickListener {
-            dialog.dismiss()
-            startAiPurifySelectedText(result.original)
-        }
-        view.findViewById<View>(R.id.btn_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.setOnShowListener {
-            dialog.window?.run {
-                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                val width = resources.displayMetrics.widthPixels - 48.dpToPx()
-                setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-            }
-        }
-        dialog.showSafely()
-    }
-
-    private fun View.prepareAiPurifyDialogSize(scrollViewId: Int) {
-        val maxHeight = (resources.displayMetrics.heightPixels * 0.86f).toInt()
-        val width = resources.displayMetrics.widthPixels - 48.dpToPx()
-        measure(
-            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
-        if (measuredHeight <= maxHeight) {
-            return
-        }
-        layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                maxHeight
-        )
-        findViewById<ScrollView>(scrollViewId).layoutParams =
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            ).apply {
-                topMargin = 10.dpToPx()
-            }
     }
 
     private fun shouldAutoApplyAiPurifyResult(result: AiPurifyResult): Boolean {
@@ -1104,22 +1030,30 @@ class ReadBookActivity : BaseReadBookActivity(),
         return !isFinishing && !isDestroyed
     }
 
-    private fun Dialog.showSafely(): Boolean {
-        if (!canShowDialogSafely()) {
-            return false
-        }
-        return runCatching {
-            show()
-            true
-        }.getOrDefault(false)
-    }
-
     private fun Dialog.dismissSafely() {
         runCatching {
             if (isShowing) {
                 dismiss()
             }
         }
+    }
+
+    private fun showAiPurifyProgressDialog(title: String): Dialog {
+        lateinit var progressDialog: Dialog
+        progressDialog = showReadComposeDialog(
+            context = this,
+            cancelOnTouchOutside = false,
+        ) {
+            AiPurifyProgressDialogContent(
+                title = title,
+                cancelLabel = getString(R.string.cancel),
+                onCancel = progressDialog::cancel,
+            )
+        }
+        progressDialog.setOnCancelListener {
+            aiPurifyJob?.cancel()
+        }
+        return progressDialog
     }
 
     private fun showAiPurifyErrorIfNeeded(titleResource: Int, error: Throwable) {
@@ -1130,10 +1064,13 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         runCatching {
-            alert(titleResource = titleResource) {
-                setMessage(error.localizedMessage ?: error.toString())
-                okButton()
-            }
+            showReadConfirmDialog(
+                context = this,
+                title = getString(titleResource),
+                message = error.localizedMessage ?: error.toString(),
+                confirmLabel = getString(R.string.ok),
+                onConfirm = {},
+            )
         }
     }
 
@@ -1312,61 +1249,58 @@ class ReadBookActivity : BaseReadBookActivity(),
             toastOnUi("当前书籍没有可采样章节")
             return
         }
-        val view = layoutInflater.inflate(R.layout.dialog_ai_purify_sample_range, null)
-        val dialog = Dialog(this)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.setContentView(view)
-        view.findViewById<TextView>(R.id.text_current_chapter).setOnClickListener {
-            dialog.dismiss()
-            startAiPurifyChapterRange(ReadBook.durChapterIndex, ReadBook.durChapterIndex)
-        }
-        view.findViewById<TextView>(R.id.text_custom_range).setOnClickListener {
-            dialog.dismiss()
-            showAiPurifyCustomChapterRangeDialog()
-        }
-        if (dialog.showSafely()) {
-            dialog.applyNgWindow()
-        }
-    }
-
-    private fun showAiPurifyCustomChapterRangeDialog() {
         val total = ReadBook.chapterSize
         val limit = AiConfig.purifyChapterSampleLimit
-        val currentChapter = (ReadBook.durChapterIndex + 1).coerceIn(1, total.coerceAtLeast(1))
+        val currentChapter = (ReadBook.durChapterIndex + 1).coerceIn(1, total)
         val defaultEnd = (currentChapter + limit - 1).coerceAtMost(total)
-        val view = layoutInflater.inflate(R.layout.dialog_ai_purify_custom_range, null)
-        val startEdit = view.findViewById<EditText>(R.id.edit_start)
-        val endEdit = view.findViewById<EditText>(R.id.edit_end)
-        view.findViewById<TextView>(R.id.text_hint).text =
-            getString(R.string.ai_purify_sample_range_hint, total, limit)
-        startEdit.setText(currentChapter.toString())
-        startEdit.setSelection(0, startEdit.text?.length ?: 0)
-        endEdit.setText(defaultEnd.toString())
-        endEdit.setSelection(0, endEdit.text?.length ?: 0)
-        val dialog = Dialog(this)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.setContentView(view)
-        view.findViewById<TextView>(R.id.button_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        view.findViewById<TextView>(R.id.button_confirm).setOnClickListener {
-            val start = startEdit.text?.toString()?.toIntOrNull()
-            val end = endEdit.text?.toString()?.toIntOrNull()
-            when {
-                start == null || end == null || start > end ->
-                    toastOnUi(getString(R.string.ai_purify_sample_range_invalid))
-                start < 1 || end > total ->
-                    toastOnUi(getString(R.string.ai_purify_sample_range_out_of_bounds, total))
-                end - start + 1 > limit ->
-                    toastOnUi(getString(R.string.ai_purify_sample_range_exceeded, limit))
-                else -> {
-                    dialog.dismiss()
-                    startAiPurifyChapterRange(start - 1, end - 1)
-                }
-            }
-        }
-        if (dialog.showSafely()) {
-            dialog.applyNgWindow()
+        val customSelected = androidx.compose.runtime.mutableStateOf(false)
+        val startText = androidx.compose.runtime.mutableStateOf(currentChapter.toString())
+        val endText = androidx.compose.runtime.mutableStateOf(defaultEnd.toString())
+        showReadComposeDialog(this, marginDp = 28) { dismiss ->
+            AiPurifyRangeDialogContent(
+                title = getString(R.string.ai_purify_chapter_sample_range),
+                currentChapterLabel = getString(R.string.ai_purify_sample_current_chapter),
+                customRangeLabel = getString(R.string.ai_purify_sample_custom_range),
+                customSelected = customSelected.value,
+                currentChapterHint = getString(R.string.ai_purify_sample_current_hint),
+                hint = getString(R.string.ai_purify_sample_range_hint, total, limit),
+                startLabel = getString(R.string.ai_purify_sample_range_start),
+                endLabel = getString(R.string.ai_purify_sample_range_end),
+                start = startText.value,
+                end = endText.value,
+                cancelLabel = getString(R.string.cancel),
+                confirmLabel = getString(R.string.ai_purify_start),
+                onModeSelected = { customSelected.value = it },
+                onStartChanged = { startText.value = it },
+                onEndChanged = { endText.value = it },
+                onCancel = dismiss,
+                onConfirm = {
+                    if (!customSelected.value) {
+                        dismiss()
+                        startAiPurifyChapterRange(
+                            ReadBook.durChapterIndex,
+                            ReadBook.durChapterIndex,
+                        )
+                    } else {
+                        val start = startText.value.toIntOrNull()
+                        val end = endText.value.toIntOrNull()
+                        when {
+                            start == null || end == null || start > end ->
+                                toastOnUi(getString(R.string.ai_purify_sample_range_invalid))
+                            start < 1 || end > total ->
+                                toastOnUi(
+                                    getString(R.string.ai_purify_sample_range_out_of_bounds, total)
+                                )
+                            end - start + 1 > limit ->
+                                toastOnUi(getString(R.string.ai_purify_sample_range_exceeded, limit))
+                            else -> {
+                                dismiss()
+                                startAiPurifyChapterRange(start - 1, end - 1)
+                            }
+                        }
+                    }
+                },
+            )
         }
     }
 
@@ -1393,19 +1327,13 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         aiPurifyJob?.cancel()
-        val waitDialog = WaitDialog(this).apply {
-            setText(
-                if (sampleCount == 1) {
-                    getString(R.string.ai_purify_chapter)
-                } else {
-                    getString(R.string.ai_purify_chapter_sampling, sampleCount)
-                }
-            )
-            setOnCancelListener {
-                aiPurifyJob?.cancel()
+        val waitDialog = showAiPurifyProgressDialog(
+            if (sampleCount == 1) {
+                getString(R.string.ai_purify_chapter)
+            } else {
+                getString(R.string.ai_purify_chapter_sampling, sampleCount)
             }
-            show()
-        }
+        )
         aiPurifyJob = lifecycleScope.launch {
             try {
                 val startedAt = SystemClock.elapsedRealtime()
@@ -1530,84 +1458,51 @@ class ReadBookActivity : BaseReadBookActivity(),
             toastOnUi("AI 未生成可应用的净化规则")
             return
         }
-        val view = layoutInflater.inflate(R.layout.dialog_ai_purify_chapter_confirm, null)
-        view.findViewById<TextView>(R.id.tv_chapter_original_count).text =
-            originalCharCount.toString()
-        view.findViewById<TextView>(R.id.tv_chapter_cleaned_count).text =
-            cleanedCharCount.toString()
-        view.findViewById<TextView>(R.id.tv_chapter_rule_count).text = candidates.size.toString()
-        view.findViewById<TextView>(R.id.tv_chapter_elapsed).text = formatAiPurifyElapsed(elapsedMs)
-        view.findViewById<TextView>(R.id.tv_chapter_model).text = model
-        val selectedIndexes = candidates.indices.toMutableSet()
-        val ruleCountView = view.findViewById<TextView>(R.id.tv_chapter_rule_count)
-        fun updateSelectionState() {
-            ruleCountView.text = "${selectedIndexes.size}/${candidates.size}"
-        }
-        fun selectionActionText(): String {
-            return getString(
-                if (selectedIndexes.size == candidates.size) {
-                    R.string.revert_selection
-                } else {
-                    R.string.select_all
-                }
-            )
-        }
-        val ruleTable = view.findViewById<LinearLayout>(R.id.layout_chapter_rule_table)
-        lateinit var bindRuleTable: () -> Unit
-        val toggleRuleSelection = {
-            if (selectedIndexes.size == candidates.size) {
-                selectedIndexes.clear()
-            } else {
-                selectedIndexes.clear()
-                selectedIndexes.addAll(candidates.indices)
-            }
-            bindRuleTable()
-            updateSelectionState()
-        }
-        bindRuleTable = {
-            bindAiPurifyChapterRuleTable(
-                ruleTable = ruleTable,
-                candidates = candidates,
-                selectedIndexes = selectedIndexes,
-                selectionActionText = selectionActionText(),
-                onSelectionAction = toggleRuleSelection,
-                onSelectionChanged = {
-                    bindRuleTable()
-                    updateSelectionState()
+        val ruleUi = candidates.map { it.toAiPurifyRuleUi() }
+        showReadComposeDialog(this) { dismiss ->
+            AiPurifyChapterConfirmDialogContent(
+                title = getString(R.string.ai_purify_chapter_confirm),
+                summary = AiPurifyChapterSummaryUi(
+                    originalCount = originalCharCount.toString(),
+                    cleanedCount = cleanedCharCount.toString(),
+                    elapsed = formatAiPurifyElapsed(elapsedMs),
+                    model = model,
+                ),
+                rules = ruleUi,
+                originalCountLabel = getString(R.string.ai_purify_chapter_original_count),
+                cleanedCountLabel = getString(R.string.ai_purify_chapter_cleaned_count),
+                ruleCountLabel = getString(R.string.ai_purify_chapter_rule_count),
+                elapsedLabel = getString(R.string.ai_purify_api_elapsed),
+                modelLabel = getString(R.string.ai_purify_model),
+                hitCountColumnLabel = getString(R.string.ai_purify_rule_column_hit_count),
+                typeColumnLabel = getString(R.string.ai_purify_rule_column_type),
+                contentColumnLabel = getString(R.string.ai_purify_rule_column_content),
+                selectAllLabel = getString(R.string.select_all),
+                clearSelectionLabel = getString(R.string.revert_selection),
+                retryLabel = getString(R.string.ai_purify_retry),
+                cancelLabel = getString(R.string.cancel),
+                applyLabel = getString(R.string.ai_purify_apply),
+                onRuleClick = { index ->
+                    candidates.getOrNull(index)?.let(::showAiPurifyRuleDetailDialog)
                 },
-                onRuleClick = ::showAiPurifyRuleDetailDialog
+                onRetry = {
+                    dismiss()
+                    startAiPurifyChapterRange(sampleStartIndex, sampleEndIndex)
+                },
+                onCancel = dismiss,
+                onApply = { selectedIndexes ->
+                    val selectedCandidates = candidates.filterIndexed { index, _ ->
+                        index in selectedIndexes
+                    }
+                    if (selectedCandidates.isEmpty()) {
+                        toastOnUi("未选择净化规则")
+                    } else {
+                        dismiss()
+                        applyAiPurifyRuleCandidates(selectedCandidates)
+                    }
+                },
             )
         }
-        bindRuleTable()
-        updateSelectionState()
-        view.prepareAiPurifyDialogSize(R.id.scroll_ai_purify_chapter_content)
-        val dialog = AlertDialog.Builder(this)
-            .setView(view)
-            .create()
-        view.findViewById<View>(R.id.btn_retry).setOnClickListener {
-            dialog.dismiss()
-            startAiPurifyChapterRange(sampleStartIndex, sampleEndIndex)
-        }
-        view.findViewById<View>(R.id.btn_apply).setOnClickListener {
-            val selectedCandidates = candidates.filterIndexed { index, _ -> index in selectedIndexes }
-            if (selectedCandidates.isEmpty()) {
-                toastOnUi("未选择净化规则")
-                return@setOnClickListener
-            }
-            dialog.dismiss()
-            applyAiPurifyRuleCandidates(selectedCandidates)
-        }
-        view.findViewById<View>(R.id.btn_cancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.setOnShowListener {
-            dialog.window?.run {
-                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                val width = resources.displayMetrics.widthPixels - 48.dpToPx()
-                setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
-            }
-        }
-        dialog.showSafely()
     }
 
     private fun formatAiPurifyModels(results: List<AiPurifyResult>): String {
@@ -1640,340 +1535,30 @@ class ReadBookActivity : BaseReadBookActivity(),
         return getString(R.string.ai_purify_elapsed_seconds, elapsedMs / 1000f)
     }
 
-    private fun bindAiPurifyChapterRuleTable(
-        ruleTable: LinearLayout,
-        candidates: List<AiPurifyRuleCandidate>,
-        selectedIndexes: MutableSet<Int>,
-        selectionActionText: String,
-        onSelectionAction: () -> Unit,
-        onSelectionChanged: () -> Unit,
-        onRuleClick: (AiPurifyRuleCandidate) -> Unit
-    ) {
-        ruleTable.removeAllViews()
-        ruleTable.addView(
-            createAiPurifyChapterRuleTableRow(
-                checked = null,
-                hitCount = getString(R.string.ai_purify_rule_column_hit_count),
-                type = getString(R.string.ai_purify_rule_column_type),
-                content = getString(R.string.ai_purify_rule_column_content),
-                isHeader = true,
-                applyHeaderText = selectionActionText,
-                onApplyHeaderClick = onSelectionAction
-            )
-        )
-        candidates.forEachIndexed { index, candidate ->
-            val checked = index in selectedIndexes
-            ruleTable.addView(
-                createAiPurifyChapterRuleTableRow(
-                    checked = checked,
-                    hitCount = getString(
-                        R.string.ai_purify_rule_hit_count_value,
-                        candidate.evidenceLabels.size
-                    ),
-                    type = candidate.aiPurifyRuleTypeLabel(),
-                    content = candidate.aiPurifyRuleContentSummary(),
-                    isHeader = false,
-                    onCheckedChanged = { isChecked ->
-                        if (isChecked) {
-                            selectedIndexes.add(index)
-                        } else {
-                            selectedIndexes.remove(index)
-                        }
-                        onSelectionChanged()
-                    },
-                    onRowClick = { onRuleClick(candidate) }
-                )
-            )
-        }
-    }
-
-    private fun createAiPurifyChapterRuleTableRow(
-        checked: Boolean?,
-        hitCount: String,
-        type: String,
-        content: String,
-        isHeader: Boolean,
-        applyHeaderText: String? = null,
-        onApplyHeaderClick: (() -> Unit)? = null,
-        onCheckedChanged: ((Boolean) -> Unit)? = null,
-        onRowClick: (() -> Unit)? = null
-    ): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 1.dpToPx(), 0, 1.dpToPx())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            if (!isHeader && onRowClick != null) {
-                isClickable = true
-                isFocusable = true
-                setOnClickListener { onRowClick.invoke() }
-            }
-            addView(
-                if (checked == null) {
-                    createAiPurifyTableText(
-                        text = applyHeaderText ?: getString(R.string.ai_purify_rule_column_apply),
-                        widthDp = 36,
-                        isHeader = isHeader,
-                        gravityValue = Gravity.CENTER
-                    ).apply {
-                        if (onApplyHeaderClick != null) {
-                            setTextColor(
-                                ContextCompat.getColor(
-                                    this@ReadBookActivity,
-                                    R.color.ng_error
-                                )
-                            )
-                            isClickable = true
-                            isFocusable = true
-                            setOnClickListener { onApplyHeaderClick.invoke() }
-                        }
-                    }
-                } else {
-                    CheckBox(this@ReadBookActivity).apply {
-                        isChecked = checked
-                        gravity = Gravity.CENTER
-                        buttonTintList = android.content.res.ColorStateList.valueOf(
-                            ContextCompat.getColor(this@ReadBookActivity, R.color.ng_error)
-                        )
-                        setOnCheckedChangeListener { _, value ->
-                            onCheckedChanged?.invoke(value)
-                        }
-                        minWidth = 0
-                        minHeight = 0
-                        minimumWidth = 0
-                        minimumHeight = 0
-                        setPadding(0, 0, 0, 0)
-                        scaleX = 0.82f
-                        scaleY = 0.82f
-                        layoutParams = LinearLayout.LayoutParams(36.dpToPx(), 32.dpToPx())
-                    }
-                }
-            )
-            addView(
-                createAiPurifyTableText(
-                    hitCount,
-                    42,
-                    isHeader = isHeader,
-                    gravityValue = Gravity.CENTER
-                )
-            )
-            addView(
-                createAiPurifyTableText(
-                    type,
-                    48,
-                    isHeader = isHeader,
-                    gravityValue = Gravity.CENTER
-                )
-            )
-            addView(
-                createAiPurifyTableText(
-                    content,
-                    0,
-                    weight = 1f,
-                    isHeader = isHeader,
-                    gravityValue = if (isHeader) Gravity.CENTER else Gravity.CENTER_VERTICAL
-                )
-            )
-        }
-    }
-
-    private fun createAiPurifyTableText(
-        text: String,
-        widthDp: Int,
-        weight: Float = 0f,
-        isHeader: Boolean,
-        gravityValue: Int,
-        fixedWidthPx: Int? = null
-    ): TextView {
-        return TextView(this).apply {
-            this.text = text
-            setTextColor(
-                ContextCompat.getColor(
-                    this@ReadBookActivity,
-                    if (isHeader) R.color.ng_on_surface_variant else R.color.ng_on_surface
-                )
-            )
-            textSize = if (isHeader) 11f else 12f
-            typeface = if (isHeader) android.graphics.Typeface.DEFAULT_BOLD else null
-            gravity = gravityValue
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            maxLines = 1
-            setLineSpacing(1.dpToPx().toFloat(), 1.0f)
-            setPadding(2.dpToPx(), 6.dpToPx(), 2.dpToPx(), 6.dpToPx())
-            minHeight = 30.dpToPx()
-            layoutParams = if (weight > 0f) {
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, weight)
-            } else if (fixedWidthPx != null) {
-                LinearLayout.LayoutParams(fixedWidthPx, LinearLayout.LayoutParams.WRAP_CONTENT)
-            } else {
-                LinearLayout.LayoutParams(widthDp.dpToPx(), LinearLayout.LayoutParams.WRAP_CONTENT)
-            }
-        }
-    }
-
     private fun showAiPurifyRuleDetailDialog(candidate: AiPurifyRuleCandidate) {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.ng_bg_card)
-            setPadding(20.dpToPx(), 18.dpToPx(), 20.dpToPx(), 16.dpToPx())
-        }
-        root.addView(TextView(this).apply {
-            text = getString(R.string.ai_purify_rule_detail)
-            setTextColor(ContextCompat.getColor(this@ReadBookActivity, R.color.ng_on_surface))
-            textSize = 19f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-        })
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 2.dpToPx(), 0, 2.dpToPx())
-            addView(
-                createAiPurifyRuleDetailSection(
-                    title = getString(R.string.original_text),
-                    text = candidate.pattern,
-                    titleColor = R.color.ng_on_surface_variant
-                )
-            )
-            addView(
-                createAiPurifyRuleDetailSection(
-                    title = getString(R.string.ai_purify_cleaned_text),
-                    text = candidate.replacement.ifBlank {
-                        getString(R.string.ai_purify_rule_deleted_result)
-                    },
-                    titleColor = R.color.ng_success
-                )
-            )
-            addView(
-                createAiPurifyRuleDetailSection(
-                    title = getString(R.string.ai_purify_deleted_content),
-                    text = candidate.aiPurifyRuleBriefContentSummary(),
-                    titleColor = R.color.ng_error
-                )
+        showReadComposeDialog(this, marginDp = 28) { dismiss ->
+            AiPurifyRuleDetailDialogContent(
+                title = getString(R.string.ai_purify_rule_detail),
+                originalLabel = getString(R.string.original_text),
+                cleanedLabel = getString(R.string.ai_purify_cleaned_text),
+                deletedLabel = getString(R.string.ai_purify_deleted_content),
+                rule = candidate.toAiPurifyRuleUi(),
+                closeLabel = getString(R.string.close),
+                onClose = dismiss,
             )
         }
-        val scrollView = ScrollView(this).apply {
-            scrollBarStyle = View.SCROLLBARS_INSIDE_INSET
-            isVerticalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            addView(
-                content,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 12.dpToPx()
-            }
-        }
-        root.addView(scrollView)
-
-        val closeButton = TextView(this).apply {
-            setText(R.string.close)
-            setTextColor(ContextCompat.getColor(this@ReadBookActivity, R.color.ng_error))
-            textSize = 15f
-            gravity = Gravity.CENTER
-            setPadding(18.dpToPx(), 8.dpToPx(), 18.dpToPx(), 8.dpToPx())
-        }
-        root.addView(LinearLayout(this).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 12.dpToPx()
-            }
-            addView(closeButton)
-        })
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(root)
-            .create()
-        closeButton.setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.setOnShowListener {
-            dialog.window?.run {
-                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                setLayout(
-                    resources.displayMetrics.widthPixels - 72.dpToPx(),
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            }
-            scrollView.post {
-                val maxHeight = (resources.displayMetrics.heightPixels * 0.62f).toInt()
-                if (content.height > maxHeight) {
-                    scrollView.layoutParams = (scrollView.layoutParams as LinearLayout.LayoutParams).apply {
-                        height = maxHeight
-                    }
-                }
-            }
-        }
-        dialog.showSafely()
     }
 
-    private fun createAiPurifyRuleDetailSection(
-        title: String,
-        text: String,
-        titleColor: Int
-    ): View {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.ng_bg_purify_panel)
-            setPadding(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 12.dpToPx())
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = 10.dpToPx()
-            }
-            addView(LinearLayout(this@ReadBookActivity).apply {
-                gravity = Gravity.CENTER
-                orientation = LinearLayout.HORIZONTAL
-                addView(View(this@ReadBookActivity).apply {
-                    setBackgroundResource(R.drawable.ng_bg_purify_separator)
-                    layoutParams = LinearLayout.LayoutParams(0, 1.dpToPx(), 1f)
-                })
-                addView(TextView(this@ReadBookActivity).apply {
-                    this.text = title
-                    setTextColor(ContextCompat.getColor(this@ReadBookActivity, titleColor))
-                    textSize = 13f
-                    gravity = Gravity.CENTER
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        marginStart = 10.dpToPx()
-                        marginEnd = 10.dpToPx()
-                    }
-                })
-                addView(View(this@ReadBookActivity).apply {
-                    setBackgroundResource(R.drawable.ng_bg_purify_separator)
-                    layoutParams = LinearLayout.LayoutParams(0, 1.dpToPx(), 1f)
-                })
-            })
-            addView(TextView(this@ReadBookActivity).apply {
-                this.text = text
-                setTextColor(ContextCompat.getColor(this@ReadBookActivity, R.color.ng_on_surface))
-                textSize = 14f
-                setLineSpacing(2.dpToPx().toFloat(), 1f)
-                setTextIsSelectable(true)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    topMargin = 8.dpToPx()
-                }
-            })
-        }
-    }
+    private fun AiPurifyRuleCandidate.toAiPurifyRuleUi() = AiPurifyRuleUi(
+        hitCount = getString(R.string.ai_purify_rule_hit_count_value, evidenceLabels.size),
+        type = aiPurifyRuleTypeLabel(),
+        summary = aiPurifyRuleContentSummary(),
+        original = pattern,
+        cleaned = replacement.ifBlank {
+            getString(R.string.ai_purify_rule_deleted_result)
+        },
+        deleted = aiPurifyRuleBriefContentSummary(),
+    )
 
     private fun AiPurifyRuleCandidate.aiPurifyRuleTypeLabel(): String {
         return when (type) {
@@ -2805,10 +2390,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     /**
      * 显示菜单
      */
-    override fun showMenuBar() {
-        binding.readMenu.runMenuIn()
-    }
-
     override val oldBook: Book?
         get() = ReadBook.book
 
@@ -2925,20 +2506,36 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     /**
-     * 打开搜索界面
+     * 打开阅读页内的全文搜索抽屉
      */
-    override fun openSearchActivity(searchWord: String?) {
-        val book = ReadBook.book ?: return
-        searchContentActivity.launch {
-            putExtra("bookUrl", book.bookUrl)
-            putExtra("searchWord", searchWord ?: viewModel.searchContentQuery)
-            putExtra("searchResultIndex", viewModel.searchResultIndex)
-            viewModel.searchResultList?.first()?.let {
-                if (it.query == viewModel.searchContentQuery) {
-                    IntentData.put("searchResultList", viewModel.searchResultList)
-                }
-            }
+    override fun openSearchDrawer(searchWord: String?) {
+        if (ReadBook.book == null) return
+        if (supportFragmentManager.findFragmentByTag(ReadSearchDialog.TAG) != null) return
+        val resolvedQuery = searchWord ?: viewModel.searchContentQuery
+        val selectedIndex = if (resolvedQuery == viewModel.searchContentQuery) {
+            viewModel.searchResultIndex
+        } else {
+            -1
         }
+        ReadSearchDialog.newInstance(resolvedQuery, selectedIndex)
+            .show(supportFragmentManager, ReadSearchDialog.TAG)
+    }
+
+    internal fun showSearchResult(searchResults: List<SearchResult>, index: Int) {
+        if (searchResults.isEmpty()) return
+        val safeIndex = index.coerceIn(searchResults.indices)
+        val searchResult = searchResults[safeIndex]
+        if (!isShowingSearchResult) {
+            ReadBook.saveCurrentBookProgress() // 退出全文搜索时恢复进入前的进度
+        }
+        viewModel.searchContentQuery = searchResult.query
+        viewModel.searchResultList = searchResults.toList()
+        viewModel.searchResultIndex = safeIndex
+        binding.searchMenu.upSearchResultList(searchResults)
+        binding.searchMenu.updateSearchResultIndex(safeIndex)
+        isShowingSearchResult = true
+        skipToSearch(searchResult)
+        showActionMenu()
     }
 
     override fun setSourceEnabled(enabled: Boolean) {
@@ -2956,10 +2553,6 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 显示更多设置
      */
     override fun showMoreSetting() {
-        showDialogFragment<MoreConfigDialog>()
-    }
-
-    override fun showSearchSetting() {
         showDialogFragment<MoreConfigDialog>()
     }
 
@@ -2982,26 +2575,36 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
+    override fun restoreSearchOrigin() {
+        if (!isShowingSearchResult) return
+        exitSearchMenu()
+        ReadBook.restoreLastBookProgress()
+    }
+
     /* 恢复到 全文搜索/进度条跳转前的位置 */
     private fun restoreLastBookProcess() {
         if (confirmRestoreProcess == true) {
             ReadBook.restoreLastBookProgress()
         } else if (confirmRestoreProcess == null) {
-            alert(R.string.draw) {
-                setMessage(R.string.restore_last_book_process)
-                yesButton {
+            showReadConfirmDialog(
+                context = this,
+                title = getString(R.string.draw),
+                message = getString(R.string.restore_last_book_process),
+                confirmLabel = getString(R.string.yes),
+                cancelLabel = getString(R.string.no),
+                onConfirm = {
                     confirmRestoreProcess = true
                     ReadBook.restoreLastBookProgress() //恢复启动全文搜索前的进度
-                }
-                noButton {
+                },
+                onCancel = {
                     ReadBook.lastBookProgress = null
                     confirmRestoreProcess = false
-                }
-                onCancelled {
+                },
+                onOutsideDismiss = {
                     ReadBook.lastBookProgress = null
                     confirmRestoreProcess = false
-                }
-            }
+                },
+            )
         }
     }
 
@@ -3021,9 +2624,13 @@ class ReadBookActivity : BaseReadBookActivity(),
             toastOnUi("no chapter")
             return
         }
-        alert(R.string.chapter_pay) {
-            setMessage(chapter.title)
-            yesButton {
+        showReadConfirmDialog(
+            context = this,
+            title = getString(R.string.chapter_pay),
+            message = chapter.title,
+            confirmLabel = getString(R.string.yes),
+            cancelLabel = getString(R.string.no),
+            onConfirm = {
                 Coroutine.async(lifecycleScope) {
                     val source =
                         ReadBook.bookSource ?: throw NoStackTraceException("no book source")
@@ -3064,9 +2671,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                 }.onError {
                     AppLog.put("执行购买操作出错\n${it.localizedMessage}", it, true)
                 }
-            }
-            noButton()
-        }
+            },
+        )
     }
 
     /**
@@ -3287,13 +2893,16 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     private fun sureSyncProgress(progress: BookProgress) {
-        alert(R.string.get_book_progress) {
-            setMessage(R.string.current_progress_exceeds_cloud)
-            okButton {
+        showReadConfirmDialog(
+            context = this,
+            title = getString(R.string.get_book_progress),
+            message = getString(R.string.current_progress_exceeds_cloud),
+            confirmLabel = getString(R.string.ok),
+            cancelLabel = getString(R.string.no),
+            onConfirm = {
                 ReadBook.setProgress(progress)
-            }
-            noButton()
-        }
+            },
+        )
     }
 
     /* 进度条跳转到指定章节 */
@@ -3399,13 +3008,16 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun sureNewProgress(progress: BookProgress) {
         syncDialog?.dismiss()
-        syncDialog = alert(R.string.get_book_progress) {
-            setMessage(R.string.cloud_progress_exceeds_current)
-            okButton {
+        syncDialog = showReadConfirmDialog(
+            context = this,
+            title = getString(R.string.get_book_progress),
+            message = getString(R.string.cloud_progress_exceeds_current),
+            confirmLabel = getString(R.string.ok),
+            cancelLabel = getString(R.string.no),
+            onConfirm = {
                 ReadBook.setProgress(progress)
-            }
-            noButton()
-        }
+            },
+        )
     }
 
     override fun finish() {
@@ -3418,20 +3030,24 @@ class ReadBookActivity : BaseReadBookActivity(),
             callBackBookEnd()
             viewModel.removeFromBookshelf { super.finish() }
         } else {
-            alert(title = getString(R.string.add_to_bookshelf)) {
-                setMessage(getString(R.string.check_add_bookshelf, book.name))
-                okButton {
+            showReadConfirmDialog(
+                context = this,
+                title = getString(R.string.add_to_bookshelf),
+                message = getString(R.string.check_add_bookshelf, book.name),
+                confirmLabel = getString(R.string.ok),
+                cancelLabel = getString(R.string.no),
+                onConfirm = {
                     ReadBook.book?.removeType(BookType.notShelf)
                     ReadBook.book?.save()
                     SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, ReadBook.bookSource, ReadBook.book)
                     ReadBook.inBookshelf = true
                     setResult(RESULT_OK)
-                }
-                noButton {
+                },
+                onCancel = {
                     callBackBookEnd()
                     viewModel.removeFromBookshelf { super.finish() }
-                }
-            }
+                },
+            )
         }
     }
 
@@ -3526,9 +3142,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         observeEvent<String>(PreferKey.showBrightnessView) {
             readMenu.upFloatingToolVisibility()
-        }
-        observeEvent<List<SearchResult>>(EventBus.SEARCH_RESULT) {
-            viewModel.searchResultList = it
         }
         observeEvent<Boolean>(EventBus.UPDATE_READ_ACTION_BAR) {
             readMenu.reset()

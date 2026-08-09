@@ -15,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
@@ -36,7 +36,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefString
 
-class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
+class MoreConfigDialog : BaseComposeDialogFragment() {
 
     private var selectedTab by mutableStateOf(ReadMoreConfigTab.INTERFACE)
     private var screenState by mutableStateOf<ReadMoreConfigUiState?>(null)
@@ -138,6 +138,11 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
     }
 
     private fun changeValue(key: String, value: String) {
+        if (key == ReadMoreConfigKeys.BOOK_IMAGE_STYLE) {
+            readActivity?.applyImageStyleConfig(value)
+            refreshUi()
+            return
+        }
         requireContext().putPrefString(key, value)
         handlePreferenceChanged(key, null)
         refreshUi()
@@ -207,15 +212,16 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
                 readActivity?.showSimulatedReading()
             }
 
-            ReadMoreConfigKeys.BOOK_IMAGE_STYLE -> {
-                dismissAllowingStateLoss()
-                readActivity?.showImageStyleConfig()
-            }
-
             ReadMoreConfigKeys.CUSTOM_PAGE_KEY -> PageKeyDialog(requireContext()).show()
 
             ReadMoreConfigKeys.CLICK_REGIONAL_CONFIG -> {
-                readActivity?.showClickRegionalConfig()
+                val activity = readActivity
+                dismissAllowingStateLoss()
+                activity?.window?.decorView?.post {
+                    if (!activity.isFinishing && !activity.isDestroyed) {
+                        activity.showClickRegionalConfig()
+                    }
+                }
             }
 
             PreferKey.pageTouchSlop -> showPageTouchSlopDialog()
@@ -346,6 +352,7 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
                 "0",
             ).orEmpty(),
             PreferKey.clickImgWay to context.getPrefString(PreferKey.clickImgWay, "0").orEmpty(),
+            ReadMoreConfigKeys.BOOK_IMAGE_STYLE to currentImageStyle(),
         )
         screenState = ReadMoreConfigUiState(
             booleans = booleanDefaults.mapValues { (key, default) ->
@@ -373,6 +380,7 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
                     R.array.click_image_way_title,
                     R.array.click_image_way_value,
                 ),
+                ReadMoreConfigKeys.BOOK_IMAGE_STYLE to imageStyleOptions(),
             ),
             actionValues = buildActionValues(),
             optimizeRenderSupported = CanvasRecorderFactory.isSupport,
@@ -386,6 +394,32 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
             ReadMoreConfigOption(values[index], entries[index])
         }
     }
+
+    private fun currentImageStyle(): String = when {
+        ReadBook.book?.getImageStyle().equals(Book.imgStyleFull, true) -> Book.imgStyleFull
+        ReadBook.book?.getImageStyle().equals(Book.imgStyleText, true) -> Book.imgStyleText
+        ReadBook.book?.getImageStyle().equals(Book.imgStyleSingle, true) -> Book.imgStyleSingle
+        else -> Book.imgStyleDefault
+    }
+
+    private fun imageStyleOptions() = listOf(
+        ReadMoreConfigOption(
+            Book.imgStyleDefault,
+            getString(R.string.image_style_original),
+        ),
+        ReadMoreConfigOption(
+            Book.imgStyleFull,
+            getString(R.string.image_style_fit_width),
+        ),
+        ReadMoreConfigOption(
+            Book.imgStyleText,
+            getString(R.string.image_style_inline),
+        ),
+        ReadMoreConfigOption(
+            Book.imgStyleSingle,
+            getString(R.string.image_style_single_page),
+        ),
+    )
 
     private fun buildActionValues(): Map<String, String> {
         val values = mutableMapOf<String, String>()
@@ -403,18 +437,6 @@ class MoreConfigDialog : BaseDialogFragment(R.layout.dialog_read_more_config) {
                 getString(R.string.simulated_reading_enabled_summary, book.config.dailyChapters)
             } else {
                 getString(R.string.disabled)
-            }
-            values[ReadMoreConfigKeys.BOOK_IMAGE_STYLE] = when {
-                book.getImageStyle().equals(Book.imgStyleFull, true) ->
-                    getString(R.string.image_style_fit_width)
-
-                book.getImageStyle().equals(Book.imgStyleText, true) ->
-                    getString(R.string.image_style_inline)
-
-                book.getImageStyle().equals(Book.imgStyleSingle, true) ->
-                    getString(R.string.image_style_single_page)
-
-                else -> getString(R.string.image_style_original)
             }
         }
         return values

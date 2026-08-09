@@ -14,6 +14,7 @@
     <item name="menu_tts_engine_import_local" type="id" />
     <item name="menu_tts_engine_import_online" type="id" />
     <item name="menu_show_disabled" type="id" />
+    <item name="menu_copy_all" type="id" />
 
     <item name="menu_ai_assistant" type="id" />
     <item name="menu_add_books" type="id" />

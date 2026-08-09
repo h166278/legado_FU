@@ -1,40 +1,57 @@
 package io.legado.app.ui.book.read.config
 
-import android.graphics.Color
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.recyclerview.widget.GridLayoutManager
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogTipConfigBinding
-import io.legado.app.databinding.ItemReadTipOptionBinding
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.config.NgInlineColorPicker
-import io.legado.app.ui.design.components.view.NgFloatingTabItem
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.widget.dialog.applyNgDialogWindow
-import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.hexString
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefBoolean
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-
-class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
+class TipConfigDialog : BaseComposeDialogFragment() {
 
     companion object {
         const val TIP_COLOR = 7897
@@ -50,222 +67,403 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
         private const val POSITION_RIGHT = 2
     }
 
-    private val binding by viewBinding(DialogTipConfigBinding::bind)
+    private enum class ColorPickerTarget { TIP, DIVIDER }
 
-    private var currentSection = SECTION_TITLE
-    private var headerPosition = POSITION_LEFT
-    private var footerPosition = POSITION_LEFT
-    private var dialogContentColor = Color.WHITE
-    private var dialogAccentColor = Color.WHITE
-    private lateinit var tipContentAdapter: TipContentAdapter
-    private var activeColorPickerTarget by mutableStateOf<ColorPickerTarget?>(null)
-
-    private enum class ColorPickerTarget {
-        TIP,
-        DIVIDER,
-    }
+    private lateinit var composeView: ComposeView
+    private var externalRevision by mutableIntStateOf(0)
 
     override fun onStart() {
         super.onStart()
         applyNgDialogWindow(marginDp = 20, dimAmount = 0.4f)
-        repositionAboveDrawer()
+        composeView.post { repositionAboveDrawer() }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        initDialogStyle()
-        initView()
-        initEvent()
-        initColorPicker()
-        showSection(SECTION_TITLE)
-        observeEvent<String>(EventBus.TIP_COLOR) {
-            updateStyleControls()
+        if (ReadBookConfig.titleMode !in 0..2) ReadBookConfig.titleMode = 0
+        composeView = view as ComposeView
+        composeView.setBackgroundColor(AndroidColor.TRANSPARENT)
+        composeView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        composeView.setContent {
+            NgAppTheme(
+                snapshot = ReadDrawerStyle.themeSnapshot(requireContext()),
+                updateSystemBars = false,
+            ) {
+                TipConfigContent()
+            }
         }
+        observeEvent<String>(EventBus.TIP_COLOR) { externalRevision++ }
     }
 
-    private fun initView() = binding.run {
-        if (ReadBookConfig.titleMode !in 0..2) {
-            ReadBookConfig.titleMode = 0
+    @Composable
+    private fun TipConfigContent() {
+        var section by remember { mutableIntStateOf(SECTION_TITLE) }
+        var headerPosition by remember { mutableIntStateOf(POSITION_LEFT) }
+        var footerPosition by remember { mutableIntStateOf(POSITION_LEFT) }
+        var headerEnabled by remember { mutableStateOf(ReadTipConfig.headerMode == 1) }
+        var footerEnabled by remember { mutableStateOf(ReadTipConfig.footerMode == 0) }
+        var titleMode by remember { mutableIntStateOf(ReadBookConfig.titleMode) }
+        var titleSize by remember { mutableIntStateOf(ReadBookConfig.titleSize) }
+        var titleTop by remember { mutableIntStateOf(ReadBookConfig.titleTopSpacing) }
+        var titleBottom by remember { mutableIntStateOf(ReadBookConfig.titleBottomSpacing) }
+        var revision by remember { mutableIntStateOf(0) }
+        var activePicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
+        externalRevision
+        revision
+
+        LaunchedEffect(
+            section,
+            activePicker,
+            headerEnabled,
+            footerEnabled,
+            headerPosition,
+            footerPosition,
+            revision,
+        ) {
+            composeView.post { repositionAboveDrawer() }
         }
 
-        switchHeaderEnabled.isChecked = ReadTipConfig.headerMode == 1
-        switchFooterEnabled.isChecked = ReadTipConfig.footerMode == 0
-
-        tipContentAdapter = TipContentAdapter().apply {
-            setItems(ReadTipConfig.tipValues.indices.toList())
-            bindToRecyclerView(rvTipContent)
-        }
-        rvTipContent.layoutManager = object : GridLayoutManager(requireContext(), 2) {
-            override fun canScrollVertically(): Boolean = false
-        }
-
-        tipPositionTabs.setItems(
-            items = listOf(
-                NgFloatingTabItem(text = getString(R.string.left)),
-                NgFloatingTabItem(text = getString(R.string.middle)),
-                NgFloatingTabItem(text = getString(R.string.right)),
+        ReadConfigDialogSurface(
+            contentPadding = PaddingValues(
+                start = 18.dp,
+                top = 16.dp,
+                end = 18.dp,
+                bottom = 12.dp,
             ),
-            selectedIndex = POSITION_LEFT,
-        ) { position ->
-            when (currentSection) {
-                SECTION_HEADER -> headerPosition = position
-                SECTION_FOOTER -> footerPosition = position
+        ) {
+            ReadConfigDialogTitle(getString(R.string.reading_information))
+            Spacer(Modifier.height(12.dp))
+            ReadConfigDock(
+                labels = listOf(
+                    getString(R.string.title),
+                    getString(R.string.header),
+                    getString(R.string.footer),
+                    getString(R.string.style),
+                ),
+                selectedIndex = section,
+                onSelected = {
+                    if (it != SECTION_STYLE) activePicker = null
+                    section = it
+                },
+                height = 40.dp,
+                accessibilityLabel = getString(R.string.reading_information),
+            )
+            Spacer(Modifier.height(10.dp))
+            if (activePicker != null) {
+                val target = requireNotNull(activePicker)
+                NgInlineColorPicker(
+                    title = getString(
+                        if (target == ColorPickerTarget.TIP) {
+                            R.string.tip_text_color
+                        } else {
+                            R.string.tip_divider_color
+                        }
+                    ),
+                    initialColor = initialColorFor(target),
+                    onBack = { activePicker = null },
+                    onColorChanged = { selected ->
+                        applySelectedColor(target, selected or AndroidColor.BLACK)
+                        revision++
+                    },
+                    onReset = {
+                        resetSelectedColor(target)
+                        revision++
+                        activePicker = null
+                    },
+                )
+                return@ReadConfigDialogSurface
             }
-            tipContentAdapter.notifyDataSetChanged()
-        }
 
-        infoSectionTabs.setItems(
-            items = listOf(
-                NgFloatingTabItem(text = getString(R.string.title)),
-                NgFloatingTabItem(text = getString(R.string.header)),
-                NgFloatingTabItem(text = getString(R.string.footer)),
-                NgFloatingTabItem(text = getString(R.string.style)),
-            ),
-            selectedIndex = SECTION_TITLE,
-        ) { section ->
-            showSection(section)
-        }
-        titleModeTabs.setItems(
-            items = listOf(
-                NgFloatingTabItem(text = getString(R.string.title_left)),
-                NgFloatingTabItem(text = getString(R.string.title_center)),
-                NgFloatingTabItem(text = getString(R.string.title_hide)),
-            ),
-            selectedIndex = ReadBookConfig.titleMode,
-        ) { titleMode ->
-            ReadBookConfig.titleMode = titleMode
-            postEvent(EventBus.UP_CONFIG, arrayListOf(5))
-        }
-
-        tipColorModeTabs.setItems(
-            items = ReadTipConfig.tipColorNames.map { NgFloatingTabItem(text = it) },
-            selectedIndex = if (ReadTipConfig.tipColor == 0) 0 else 1,
-        ) { mode ->
-            if (mode == 0) {
-                ReadTipConfig.tipColor = 0
-                updateStyleControls()
-                postEvent(EventBus.UP_CONFIG, arrayListOf(2))
-            } else {
-                openColorPicker(ColorPickerTarget.TIP)
-            }
-        }
-        tipDividerColorModeTabs.setItems(
-            items = ReadTipConfig.tipDividerColorNames.map { NgFloatingTabItem(text = it) },
-            selectedIndex = dividerColorModeIndex(),
-        ) { mode ->
-            when (mode) {
-                0, 1 -> {
-                    ReadTipConfig.tipDividerColor = mode - 1
-                    updateStyleControls()
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+            when (section) {
+                SECTION_TITLE -> {
+                    ReadConfigDock(
+                        labels = listOf(
+                            getString(R.string.title_left),
+                            getString(R.string.title_center),
+                            getString(R.string.title_hide),
+                        ),
+                        selectedIndex = titleMode,
+                        onSelected = {
+                            titleMode = it
+                            ReadBookConfig.titleMode = it
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                        },
+                        accessibilityLabel = getString(R.string.title),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ReadConfigSliderRow(
+                        title = getString(R.string.title_font_size),
+                        value = titleSize,
+                        valueRange = 0..20,
+                        onValueChange = {
+                            titleSize = it
+                            ReadBookConfig.titleSize = it
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+                        },
+                    )
+                    ReadConfigSliderRow(
+                        title = getString(R.string.title_margin_top),
+                        value = titleTop,
+                        valueRange = 0..100,
+                        onValueChange = {
+                            titleTop = it
+                            ReadBookConfig.titleTopSpacing = it
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+                        },
+                    )
+                    ReadConfigSliderRow(
+                        title = getString(R.string.title_margin_bottom),
+                        value = titleBottom,
+                        valueRange = 0..100,
+                        onValueChange = {
+                            titleBottom = it
+                            ReadBookConfig.titleBottomSpacing = it
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+                        },
+                    )
                 }
 
-                else -> openColorPicker(ColorPickerTarget.DIVIDER)
+                SECTION_HEADER -> TipAreaContent(
+                    enabledTitle = getString(R.string.show_header),
+                    enabled = headerEnabled,
+                    onEnabledChanged = { enabled ->
+                        headerEnabled = enabled
+                        ReadTipConfig.headerMode = if (enabled) 1 else 2
+                        if (enabled && !ReadBookConfig.hideStatusBar) {
+                            ReadBookConfig.hideStatusBar = true
+                            putPrefBoolean(PreferKey.hideStatusBar, true)
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
+                        } else {
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+                        }
+                    },
+                    position = headerPosition,
+                    onPositionChanged = { headerPosition = it },
+                    section = SECTION_HEADER,
+                    revision = revision,
+                    onContentChanged = { revision++ },
+                )
+
+                SECTION_FOOTER -> TipAreaContent(
+                    enabledTitle = getString(R.string.show_footer),
+                    enabled = footerEnabled,
+                    onEnabledChanged = { enabled ->
+                        footerEnabled = enabled
+                        ReadTipConfig.footerMode = if (enabled) 0 else 1
+                        postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+                    },
+                    position = footerPosition,
+                    onPositionChanged = { footerPosition = it },
+                    section = SECTION_FOOTER,
+                    revision = revision,
+                    onContentChanged = { revision++ },
+                )
+
+                SECTION_STYLE -> StyleContent(
+                    revision = revision + externalRevision,
+                    onOpenPicker = { activePicker = it },
+                    onChanged = { revision++ },
+                )
             }
         }
-        dsbTitleSize.progress = ReadBookConfig.titleSize
-        dsbTitleTop.progress = ReadBookConfig.titleTopSpacing
-        dsbTitleBottom.progress = ReadBookConfig.titleBottomSpacing
-
-        updateStyleControls()
     }
 
-    private fun updateStyleControls() = binding.run {
-        val tipColor = ReadTipConfig.tipColor
-        val tipDividerColor = ReadTipConfig.tipDividerColor
-        tipColorModeTabs.select(if (tipColor == 0) 0 else 1, notify = false)
-        tipDividerColorModeTabs.select(dividerColorModeIndex(), notify = false)
-        tvTipColor.visibility = if (tipColor == 0) View.GONE else View.VISIBLE
-        tvTipColor.text = "#${tipColor.hexString}"
-        tvTipDividerColor.visibility = if (tipDividerColor in -1..0) View.GONE else View.VISIBLE
-        tvTipDividerColor.text = "#${tipDividerColor.hexString}"
+    @Composable
+    private fun TipAreaContent(
+        enabledTitle: String,
+        enabled: Boolean,
+        onEnabledChanged: (Boolean) -> Unit,
+        position: Int,
+        onPositionChanged: (Int) -> Unit,
+        section: Int,
+        revision: Int,
+        onContentChanged: () -> Unit,
+    ) {
+        revision
+        ReadConfigSwitchRow(
+            title = enabledTitle,
+            checked = enabled,
+            onCheckedChange = onEnabledChanged,
+        )
+        if (!enabled) return
+        Spacer(Modifier.height(6.dp))
+        ReadConfigDock(
+            labels = listOf(
+                getString(R.string.left),
+                getString(R.string.middle),
+                getString(R.string.right),
+            ),
+            selectedIndex = position,
+            onSelected = onPositionChanged,
+            height = 38.dp,
+            accessibilityLabel = getString(R.string.reading_information),
+        )
+        ReadTipConfig.tipValues.indices.chunked(2).forEach { rowItems ->
+            Row(Modifier.fillMaxWidth()) {
+                rowItems.forEach { item ->
+                    val value = ReadTipConfig.tipValues[item]
+                    val selected = value == currentTipValue(section, position)
+                    TipOption(
+                        name = ReadTipConfig.tipNames[item],
+                        icon = tipIcon(value),
+                        selected = selected,
+                        usage = if (selected) null else usagePosition(value, section, position),
+                        onClick = {
+                            clearRepeat(value)
+                            assignTipValue(section, position, value)
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
+                            onContentChanged()
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowItems.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+
+    @Composable
+    private fun TipOption(
+        name: String,
+        icon: Int,
+        selected: Boolean,
+        usage: String?,
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        Row(
+            modifier = modifier
+                .heightIn(min = 40.dp)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = Color(NgTheme.colors.onSurface),
+                modifier = Modifier.size(18.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 6.dp),
+            ) {
+                Text(
+                    text = name,
+                    color = Color(NgTheme.colors.onSurface),
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (usage != null) {
+                    Text(
+                        text = usage,
+                        color = Color(NgTheme.colors.onSurfaceVariant),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (selected) {
+                Icon(
+                    painter = painterResource(R.drawable.ng_ic_popup_selected),
+                    contentDescription = null,
+                    tint = Color(NgTheme.colors.primary),
+                    modifier = Modifier.size(18.dp),
+                )
+            } else {
+                Spacer(Modifier.size(18.dp))
+            }
+        }
+    }
+
+    @Composable
+    private fun StyleContent(
+        revision: Int,
+        onOpenPicker: (ColorPickerTarget) -> Unit,
+        onChanged: () -> Unit,
+    ) {
+        revision
+        ColorModeSection(
+            title = getString(R.string.tip_text_color),
+            labels = ReadTipConfig.tipColorNames,
+            selectedIndex = if (ReadTipConfig.tipColor == 0) 0 else 1,
+            valueText = ReadTipConfig.tipColor.takeUnless { it == 0 }?.let { "#${it.hexString}" },
+            onSelected = { mode ->
+                if (mode == 0) {
+                    ReadTipConfig.tipColor = 0
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+                    onChanged()
+                } else {
+                    onOpenPicker(ColorPickerTarget.TIP)
+                }
+            },
+        )
+        Spacer(Modifier.height(10.dp))
+        ColorModeSection(
+            title = getString(R.string.tip_divider_color),
+            labels = ReadTipConfig.tipDividerColorNames,
+            selectedIndex = dividerColorModeIndex(),
+            valueText = ReadTipConfig.tipDividerColor.takeUnless { it in -1..0 }
+                ?.let { "#${it.hexString}" },
+            onSelected = { mode ->
+                if (mode <= 1) {
+                    ReadTipConfig.tipDividerColor = mode - 1
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+                    onChanged()
+                } else {
+                    onOpenPicker(ColorPickerTarget.DIVIDER)
+                }
+            },
+        )
+    }
+
+    @Composable
+    private fun ColorModeSection(
+        title: String,
+        labels: List<String>,
+        selectedIndex: Int,
+        valueText: String?,
+        onSelected: (Int) -> Unit,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 14.sp,
+            )
+            if (valueText != null) {
+                Text(
+                    text = valueText,
+                    color = Color(NgTheme.colors.onSurfaceVariant),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+        ReadConfigDock(
+            labels = labels,
+            selectedIndex = selectedIndex,
+            onSelected = onSelected,
+            modifier = Modifier.padding(horizontal = 8.dp),
+            accessibilityLabel = title,
+        )
     }
 
     private fun dividerColorModeIndex(): Int = when (ReadTipConfig.tipDividerColor) {
         -1 -> 0
         0 -> 1
         else -> 2
-    }
-
-    private fun initEvent() = binding.run {
-        dsbTitleSize.onChanged = {
-            ReadBookConfig.titleSize = it
-            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
-        }
-        dsbTitleTop.onChanged = {
-            ReadBookConfig.titleTopSpacing = it
-            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
-        }
-        dsbTitleBottom.onChanged = {
-            ReadBookConfig.titleBottomSpacing = it
-            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
-        }
-
-        llHeaderEnabled.setOnClickListener { switchHeaderEnabled.performClick() }
-        switchHeaderEnabled.setOnUserCheckedChangeListener { enabled ->
-            ReadTipConfig.headerMode = if (enabled) 1 else 2
-            if (enabled && !ReadBookConfig.hideStatusBar) {
-                ReadBookConfig.hideStatusBar = true
-                putPrefBoolean(PreferKey.hideStatusBar, true)
-                postEvent(EventBus.UP_CONFIG, arrayListOf(0, 2))
-            } else {
-                postEvent(EventBus.UP_CONFIG, arrayListOf(2))
-            }
-            updateTipContentVisibility()
-        }
-
-        llFooterEnabled.setOnClickListener { switchFooterEnabled.performClick() }
-        switchFooterEnabled.setOnUserCheckedChangeListener { enabled ->
-            ReadTipConfig.footerMode = if (enabled) 0 else 1
-            updateTipContentVisibility()
-            postEvent(EventBus.UP_CONFIG, arrayListOf(2))
-        }
-
-    }
-
-    private fun initColorPicker() = binding.colorPickerHost.apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent {
-            NgAppTheme(
-                updateSystemBars = false,
-                darkModeOverride = ReadBookConfig.isNightTheme,
-            ) {
-                val target = activeColorPickerTarget
-                if (target != null) {
-                    NgInlineColorPicker(
-                        title = getString(
-                            when (target) {
-                                ColorPickerTarget.TIP -> R.string.tip_text_color
-                                ColorPickerTarget.DIVIDER -> R.string.tip_divider_color
-                            }
-                        ),
-                        initialColor = initialColorFor(target),
-                        onBack = ::closeColorPicker,
-                        onColorChanged = { selected ->
-                            applySelectedColor(target, selected or Color.BLACK)
-                        },
-                        onReset = {
-                            resetSelectedColor(target)
-                            closeColorPicker()
-                        },
-                    )
-                }
-            }
-        }
-    }
-
-    private fun openColorPicker(target: ColorPickerTarget) = binding.run {
-        activeColorPickerTarget = target
-        styleModeContent.visibility = View.GONE
-        colorPickerHost.visibility = View.VISIBLE
-        rootView.post { repositionAboveDrawer() }
-    }
-
-    private fun closeColorPicker() = binding.run {
-        activeColorPickerTarget = null
-        colorPickerHost.visibility = View.GONE
-        styleModeContent.visibility = View.VISIBLE
-        updateStyleControls()
-        rootView.post { repositionAboveDrawer() }
     }
 
     private fun initialColorFor(target: ColorPickerTarget): Int = when (target) {
@@ -293,99 +491,18 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
             ColorPickerTarget.TIP -> ReadTipConfig.tipColor = 0
             ColorPickerTarget.DIVIDER -> ReadTipConfig.tipDividerColor = -1
         }
-        updateStyleControls()
         postEvent(EventBus.UP_CONFIG, arrayListOf(2))
     }
 
-    private fun initDialogStyle() = binding.run {
-        dialogContentColor = ReadDrawerStyle.contentColor(requireContext())
-        rootView.setBackgroundColor(Color.TRANSPARENT)
-        ReadDrawerStyle.applyGlassBackground(
-            view = ngDialogBackground,
-            radiusDp = 24,
-        )
-        applyTextColor(dialogContent, dialogContentColor)
-        dialogAccentColor = ReadDrawerStyle.accentColor(requireContext())
-        val selectedContentColor = if (ColorUtils.isColorLight(dialogAccentColor)) {
-            Color.BLACK
-        } else {
-            Color.WHITE
-        }
-        listOf(
-            infoSectionTabs,
-            titleModeTabs,
-            tipPositionTabs,
-            tipColorModeTabs,
-            tipDividerColorModeTabs,
-        ).forEach {
-            it.setSurfaceAlpha(0.28f)
-            it.setContentColors(
-                unselectedContentColor = dialogContentColor,
-                selectedContentColor = selectedContentColor,
-                selectedContainerColor = dialogAccentColor,
-            )
-        }
-        listOf(dsbTitleSize, dsbTitleTop, dsbTitleBottom).forEach {
-            it.setContentColor(dialogContentColor)
-            it.useSliderOnlyLayout()
-        }
-    }
-
-    private fun applyTextColor(view: View, color: Int) {
-        when (view) {
-            is TextView -> view.setTextColor(color)
-            is ViewGroup -> repeat(view.childCount) { index ->
-                applyTextColor(view.getChildAt(index), color)
-            }
-        }
-    }
-
-    private fun showSection(section: Int) = binding.run {
-        if (section != SECTION_STYLE && activeColorPickerTarget != null) {
-            closeColorPicker()
-        }
-        currentSection = section
-        llTitleConfig.visibility = if (section == SECTION_TITLE) View.VISIBLE else View.GONE
-        llHeaderConfig.visibility = if (section == SECTION_HEADER) View.VISIBLE else View.GONE
-        llFooterConfig.visibility = if (section == SECTION_FOOTER) View.VISIBLE else View.GONE
-        llInfoStyleConfig.visibility = if (section == SECTION_STYLE) View.VISIBLE else View.GONE
-        updateTipContentVisibility()
-    }
-
-    private fun updateTipContentVisibility() = binding.run {
-        val showTipContent = when (currentSection) {
-            SECTION_HEADER -> switchHeaderEnabled.isChecked
-            SECTION_FOOTER -> switchFooterEnabled.isChecked
-            else -> false
-        }
-        llTipContentConfig.visibility = if (showTipContent) View.VISIBLE else View.GONE
-        if (showTipContent) {
-            val selectedPosition = if (currentSection == SECTION_HEADER) {
-                headerPosition
-            } else {
-                footerPosition
-            }
-            tipPositionTabs.select(selectedPosition, notify = false)
-            tipContentAdapter.notifyDataSetChanged()
-        }
-        rootView.post { repositionAboveDrawer() }
-    }
-
-    private fun repositionAboveDrawer() {
-        parentFragment?.view?.let {
-            ReadDrawerStyle.positionDialogAbove(dialog, it)
-        }
-    }
-
-    private fun currentTipValue(): Int = ReadTipConfig.run {
-        when (currentSection) {
-            SECTION_HEADER -> when (headerPosition) {
+    private fun currentTipValue(section: Int, position: Int): Int = ReadTipConfig.run {
+        when (section) {
+            SECTION_HEADER -> when (position) {
                 POSITION_LEFT -> tipHeaderLeft
                 POSITION_MIDDLE -> tipHeaderMiddle
                 else -> tipHeaderRight
             }
 
-            SECTION_FOOTER -> when (footerPosition) {
+            SECTION_FOOTER -> when (position) {
                 POSITION_LEFT -> tipFooterLeft
                 POSITION_MIDDLE -> tipFooterMiddle
                 else -> tipFooterRight
@@ -395,15 +512,15 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
         }
     }
 
-    private fun assignCurrentTipValue(value: Int) = ReadTipConfig.run {
-        when (currentSection) {
-            SECTION_HEADER -> when (headerPosition) {
+    private fun assignTipValue(section: Int, position: Int, value: Int) = ReadTipConfig.run {
+        when (section) {
+            SECTION_HEADER -> when (position) {
                 POSITION_LEFT -> tipHeaderLeft = value
                 POSITION_MIDDLE -> tipHeaderMiddle = value
                 POSITION_RIGHT -> tipHeaderRight = value
             }
 
-            SECTION_FOOTER -> when (footerPosition) {
+            SECTION_FOOTER -> when (position) {
                 POSITION_LEFT -> tipFooterLeft = value
                 POSITION_MIDDLE -> tipFooterMiddle = value
                 POSITION_RIGHT -> tipFooterRight = value
@@ -411,7 +528,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
         }
     }
 
-    private fun usagePosition(value: Int): String? {
+    private fun usagePosition(value: Int, currentSection: Int, currentPosition: Int): String? {
         if (value == ReadTipConfig.none) return null
         val slots = listOf(
             Triple(SECTION_HEADER, POSITION_LEFT, ReadTipConfig.tipHeaderLeft),
@@ -421,11 +538,6 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
             Triple(SECTION_FOOTER, POSITION_MIDDLE, ReadTipConfig.tipFooterMiddle),
             Triple(SECTION_FOOTER, POSITION_RIGHT, ReadTipConfig.tipFooterRight),
         )
-        val currentPosition = if (currentSection == SECTION_HEADER) {
-            headerPosition
-        } else {
-            footerPosition
-        }
         val usedSlot = slots.firstOrNull { (section, position, slotValue) ->
             slotValue == value && (section != currentSection || position != currentPosition)
         } ?: return null
@@ -439,8 +551,10 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
                 else -> R.string.right
             }
         )
-        val position = getString(R.string.read_tip_position, sectionName, positionName)
-        return getString(R.string.read_tip_used_at, position)
+        return getString(
+            R.string.read_tip_used_at,
+            getString(R.string.read_tip_position, sectionName, positionName),
+        )
     }
 
     private fun clearRepeat(repeat: Int) = ReadTipConfig.apply {
@@ -467,47 +581,7 @@ class TipConfigDialog : BaseDialogFragment(R.layout.dialog_tip_config) {
         else -> R.drawable.ic_chapter_list
     }
 
-    private inner class TipContentAdapter :
-        RecyclerAdapter<Int, ItemReadTipOptionBinding>(requireContext()) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemReadTipOptionBinding {
-            return ItemReadTipOptionBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemReadTipOptionBinding,
-            item: Int,
-            payloads: MutableList<Any>,
-        ) = binding.run {
-            val value = ReadTipConfig.tipValues[item]
-            val selected = value == currentTipValue()
-            tvOption.text = ReadTipConfig.tipNames[item]
-            tvOption.setTextColor(dialogContentColor)
-            ivOption.setImageResource(tipIcon(value))
-            ivOption.setColorFilter(dialogContentColor)
-            ivChecked.setColorFilter(dialogAccentColor)
-            ivChecked.visibility = if (selected) View.VISIBLE else View.GONE
-
-            val usage = if (selected) null else usagePosition(value)
-            tvUsage.text = usage
-            tvUsage.setTextColor(ColorUtils.withAlpha(dialogContentColor, 0.62f))
-            tvUsage.visibility = if (usage == null) View.GONE else View.VISIBLE
-        }
-
-        override fun registerListener(
-            holder: ItemViewHolder,
-            binding: ItemReadTipOptionBinding,
-        ) {
-            binding.root.setOnClickListener {
-                getItemByLayoutPosition(holder.layoutPosition)?.let { item ->
-                    val value = ReadTipConfig.tipValues[item]
-                    clearRepeat(value)
-                    assignCurrentTipValue(value)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
-                    notifyDataSetChanged()
-                }
-            }
-        }
+    private fun repositionAboveDrawer() {
+        parentFragment?.view?.let { ReadDrawerStyle.positionDialogAbove(dialog, it) }
     }
 }

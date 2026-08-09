@@ -2,7 +2,6 @@ package io.legado.app.ui.book.read.config
 
 import android.content.DialogInterface
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -10,9 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -24,24 +21,21 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.graphics.toColorInt
 import com.github.liuyueyi.quick.transfer.constants.TransType
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadHighlightRule
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.font.FontSelectDialog
-import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.hexString
 import io.legado.app.utils.inputStream
@@ -61,7 +55,7 @@ import kotlin.math.roundToInt
 
 private val EDITOR_FALLBACK_BG_COLOR = 0xFFF7F3EA.toInt()
 
-class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
+class ReadStyleDialog : BaseComposeDialogFragment(),
     FontSelectDialog.CallBack {
 
     private val callBack get() = activity as? ReadBookActivity
@@ -745,9 +739,9 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             currentValues = descriptions,
             selectedIndex = weights.indexOf(resolveFontWeight(ReadBookConfig.textBold))
                 .coerceAtLeast(0),
-            applyCurrentValueStyle = { view, index ->
+            previewTypeface = { index ->
                 val weight = weights[index]
-                view.typeface = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     Typeface.create(Typeface.DEFAULT, weight, false)
                 } else {
                     Typeface.create(
@@ -807,9 +801,13 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
 
     private fun deleteCurrentStyle() {
         val name = ReadBookConfig.durConfig.name.ifBlank { getString(R.string.text) }
-        alert(R.string.delete) {
-            setMessage(getString(R.string.sure_del_any, name))
-            okButton {
+        showReadConfirmDialog(
+            context = requireContext(),
+            title = getString(R.string.delete),
+            message = getString(R.string.sure_del_any, name),
+            confirmLabel = getString(R.string.ok),
+            cancelLabel = getString(R.string.cancel),
+            onConfirm = {
                 if (ReadBookConfig.deleteDur()) {
                     editorBackgroundCache = null
                     refreshUi()
@@ -817,9 +815,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
                 } else {
                     toastOnUi(R.string.read_style_keep_one_preset)
                 }
-            }
-            cancelButton()
-        }
+            },
+        )
     }
 
     private fun confirmRestoreCurrentPreset() {
@@ -827,28 +824,31 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             toastOnUi(R.string.read_style_restore_unavailable)
             return
         }
-        alert(
-            R.string.read_style_restore_current,
-            R.string.read_style_restore_current_confirm,
-        ) {
-            yesButton {
+        showReadConfirmDialog(
+            context = requireContext(),
+            title = getString(R.string.read_style_restore_current),
+            message = getString(R.string.read_style_restore_current_confirm),
+            confirmLabel = getString(R.string.yes),
+            cancelLabel = getString(R.string.no),
+            onConfirm = {
                 if (ReadBookConfig.restoreCurrentDefault()) {
                     editorBackgroundCache = null
                     refreshUi()
                     notifyPresetRestored()
                     toastOnUi(R.string.read_style_restore_current_done)
                 }
-            }
-            noButton()
-        }.applyOpaqueReadConfirmWindow()
+            },
+        )
     }
 
     private fun confirmRestoreAllPresets() {
-        alert(
-            R.string.read_style_restore_all,
-            R.string.read_style_restore_all_confirm,
-        ) {
-            yesButton {
+        showReadConfirmDialog(
+            context = requireContext(),
+            title = getString(R.string.read_style_restore_all),
+            message = getString(R.string.read_style_restore_all_confirm),
+            confirmLabel = getString(R.string.yes),
+            cancelLabel = getString(R.string.no),
+            onConfirm = {
                 if (ReadBookConfig.restoreAllDefaults()) {
                     editorBackgroundCache = null
                     clearHighlightDraft()
@@ -857,27 +857,8 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
                     notifyPresetRestored()
                     toastOnUi(R.string.read_style_restore_all_done)
                 }
-            }
-            noButton()
-        }.applyOpaqueReadConfirmWindow()
-    }
-
-    private fun AlertDialog.applyOpaqueReadConfirmWindow() {
-        applyNgWindow(marginDp = 20, dimAmount = 0.14f)
-        val colors = ReadDrawerStyle.themeSnapshot(requireContext()).colors
-        window?.setBackgroundDrawable(
-            GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 20.dpToPx().toFloat()
-                setColor(colors.dialogContainer or 0xFF000000.toInt())
-            }
+            },
         )
-        findViewById<TextView>(androidx.appcompat.R.id.alertTitle)
-            ?.setTextColor(colors.onSurface)
-        findViewById<TextView>(android.R.id.message)
-            ?.setTextColor(colors.onSurfaceVariant)
-        getButton(DialogInterface.BUTTON_POSITIVE)?.setTextColor(colors.primary)
-        getButton(DialogInterface.BUTTON_NEGATIVE)?.setTextColor(colors.primary)
     }
 
     private fun notifyPresetRestored() {

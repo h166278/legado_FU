@@ -39,12 +39,6 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/menu_page_anim"
-        android:title="@string/book_page_anim"
-        android:visible="false"
-        app:showAsAction="never" />
-
-    <item
         android:id="@+id/menu_get_progress"
         android:title="@string/get_book_progress"
         android:visible="false"
@@ -112,12 +106,6 @@
             app:showAsAction="never" />
 
     </group>
-
-    <item
-        android:id="@+id/menu_image_style"
-        android:title="@string/image_style"
-        android:visible="false"
-        app:showAsAction="never" />
 
     <item
         android:id="@+id/menu_effective_replaces"

@@ -1,23 +1,25 @@
 package io.legado.app.ui.book.bookmark
 
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
+import android.view.WindowManager
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.DialogBookmarkBinding
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
+import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgThemeResolver
+import io.legado.app.ui.widget.dialog.applyNgDialogWindow
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class BookmarkDialog() : BaseDialogFragment(R.layout.dialog_bookmark, true) {
+class BookmarkDialog() : BaseComposeDialogFragment() {
 
     constructor(bookmark: Bookmark, editPos: Int = -1) : this() {
         arguments = Bundle().apply {
@@ -26,54 +28,73 @@ class BookmarkDialog() : BaseDialogFragment(R.layout.dialog_bookmark, true) {
         }
     }
 
-    private val binding by viewBinding(DialogBookmarkBinding::bind)
+    private var bookmark: Bookmark? = null
 
     override fun onStart() {
         super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        applyNgDialogWindow(marginDp = 24, dimAmount = 0.42f)
+        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        val arguments = arguments ?: let {
+        val arguments = arguments ?: run {
             dismiss()
             return
+        }
+        @Suppress("DEPRECATION")
+        val currentBookmark = arguments.getParcelable<Bookmark>("bookmark") ?: run {
+            dismiss()
+            return
+        }
+        bookmark = currentBookmark
+        val isEditing = arguments.getInt("editPos", -1) >= 0
+        val themeSnapshot = if (activity is ReadBookActivity) {
+            ReadDrawerStyle.themeSnapshot(requireContext())
+        } else {
+            NgThemeResolver.resolve(requireContext())
         }
 
-        @Suppress("DEPRECATION")
-        val bookmark = arguments.getParcelable<Bookmark>("bookmark")
-        bookmark ?: let {
-            dismiss()
-            return
-        }
-        val editPos = arguments.getInt("editPos", -1)
-        binding.tvFooterLeft.visible(editPos >= 0)
-        binding.run {
-            tvChapterName.text = bookmark.chapterName
-            editBookText.setText(bookmark.bookText)
-            editContent.setText(bookmark.content)
-            tvCancel.setOnClickListener {
-                dismiss()
-            }
-            tvOk.setOnClickListener {
-                bookmark.bookText = editBookText.text?.toString() ?: ""
-                bookmark.content = editContent.text?.toString() ?: ""
-                lifecycleScope.launch {
-                    withContext(IO) {
-                        appDb.bookmarkDao.insert(bookmark)
-                    }
-                    dismiss()
-                }
-            }
-            tvFooterLeft.setOnClickListener {
-                lifecycleScope.launch {
-                    withContext(IO) {
-                        appDb.bookmarkDao.delete(bookmark)
-                    }
-                    dismiss()
+        (view as ComposeView).apply {
+            setBackgroundColor(AndroidColor.TRANSPARENT)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                NgAppTheme(
+                    snapshot = themeSnapshot,
+                    updateSystemBars = false,
+                ) {
+                    BookmarkDialogContent(
+                        chapterName = currentBookmark.chapterName,
+                        initialBookmarkText = currentBookmark.bookText,
+                        initialNote = currentBookmark.content,
+                        showDelete = isEditing,
+                        onCancel = ::dismiss,
+                        onConfirm = ::saveBookmark,
+                        onDelete = ::deleteBookmark,
+                    )
                 }
             }
         }
     }
 
+    private fun saveBookmark(bookText: String, content: String) {
+        val currentBookmark = bookmark ?: return
+        currentBookmark.bookText = bookText
+        currentBookmark.content = content
+        lifecycleScope.launch {
+            withContext(IO) {
+                appDb.bookmarkDao.insert(currentBookmark)
+            }
+            dismiss()
+        }
+    }
+
+    private fun deleteBookmark() {
+        val currentBookmark = bookmark ?: return
+        lifecycleScope.launch {
+            withContext(IO) {
+                appDb.bookmarkDao.delete(currentBookmark)
+            }
+            dismiss()
+        }
+    }
 }
