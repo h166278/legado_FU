@@ -27,7 +27,7 @@ import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
 import io.legado.app.service.WebService
 import io.legado.app.ui.about.NetworkLogDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.video.config.SettingsDialog
 import io.legado.app.ui.widget.code.addJsonPattern
 import io.legado.app.ui.widget.number.NumberPickerDialog
@@ -55,7 +55,7 @@ class OtherConfigFragment : PreferenceFragment(),
         appCtx,
         SharedReceiverActivity::class.java.name
     )
-    private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
+    private val localBookTreeSelect = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { treeUri ->
             AppConfig.defaultBookTreeUri = treeUri.toString()
         }
@@ -101,10 +101,7 @@ class OtherConfigFragment : PreferenceFragment(),
             PreferKey.userAgent -> showUserAgentDialog()
             PreferKey.customHosts -> showCustomHostsDialog()
             PreferKey.videoSetting -> showDialogFragment(SettingsDialog(requireActivity()))
-            PreferKey.defaultBookTreeUri -> localBookTreeSelect.launch {
-                title = getString(R.string.select_book_folder)
-                mode = HandleFileContract.DIR_SYS
-            }
+            PreferKey.defaultBookTreeUri -> localBookTreeSelect.launch(null)
 
             PreferKey.preDownloadNum -> NumberPickerDialog(requireContext())
                 .setTitle(getString(R.string.pre_download))

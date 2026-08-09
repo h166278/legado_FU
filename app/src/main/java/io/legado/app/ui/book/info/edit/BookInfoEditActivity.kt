@@ -19,9 +19,9 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.removeType
 import io.legado.app.ui.book.changecover.ChangeCoverDialog
-import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.readUri
@@ -37,7 +37,7 @@ class BookInfoEditActivity :
     VMBaseActivity<ActivityBookInfoEditBinding, BookInfoEditViewModel>(),
     ChangeCoverDialog.CallBack {
 
-    private val selectCover = registerForActivityResult(HandleFileContract()) {
+    private val selectCover = registerForActivityResult(SelectImageContract()) {
         it.uri?.let { uri ->
             coverChangeTo(uri)
         }
@@ -87,9 +87,7 @@ class BookInfoEditActivity :
             }
         }
         tvSelectCover.setOnClickListener {
-            selectCover.launch {
-                mode = HandleFileContract.IMAGE
-            }
+            selectCover.launch(null)
         }
         tvRefreshCover.setOnClickListener {
             viewModel.book?.customCoverUrl = tieCoverUrl.text?.toString()

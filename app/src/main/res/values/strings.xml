@@ -28,9 +28,6 @@
     <string name="tip_cannot_jump_setting_page">Cannot jump to Settings.</string>
 
     <string name="manual_input">Manual Input</string>
-    <string name="enter_directory_path">Enter directory path</string>
-    <string name="invalid_directory">Invalid directory path</string>
-    <string name="empty_directory_input">Directory path cannot be empty</string>
 
     <string name="dynamic_click_retry">Retry</string>
     <string name="dynamic_loading">Loading</string>
@@ -868,7 +865,6 @@
     <string name="replace_scope">Replacement object. Book name or source url is available</string>
     <string name="menu_action_group">Groups</string>
     <string name="download_path">Cache path</string>
-    <string name="sys_file_picker">System file picker</string>
     <string name="new_version">New version</string>
     <string name="download_update">Download updates</string>
     <string name="volume_key_page_on_play">Volume keys to turn page when reading</string>
@@ -1202,8 +1198,6 @@
     <string name="precision_search">Precise search</string>
     <string name="service_starting">Starting service</string>
     <string name="empty">Empty</string>
-    <string name="file_chooser">File selection</string>
-    <string name="folder_chooser">Folder selection</string>
     <string name="bottom_line">I AM OVER!</string>
     <string name="uri_to_path_fail">Uri To Path failed</string>
     <string name="refresh_cover">Refresh cover</string>
@@ -1232,9 +1226,6 @@
     <string name="service_stop">Service stopped</string>
     <string name="service_start">Starting service\nChecking notification bar for details</string>
     <string name="default_path">Default path</string>
-    <string name="sys_folder_picker">System folder picker</string>
-    <string name="app_folder_picker">App folder picker</string>
-    <string name="app_file_picker">App file picker</string>
     <string name="a10_permission_toast">Android 10+ unable to read and write file due to permission restrictions</string>
     <string name="add_to_text_context_menu_s">Long tap to display Legado·Search in the operation menu</string>
     <string name="add_to_text_context_menu_t">Text operation display Search</string>
@@ -1550,7 +1541,6 @@
     <string name="search_result_position">%1$d / %2$d · %3$s</string>
     <string name="tts_speech_reduce">Decrease speech speed</string>
     <string name="tts_speech_add">Increase speech speed</string>
-    <string name="open_sys_dir_picker_error">Error opening system folder selector, automatically open application folder selector</string>
     <string name="open_sys_doc_picker_error">Error opening system file selector, automatically open application file selector</string>
     <string name="expand_text_menu">Expand text selection menu</string>
     <string name="book_tree_uri_t">Book Save Location</string>
@@ -1928,15 +1918,10 @@
     <string name="cache_first">优先加载缓存</string>
     <string name="rule_sub_content">副文规则（subContent）</string>
     <string name="system_auto">跟随系统</string>
-    <string name="sys_image_picker">系统图片选择器</string>
     <string name="transparent_app_bars">Transparent app bars</string>
     <string name="transparent_app_bars_summary">Use transparent backgrounds for app bars</string>
     <string name="day_nav_bar_immersion">开启后白天操作栏透明，背景图透到顶部，主色调暂时禁用</string>
     <string name="night_nav_bar_immersion">开启后夜间操作栏透明，背景图透到顶部，主色调暂时禁用</string>
-    <string name="manual_input_img_src">手动输入图片链接</string>
-    <string name="enter_img_src_path">请输入图片链接</string>
-    <string name="empty_img_src_input">图片链接不能为空</string>
-    <string name="invalid_file_path">文件路径无效</string>
     <string name="is_system_tts_no_export">无法导出系统tts</string>
     <string name="click_image_way">点击图片方式</string>
     <string name="auto_update_summary">每天自动检查软件是否更新</string>

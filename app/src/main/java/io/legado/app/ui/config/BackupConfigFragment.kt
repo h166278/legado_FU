@@ -8,6 +8,7 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
@@ -35,17 +36,17 @@ import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isContentScheme
-import io.legado.app.utils.launch
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
+import io.legado.app.utils.takePersistableReadPermission
 import io.legado.app.utils.toEditable
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
@@ -66,7 +67,7 @@ class BackupConfigFragment : PreferenceFragment(),
     private var backupJob: Job? = null
     private var restoreJob: Job? = null
 
-    private val selectBackupPath = registerForActivityResult(HandleFileContract()) {
+    private val selectBackupPath = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             if (uri.isContentScheme()) {
                 AppConfig.backupPath = uri.toString()
@@ -75,7 +76,7 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
-    private val backupDir = registerForActivityResult(HandleFileContract()) { result ->
+    private val backupDir = registerForActivityResult(SelectDirectoryContract()) { result ->
         result.uri?.let { uri ->
             if (uri.isContentScheme()) {
                 AppConfig.backupPath = uri.toString()
@@ -88,8 +89,9 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
-    private val restoreDoc = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
+    private val restoreDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            it.takePersistableReadPermission()
             waitDialog.setText("恢复中…")
             waitDialog.show()
             val task = Coroutine.async {
@@ -102,7 +104,7 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
-    private val restoreOld = registerForActivityResult(HandleFileContract()) {
+    private val restoreOld = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             ImportOldData.importUri(appCtx, uri)
         }
@@ -237,11 +239,11 @@ class BackupConfigFragment : PreferenceFragment(),
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
             "localPassword" -> alertLocalPassword()
-            PreferKey.backupPath -> selectBackupPath.launch()
+            PreferKey.backupPath -> selectBackupPath.launch(null)
             PreferKey.restoreIgnore -> backupIgnore()
             "web_dav_backup" -> backup()
             "web_dav_restore" -> restore()
-            "import_old" -> restoreOld.launch()
+            "import_old" -> restoreOld.launch(null)
         }
         return super.onPreferenceTreeClick(preference)
     }
@@ -282,7 +284,7 @@ class BackupConfigFragment : PreferenceFragment(),
     fun backup() {
         val backupPath = AppConfig.backupPath
         if (backupPath.isNullOrEmpty()) {
-            backupDir.launch()
+            backupDir.launch(null)
         } else {
             if (backupPath.isContentScheme()) {
                 lifecycleScope.launch {
@@ -292,7 +294,7 @@ class BackupConfigFragment : PreferenceFragment(),
                     if (canWrite) {
                         backup(backupPath)
                     } else {
-                        backupDir.launch()
+                        backupDir.launch(null)
                     }
                 }
             } else {
@@ -406,11 +408,9 @@ class BackupConfigFragment : PreferenceFragment(),
     }
 
     private fun restoreFromLocal() {
-        restoreDoc.launch {
-            title = getString(R.string.select_restore_file)
-            mode = HandleFileContract.FILE
-            allowExtensions = arrayOf("zip")
-        }
+        restoreDoc.launch(
+            arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
+        )
     }
 
     override fun onDestroyView() {

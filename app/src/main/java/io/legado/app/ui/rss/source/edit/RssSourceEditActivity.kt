@@ -29,7 +29,6 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.source.edit.SourceEditCodeHighlighter
@@ -52,6 +51,7 @@ import io.legado.app.utils.shareWithQr
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.takePersistableReadPermission
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
@@ -75,12 +75,13 @@ class RssSourceEditActivity :
     private val listEntities: ArrayList<EditEntity> = ArrayList()
     private val webViewEntities: ArrayList<EditEntity> = ArrayList()
     private val startEntities: ArrayList<EditEntity> = ArrayList()
-    private val selectDoc = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            if (uri.isContentScheme()) {
-                sendText(uri.toString())
+    private val selectDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            it.takePersistableReadPermission()
+            if (it.isContentScheme()) {
+                sendText(it.toString())
             } else {
-                sendText(uri.path.toString())
+                sendText(it.path.toString())
             }
         }
     }
@@ -513,9 +514,7 @@ class RssSourceEditActivity :
             "ruleHelp" -> showHelp("rssRuleHelp")
             "jsHelp" -> showHelp("jsHelp")
             "regexHelp" -> showHelp("regexHelp")
-            "selectFile" -> selectDoc.launch {
-                mode = HandleFileContract.FILE
-            }
+            "selectFile" -> selectDoc.launch(arrayOf("*/*"))
         }
     }
 

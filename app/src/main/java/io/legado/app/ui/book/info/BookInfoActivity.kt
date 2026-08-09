@@ -101,7 +101,7 @@ import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.config.AiChatActivity
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.ui.widget.NgActionPopup
@@ -175,7 +175,7 @@ class BookInfoActivity :
             }
         }
     }
-    private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
+    private val localBookTreeSelect = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { treeUri ->
             AppConfig.defaultBookTreeUri = treeUri.toString()
         }
@@ -592,9 +592,7 @@ class BookInfoActivity :
     override fun observeLiveBus() {
         viewModel.actionLive.observe(this) {
             when (it) {
-                "selectBooksDir" -> localBookTreeSelect.launch {
-                    title = getString(R.string.select_book_folder)
-                }
+                "selectBooksDir" -> localBookTreeSelect.launch(null)
             }
         }
 

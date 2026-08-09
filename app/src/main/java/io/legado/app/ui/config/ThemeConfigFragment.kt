@@ -28,9 +28,9 @@ import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.design.theme.NgAppTheme
-import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
@@ -60,7 +60,7 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     private var backgroundEditorState by mutableStateOf<ThemeBackgroundEditorState?>(null)
     private var fontScaleEditorState by mutableStateOf<ThemeFontScaleEditorState?>(null)
 
-    private val selectImage = registerForActivityResult(HandleFileContract()) {
+    private val selectImage = registerForActivityResult(SelectImageContract()) {
         it.uri?.let { uri ->
             when (it.requestCode) {
                 requestCodeBgLight -> copyBgFromUri(uri, PreferKey.bgImage) { path ->
@@ -365,10 +365,7 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     }
 
     private fun selectBackgroundImage(dark: Boolean) {
-        selectImage.launch {
-            requestCode = if (dark) requestCodeBgDark else requestCodeBgLight
-            mode = HandleFileContract.IMAGE
-        }
+        selectImage.launch(if (dark) requestCodeBgDark else requestCodeBgLight)
     }
 
     private fun updateBackgroundDraft(dark: Boolean, path: String) {

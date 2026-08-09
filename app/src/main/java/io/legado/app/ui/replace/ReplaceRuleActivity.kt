@@ -23,7 +23,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.databinding.ActivityReplaceRuleBinding
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.dialogs.alert
@@ -31,7 +30,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.association.ImportReplaceRuleDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.CreateFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.widget.SelectActionBar
@@ -47,6 +46,7 @@ import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
+import io.legado.app.utils.takePersistableReadPermission
 import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
@@ -95,17 +95,15 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
                 setResult(RESULT_OK)
             }
         }
-    private val importDoc = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
+    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            it.takePersistableReadPermission()
             showDialogFragment(ImportReplaceRuleDialog(uri.toString()))
         }
     }
-    private val exportResult = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
+    private val exportResult = registerForActivityResult(CreateFileContract()) {
+        it.save(this, this) { uri ->
             alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
                 val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                     editView.hint = getString(R.string.path)
                     editView.setText(uri.toString())
@@ -275,10 +273,7 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             }
             R.id.menu_del_selection -> viewModel.delSelection(adapter.selection)
             R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
+            R.id.menu_import_local -> importDoc.launch(arrayOf("text/*", "application/json"))
 
             R.id.menu_import_qr -> qrCodeResult.launch()
             R.id.menu_help -> showHelp("replaceRuleHelp")
@@ -299,14 +294,13 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             R.id.menu_disable_selection -> viewModel.disableSelection(adapter.selection)
             R.id.menu_top_sel -> viewModel.topSelect(adapter.selection)
             R.id.menu_bottom_sel -> viewModel.bottomSelect(adapter.selection)
-            R.id.menu_export_selection -> exportResult.launch {
-                mode = HandleFileContract.EXPORT
-                fileData = HandleFileContract.FileData(
+            R.id.menu_export_selection -> exportResult.launch(
+                CreateFileContract.FileData(
                     "exportReplaceRule.json",
                     GSON.toJson(adapter.selection).toByteArray(),
                     "application/json"
                 )
-            }
+            )
         }
         return false
     }

@@ -31,7 +31,7 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.association.OnLineImportActivity
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.ACache
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
@@ -83,7 +83,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private var isfullscreen = false
     private var wasScreenOff = false
     private var needClearHistory = true
-    private val saveImage = registerForActivityResult(HandleFileContract()) {
+    private val saveImage = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
             viewModel.saveImage(webPic, uri.toString())
@@ -291,14 +291,12 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     }
 
     private fun selectSaveFolder() {
-        val default = arrayListOf<SelectItem<Int>>()
         val path = ACache.get().getAsString(imagePathKey)
-        if (!path.isNullOrEmpty()) {
-            default.add(SelectItem(path, -1))
-        }
-        saveImage.launch {
-            otherActions = default
-        }
+        saveImage.launch(
+            SelectDirectoryContract.Request(
+                initialUri = path?.takeIf { it.startsWith("content://") }?.toUri()
+            )
+        )
     }
 
     override fun finish() {

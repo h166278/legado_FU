@@ -15,7 +15,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.canRead
@@ -38,7 +38,7 @@ import java.io.FileOutputStream
 class FileAssociationActivity :
     VMBaseActivity<ActivityTranslucenceBinding, FileAssociationViewModel>() {
 
-    private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
+    private val localBookTreeSelect = registerForActivityResult(SelectDirectoryContract()) {
         intent.data?.let { uri ->
             it.uri?.let { treeUri ->
                 AppConfig.defaultBookTreeUri = treeUri.toString()
@@ -132,10 +132,7 @@ class FileAssociationActivity :
         if (uri.isContentScheme()) {
             val treeUriStr = AppConfig.defaultBookTreeUri
             if (treeUriStr.isNullOrEmpty()) {
-                localBookTreeSelect.launch {
-                    title = getString(R.string.select_book_folder)
-                    mode = HandleFileContract.DIR_SYS
-                }
+                localBookTreeSelect.launch(null)
             } else {
                 importBook(Uri.parse(treeUriStr), uri)
             }
@@ -197,10 +194,7 @@ class FileAssociationActivity :
                 }
             }.onFailure {
                 when (it) {
-                    is InvalidBooksDirException -> localBookTreeSelect.launch {
-                        title = getString(R.string.select_book_folder)
-                        mode = HandleFileContract.DIR_SYS
-                    }
+                    is InvalidBooksDirException -> localBookTreeSelect.launch(null)
 
                     else -> {
                         val msg = "导入书籍失败\n${it.localizedMessage}"

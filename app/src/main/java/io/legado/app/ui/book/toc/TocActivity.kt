@@ -23,7 +23,7 @@ import io.legado.app.model.ReadBook
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
 import io.legado.app.ui.book.toc.rule.TxtTocRuleDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.gone
@@ -44,7 +44,7 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
     private var menu: Menu? = null
     private var searchView: SearchView? = null
     private val waitDialog by lazy { WaitDialog(this) }
-    private val exportDir = registerForActivityResult(HandleFileContract()) {
+    private val exportDir = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             when (it.requestCode) {
                 1 -> viewModel.saveBookmark(uri)
@@ -158,13 +158,13 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
                 viewModel.upChapterListAdapter()
             }
 
-            R.id.menu_export_bookmark -> exportDir.launch {
-                requestCode = 1
-            }
+            R.id.menu_export_bookmark -> exportDir.launch(
+                SelectDirectoryContract.Request(requestCode = 1)
+            )
 
-            R.id.menu_export_md -> exportDir.launch {
-                requestCode = 2
-            }
+            R.id.menu_export_md -> exportDir.launch(
+                SelectDirectoryContract.Request(requestCode = 2)
+            )
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_network_log -> showDialogFragment<NetworkLogDialog>()

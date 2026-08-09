@@ -22,14 +22,13 @@ import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.book.import.BaseImportBookActivity
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.gone
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isUri
-import io.legado.app.utils.launch
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
@@ -52,7 +51,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     private val adapter by lazy { ImportBookAdapter(this, this) }
     private var scanDocJob: Job? = null
 
-    private val selectFolder = registerForActivityResult(HandleFileContract()) {
+    private val selectFolder = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             AppConfig.importBookPath = uri.toString()
             initRootDoc(true)
@@ -90,7 +89,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_select_folder -> selectFolder.launch()
+            R.id.menu_select_folder -> selectFolder.launch(null)
             R.id.menu_scan_folder -> scanFolder()
             R.id.menu_import_file_name -> alertImportFileName()
             R.id.menu_sort_name -> upSort(0)
@@ -164,7 +163,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             val lastPath = AppConfig.importBookPath
             if (lastPath.isNullOrBlank()) {
                 binding.tvEmptyMsg.visible()
-                selectFolder.launch()
+                selectFolder.launch(null)
             } else {
                 val rootUri = if (lastPath.isUri()) {
                     lastPath.toUri()
@@ -184,7 +183,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             val doc = DocumentFile.fromTreeUri(this, rootUri)
             if (doc == null || doc.name.isNullOrEmpty() || !doc.isDirectory) {
                 binding.tvEmptyMsg.visible()
-                selectFolder.launch()
+                selectFolder.launch(null)
             } else {
                 viewModel.subDocs.clear()
                 viewModel.rootDoc = FileDoc.fromDocumentFile(doc)
@@ -192,7 +191,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
             }
         }.onFailure {
             binding.tvEmptyMsg.visible()
-            selectFolder.launch()
+            selectFolder.launch(null)
         }
     }
 
@@ -206,7 +205,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
                     val file = File(path)
                     if (!file.isDirectory) {
                         binding.tvEmptyMsg.visible()
-                        selectFolder.launch()
+                        selectFolder.launch(null)
                     } else {
                         viewModel.subDocs.clear()
                         viewModel.rootDoc = FileDoc.fromFile(file)
@@ -214,7 +213,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
                     }
                 }.onFailure {
                     binding.tvEmptyMsg.visible()
-                    selectFolder.launch()
+                    selectFolder.launch(null)
                 }
             }
             .request()

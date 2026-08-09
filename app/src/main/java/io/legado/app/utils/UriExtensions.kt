@@ -29,6 +29,28 @@ fun Uri.isContentScheme() = this.scheme == "content"
 
 fun Uri.isFileScheme() = this.scheme == "file"
 
+fun Uri.takePersistableReadPermission() {
+    if (!isContentScheme()) return
+    try {
+        appCtx.contentResolver.takePersistableUriPermission(
+            this,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
+    } catch (_: SecurityException) {
+    }
+}
+
+fun Uri.takePersistableReadWritePermission() {
+    if (!isContentScheme()) return
+    try {
+        appCtx.contentResolver.takePersistableUriPermission(
+            this,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+    } catch (_: SecurityException) {
+    }
+}
+
 /**
  * 读取URI
  */

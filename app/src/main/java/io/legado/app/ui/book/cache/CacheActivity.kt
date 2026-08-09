@@ -35,7 +35,7 @@ import io.legado.app.model.CacheBook
 import io.legado.app.service.ExportBookService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.utils.ACache
@@ -84,7 +84,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     private val groupList: ArrayList<BookGroup> = arrayListOf()
     private var groupId: Long = -1
 
-    private val exportDir = registerForActivityResult(HandleFileContract()) { result ->
+    private val exportDir = registerForActivityResult(SelectDirectoryContract()) { result ->
         var isReadyPath = false
         var dirPath = ""
         result.uri?.let { uri ->
@@ -488,15 +488,14 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     }
 
     private fun selectExportFolder(exportPosition: Int) {
-        val default = arrayListOf<SelectItem<Int>>()
         val path = ACache.get().getAsString(exportBookPathKey)
-        if (!path.isNullOrEmpty()) {
-            default.add(SelectItem(path, -1))
-        }
-        exportDir.launch {
-            otherActions = default
-            requestCode = exportPosition
-        }
+        exportDir.launch(
+            SelectDirectoryContract.Request(
+                requestCode = exportPosition,
+                initialUri = path?.takeIf { it.startsWith("content://") }
+                    ?.let(android.net.Uri::parse)
+            )
+        )
     }
 
     private fun startExport(path: String, exportPosition: Int) {

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
@@ -16,11 +17,10 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.DictRule
 import io.legado.app.databinding.ActivityDictRuleBinding
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.help.DirectLinkUpload
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.association.ImportDictRuleDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.CreateFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
@@ -35,6 +35,7 @@ import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
+import io.legado.app.utils.takePersistableReadPermission
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
@@ -54,17 +55,15 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
         it ?: return@registerForActivityResult
         showDialogFragment(ImportDictRuleDialog(it))
     }
-    private val importDoc = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
+    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            it.takePersistableReadPermission()
             showDialogFragment(ImportDictRuleDialog(uri.toString()))
         }
     }
-    private val exportResult = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
+    private val exportResult = registerForActivityResult(CreateFileContract()) {
+        it.save(this, this) { uri ->
             alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
                 val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                     editView.hint = getString(R.string.path)
                     editView.setText(uri.toString())
@@ -136,10 +135,7 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_add -> showDialogFragment<DictRuleEditDialog>()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
+            R.id.menu_import_local -> importDoc.launch(arrayOf("text/*", "application/json"))
 
             R.id.menu_import_onLine -> showImportDialog()
             R.id.menu_import_qr -> qrCodeResult.launch()
@@ -159,14 +155,13 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
                 viewModel.disableSelection(*adapter.selection.toTypedArray())
             }
 
-            R.id.menu_export_selection -> exportResult.launch {
-                mode = HandleFileContract.EXPORT
-                fileData = HandleFileContract.FileData(
+            R.id.menu_export_selection -> exportResult.launch(
+                CreateFileContract.FileData(
                     "exportDictRule.json",
                     GSON.toJson(adapter.selection).toByteArray(),
                     "application/json"
                 )
-            }
+            )
         }
         return true
     }

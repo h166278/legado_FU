@@ -5,6 +5,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
@@ -21,7 +22,6 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.DialogBookshelfConfigBinding
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.AppLogDialog
@@ -32,19 +32,19 @@ import io.legado.app.ui.book.import.local.ImportBookActivity
 import io.legado.app.ui.book.import.remote.RemoteBookActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.config.AiChatActivity
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.CreateFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.checkByIndex
 import io.legado.app.utils.getCheckedIndex
-import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.readText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.takePersistableReadPermission
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.dpToPx
 
@@ -56,21 +56,22 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
     val activityViewModel by activityViewModels<MainViewModel>()
     override val viewModel by viewModels<BookshelfViewModel>()
 
-    private val importBookshelf = registerForActivityResult(HandleFileContract()) {
-        kotlin.runCatching {
-            it.uri?.readText(requireContext())?.let { text ->
-                viewModel.importBookshelf(text, groupId)
-            }
-        }.onFailure {
-            toastOnUi(it.localizedMessage ?: "ERROR")
-        }
-    }
-    private val exportResult = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
+    private val importBookshelf =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            kotlin.runCatching {
+                uri?.let {
+                    it.takePersistableReadPermission()
+                    it.readText(requireContext())
+                }?.let { text ->
+                    viewModel.importBookshelf(text, groupId)
                 }
+            }.onFailure {
+                toastOnUi(it.localizedMessage ?: "ERROR")
+            }
+        }
+    private val exportResult = registerForActivityResult(CreateFileContract()) {
+        it.save(viewLifecycleOwner, requireContext()) { uri ->
+            alert(R.string.export_success) {
                 val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                     editView.hint = getString(R.string.path)
                     editView.setText(uri.toString())
@@ -140,11 +141,9 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             }
 
             R.id.menu_export_bookshelf -> viewModel.exportBookshelf(books) { file ->
-                exportResult.launch {
-                    mode = HandleFileContract.EXPORT
-                    fileData =
-                        HandleFileContract.FileData("bookshelf.json", file, "application/json")
-                }
+                exportResult.launch(
+                    CreateFileContract.FileData("bookshelf.json", file, "application/json")
+                )
             }
 
             R.id.menu_import_bookshelf -> importBookshelfAlert(groupId)
@@ -306,10 +305,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             }
             cancelButton()
             neutralButton(R.string.select_file) {
-                importBookshelf.launch {
-                    mode = HandleFileContract.FILE
-                    allowExtensions = arrayOf("txt", "json")
-                }
+                importBookshelf.launch(arrayOf("text/*", "application/json"))
             }
         }
     }

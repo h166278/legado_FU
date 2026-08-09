@@ -25,9 +25,6 @@
     <string name="tip_cannot_jump_setting_page">无法跳转至设置界面</string>
 
     <string name="manual_input">手动输入</string>
-    <string name="enter_directory_path">请输入目录路径</string>
-    <string name="invalid_directory">目录路径无效</string>
-    <string name="empty_directory_input">目录路径不能为空</string>
 
     <string name="dynamic_click_retry">点击重试</string>
     <string name="dynamic_loading">正在加载</string>
@@ -865,7 +862,6 @@
     <string name="replace_scope">替换范围，选填书名或者书源 URL</string>
     <string name="menu_action_group">分组</string>
     <string name="download_path">内容缓存路径</string>
-    <string name="sys_file_picker">系统文件选择器</string>
     <string name="new_version">新版本</string>
     <string name="download_update">下载更新</string>
     <string name="volume_key_page_on_play">朗读时音量键翻页</string>
@@ -1199,8 +1195,6 @@
     <string name="precision_search">精准搜索</string>
     <string name="service_starting">正在启动服务</string>
     <string name="empty">空</string>
-    <string name="file_chooser">文件选择</string>
-    <string name="folder_chooser">文件夹选择</string>
     <string name="bottom_line">我是有底线的</string>
     <string name="uri_to_path_fail">URI 转 Path 失败</string>
     <string name="refresh_cover">刷新封面</string>
@@ -1229,9 +1223,6 @@
     <string name="service_stop">服务已停止</string>
     <string name="service_start">正在启动服务\n具体信息请查看通知栏</string>
     <string name="default_path">默认路径</string>
-    <string name="sys_folder_picker">系统文件夹选择器</string>
-    <string name="app_folder_picker">自带文件夹选择器</string>
-    <string name="app_file_picker">自带文件选择器</string>
     <string name="a10_permission_toast">Android 10 以上因系统权限限制可能无法读写文件</string>
     <string name="add_to_text_context_menu_s">长按文字在操作菜单中显示阅读·搜索</string>
     <string name="add_to_text_context_menu_t">文字操作显示搜索</string>
@@ -1545,7 +1536,6 @@
     <string name="ng_font_scale_follow_system">跟随系统</string>
     <string name="tts_speech_reduce">语速减</string>
     <string name="tts_speech_add">语速加</string>
-    <string name="open_sys_dir_picker_error">打开系统文件夹选择器出错，将自动打开应用文件夹选择器</string>
     <string name="open_sys_doc_picker_error">打开系统文件选择器出错，将自动打开应用文件选择器</string>
     <string name="expand_text_menu">展开文本选择菜单</string>
     <string name="book_tree_uri_t">书籍保存位置</string>
@@ -1834,7 +1824,6 @@
     <string name="sure_cache_book">是否确认开始缓存？</string>
     <string name="auto_check_new_backup_t">自动检查新备份</string>
     <string name="auto_check_new_backup_s">打开软件时检查是否有新备份，有新备份时提示是否更新</string>
-    <string name="sys_image_picker">系统图片选择器</string>
     <string name="ng_custom_colors">自定义颜色</string>
     <string name="ng_custom_colors_summary">使用色板生成，或分别设置日间与夜间颜色</string>
     <string name="ng_use_palette_colors">使用色板生成颜色</string>

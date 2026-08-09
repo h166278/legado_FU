@@ -74,9 +74,7 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
 
     override fun observeLiveBus() {
         viewModel.permissionDenialLiveData.observe(this) {
-            localBookTreeSelect.launch {
-                title = getString(R.string.select_book_folder)
-            }
+            localBookTreeSelect.launch(null)
         }
     }
 

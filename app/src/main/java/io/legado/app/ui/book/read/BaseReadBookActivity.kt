@@ -34,7 +34,7 @@ import io.legado.app.ui.book.read.config.ReadCharsetDialogContent
 import io.legado.app.ui.book.read.config.ReadOfflineCacheDialogContent
 import io.legado.app.ui.book.read.config.ReadSimulatedReadingDialogContent
 import io.legado.app.ui.book.read.config.showReadComposeDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.find
@@ -66,7 +66,7 @@ abstract class BaseReadBookActivity :
                 onBottomDialogChange()
             }
         }
-    private val selectBookFolderResult = registerForActivityResult(HandleFileContract()) {
+    private val selectBookFolderResult = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             ReadBook.book?.let { book ->
                 FileDoc.fromUri(uri, true).find(book.originName)?.let { doc ->
@@ -95,10 +95,7 @@ abstract class BaseReadBookActivity :
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.navigationBar.setBackgroundColor(bottomBackground)
         viewModel.permissionDenialLiveData.observe(this) {
-            selectBookFolderResult.launch {
-                mode = HandleFileContract.DIR_SYS
-                title = "选择书籍所在文件夹"
-            }
+            selectBookFolderResult.launch(null)
         }
         if (!LocalConfig.readHelpVersionIsLast) {
             if (isTv) {

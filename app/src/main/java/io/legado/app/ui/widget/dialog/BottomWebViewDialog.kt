@@ -78,7 +78,7 @@ import io.legado.app.help.webView.WebViewPool.DATA_HTML
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.Download
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -123,7 +123,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         }
     }
     private val displayMetrics by lazy { resources.displayMetrics }
-    private val selectImageDir = registerForActivityResult(HandleFileContract()) {
+    private val selectImageDir = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
             saveImage(it.value, uri)
@@ -576,15 +576,13 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
     }
 
     private fun selectSaveFolder(webPic: String?) {
-        val default = arrayListOf<SelectItem<Int>>()
         val path = ACache.get().getAsString(imagePathKey)
-        if (!path.isNullOrEmpty()) {
-            default.add(SelectItem(path, -1))
-        }
-        selectImageDir.launch {
-            otherActions = default
-            value = webPic
-        }
+        selectImageDir.launch(
+            SelectDirectoryContract.Request(
+                value = webPic,
+                initialUri = path?.takeIf { it.startsWith("content://") }?.toUri()
+            )
+        )
     }
 
     private fun saveImage(webPic: String?, uri: Uri) {

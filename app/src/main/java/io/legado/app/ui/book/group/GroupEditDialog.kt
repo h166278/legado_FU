@@ -11,9 +11,9 @@ import io.legado.app.databinding.DialogBookGroupEditBinding
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.gone
 import io.legado.app.utils.inputStream
@@ -38,7 +38,7 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
     private val binding by viewBinding(DialogBookGroupEditBinding::bind)
     private val viewModel by viewModels<GroupViewModel>()
     private var bookGroup: BookGroup? = null
-    private val selectImage = registerForActivityResult(HandleFileContract()) {
+    private val selectImage = registerForActivityResult(SelectImageContract()) {
         val uri = it.uri ?: return@registerForActivityResult
         if (uri.scheme?.lowercase() in listOf("http", "https")) {
             binding.ivCover.load(uri.toString())
@@ -99,16 +99,12 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
                     )
                     context?.selector(items = actions) { _, i ->
                         when (i) {
-                            0 -> selectImage.launch {
-                                mode = HandleFileContract.IMAGE
-                            }
+                            0 -> selectImage.launch(null)
                             1 -> binding.ivCover.load()
                         }
                     }
                 } else {
-                    selectImage.launch {
-                        mode = HandleFileContract.IMAGE
-                    }
+                    selectImage.launch(null)
                 }
             }
             btnCancel.onClick {

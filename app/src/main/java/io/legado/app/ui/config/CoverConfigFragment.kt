@@ -16,9 +16,9 @@ import io.legado.app.help.config.NgCoverAlbumStore
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.BookCover
 import io.legado.app.ui.design.theme.NgAppTheme
-import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
@@ -39,7 +39,7 @@ class CoverConfigFragment : BaseFragment(R.layout.fragment_cover_config) {
     private val requestCodeCoverDark = 112
     private var screenState by mutableStateOf(CoverConfigScreenState())
 
-    private val selectImage = registerForActivityResult(HandleFileContract()) {
+    private val selectImage = registerForActivityResult(SelectImageContract()) {
         it.uri?.let { uri ->
             when (it.requestCode) {
                 requestCodeCover -> setCoverFromUri(PreferKey.defaultCover, uri)
@@ -175,10 +175,7 @@ class CoverConfigFragment : BaseFragment(R.layout.fragment_cover_config) {
     }
 
     private fun selectCoverImage(dark: Boolean) {
-        selectImage.launch {
-            requestCode = if (dark) requestCodeCoverDark else requestCodeCover
-            mode = HandleFileContract.IMAGE
-        }
+        selectImage.launch(if (dark) requestCodeCoverDark else requestCodeCover)
     }
 
     private fun setCoverFromUri(preferenceKey: String, uri: Uri) {

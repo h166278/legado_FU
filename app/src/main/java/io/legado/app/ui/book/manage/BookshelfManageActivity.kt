@@ -21,7 +21,6 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityArrangeBookBinding
 import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.contains
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
@@ -32,7 +31,7 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.book.group.GroupManageDialog
 import io.legado.app.ui.book.group.GroupSelectDialog
 import io.legado.app.ui.book.info.BookInfoActivity
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.CreateFileContract
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
@@ -41,7 +40,6 @@ import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
@@ -83,12 +81,9 @@ class BookshelfManageActivity :
     }
     private var books: List<Book>? = null
     private val waitDialog by lazy { WaitDialog(this) }
-    private val exportDir = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
+    private val exportDir = registerForActivityResult(CreateFileContract()) {
+        it.save(this, this) { uri ->
             alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
                 val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
                     editView.hint = getString(R.string.path)
                     editView.setText(uri.toString())
@@ -276,14 +271,13 @@ class BookshelfManageActivity :
             }
 
             R.id.menu_export_all_use_book_source -> viewModel.saveAllUseBookSourceToFile { file ->
-                exportDir.launch {
-                    mode = HandleFileContract.EXPORT
-                    fileData = HandleFileContract.FileData(
+                exportDir.launch(
+                    CreateFileContract.FileData(
                         "bookSource.json",
                         file,
                         "application/json"
                     )
-                }
+                )
             }
 
             else -> if (item.groupId == R.id.menu_group) {

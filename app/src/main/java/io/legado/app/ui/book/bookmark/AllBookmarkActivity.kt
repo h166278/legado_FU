@@ -11,7 +11,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.databinding.ActivityAllBookmarkBinding
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivityForBook
@@ -33,7 +33,7 @@ class AllBookmarkActivity : VMBaseActivity<ActivityAllBookmarkBinding, AllBookma
     private val adapter by lazy {
         BookmarkAdapter(this, this)
     }
-    private val exportDir = registerForActivityResult(HandleFileContract()) {
+    private val exportDir = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             when (it.requestCode) {
                 1 -> viewModel.exportBookmark(uri)
@@ -66,13 +66,13 @@ class AllBookmarkActivity : VMBaseActivity<ActivityAllBookmarkBinding, AllBookma
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_export -> exportDir.launch {
-                requestCode = 1
-            }
+            R.id.menu_export -> exportDir.launch(
+                SelectDirectoryContract.Request(requestCode = 1)
+            )
 
-            R.id.menu_export_md -> exportDir.launch {
-                requestCode = 2
-            }
+            R.id.menu_export_md -> exportDir.launch(
+                SelectDirectoryContract.Request(requestCode = 2)
+            )
         }
         return super.onCompatOptionsItemSelected(item)
     }

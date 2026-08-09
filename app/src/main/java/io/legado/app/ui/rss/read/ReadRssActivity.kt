@@ -48,7 +48,7 @@ import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.association.OnLineImportActivity
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
 import io.legado.app.utils.ACache
@@ -122,7 +122,7 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var interfaceInjected: String? = null
     private var needClearHistory = true
-    private val selectImageDir = registerForActivityResult(HandleFileContract()) {
+    private val selectImageDir = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
             viewModel.saveImage(it.value, uri)
@@ -370,15 +370,13 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     private fun selectSaveFolder(webPic: String?) {
-        val default = arrayListOf<SelectItem<Int>>()
         val path = ACache.get().getAsString(imagePathKey)
-        if (!path.isNullOrEmpty()) {
-            default.add(SelectItem(path, -1))
-        }
-        selectImageDir.launch {
-            otherActions = default
-            value = webPic
-        }
+        selectImageDir.launch(
+            SelectDirectoryContract.Request(
+                value = webPic,
+                initialUri = path?.takeIf { it.startsWith("content://") }?.toUri()
+            )
+        )
     }
 
     @SuppressLint("SetJavaScriptEnabled")

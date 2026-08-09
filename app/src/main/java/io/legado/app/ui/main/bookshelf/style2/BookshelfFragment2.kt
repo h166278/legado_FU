@@ -40,7 +40,7 @@ import io.legado.app.model.localBook.LocalBook
 import io.legado.app.service.ExportBookService
 import io.legado.app.ui.book.character.BookCharacterActivity
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
-import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.read.aloud.ReadAloudLauncher
@@ -112,7 +112,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
     private var actionBook: Book? = null
     private var exportBook: Book? = null
     private val exportBookPathKey = "exportBookPath"
-    private val exportDir = registerForActivityResult(HandleFileContract()) { result ->
+    private val exportDir = registerForActivityResult(SelectDirectoryContract()) { result ->
         val book = exportBook ?: return@registerForActivityResult
         result.uri?.let { uri ->
             val path = if (uri.isContentScheme()) uri.toString() else uri.path ?: uri.toString()
@@ -353,10 +353,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             if (canWrite && path != null) {
                 startExportBook(book, path)
             } else {
-                exportDir.launch {
-                    mode = HandleFileContract.DIR
-                    requestCode = 0
-                }
+                exportDir.launch(null)
             }
         }
     }
