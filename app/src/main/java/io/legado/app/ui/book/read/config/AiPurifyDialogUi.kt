@@ -1,6 +1,5 @@
 package io.legado.app.ui.book.read.config
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -199,7 +198,6 @@ internal fun AiPurifyRangeDialogContent(
     onConfirm: () -> Unit,
 ) {
     ReadConfigDialogSurface(
-        modifier = Modifier.animateContentSize(),
         contentPadding = PaddingValues(
             start = 18.dp,
             top = 18.dp,
