@@ -439,10 +439,13 @@ class TtsHttpForwarderClientTest {
         assertEquals(TtsEngineStore.NEXT_EDGE_PROXY_ID, engine.id)
         assertEquals("Next Edge TTS", engine.name)
         assertEquals(TtsEngineType.SCRIPT, engine.type)
-        assertEquals(false, engine.enabled)
+        assertEquals(true, engine.enabled)
         assertEquals("audio/mpeg", engine.contentType)
+        assertEquals("http://5.45.99.149:8075/tts", engine.baseUrl)
         assertTrue(engine.supportsVoiceFetch())
-        assertTrue(engine.script.contains("// @version 1.0.6"))
+        assertTrue(engine.script.contains("// @version 1.0.7"))
+        assertTrue(engine.script.contains("defaultValue: \"http://5.45.99.149:8075/tts\""))
+        assertFalse(engine.script.contains("36.248.181.23"))
         assertTrue(engine.supportsCapability(TtsEngineCapability.STYLE_TAGS))
         assertTrue(engine.supportsCapability(TtsEngineCapability.EMOTION))
         assertFalse(engine.supportsCapability(TtsEngineCapability.EMOTION_INTENSITY))
@@ -486,7 +489,7 @@ class TtsHttpForwarderClientTest {
         val nextEdge = scriptEngineFromAssetFile("next_edge_proxy.js")
         val savedNextEdge = TtsEngineStore.scriptEngineFromScript(
             nextEdge.script
-                .replace("// @version 1.0.6", "// @version 1.0.5")
+                .replace("// @version 1.0.7", "// @version 1.0.5")
                 .replace(Regex("// @capabilities style_tags,emotion\\r?\\n"), "")
         )!!
         val updatedNextEdge = TtsEngineStore.updateDefaultScriptForTest(savedNextEdge, nextEdge)
@@ -507,6 +510,32 @@ class TtsHttpForwarderClientTest {
 
         assertEquals(mimo.script, updatedMimo.script)
         assertEquals(mimo.capabilities, updatedMimo.capabilities)
+    }
+
+    @Test
+    fun nextEdgeProxyEndpointUpgradeReplacesOnlyRetiredDefault() {
+        val builtIn = scriptEngineFromAssetFile("next_edge_proxy.js")
+        val saved = TtsEngineStore.scriptEngineFromScript(
+            builtIn.script.replace("// @version 1.0.7", "// @version 1.0.6")
+        )!!.copy(
+            enabled = false,
+            optionValues = mapOf(
+                "api" to "http://36.248.181.23:22335/tts",
+                "timeout" to "45"
+            )
+        )
+
+        val updated = TtsEngineStore.updateDefaultScriptForTest(saved, builtIn)
+
+        assertEquals(false, updated.enabled)
+        assertEquals("http://5.45.99.149:8075/tts", updated.optionValues["api"])
+        assertEquals("45", updated.optionValues["timeout"])
+
+        val customEndpoint = TtsEngineStore.updateDefaultScriptForTest(
+            saved.copy(optionValues = saved.optionValues + ("api" to "http://example.com/tts")),
+            builtIn
+        )
+        assertEquals("http://example.com/tts", customEndpoint.optionValues["api"])
     }
 
     @Test

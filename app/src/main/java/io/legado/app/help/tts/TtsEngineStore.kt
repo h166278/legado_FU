@@ -176,6 +176,8 @@ object TtsEngineStore {
         "http://localhost:8774/forward?volume=50&speed={{speakSpeed*2}}&text={{java.encodeURI(speakText)}}"
     private const val DEFAULT_MULTITTS_FORWARDER_URL =
         "http://localhost:8774/forward?volume={{speakVolume}}&speed={{speakSpeed}}&pitch={{speakPitch}}&voice={{voiceId}}&text={{java.encodeURI(speakText)}}"
+    private const val OLD_NEXT_EDGE_PROXY_URL = "http://36.248.181.23:22335/tts"
+    private const val DEFAULT_NEXT_EDGE_PROXY_URL = "http://5.45.99.149:8075/tts"
     private val DEFAULT_SCRIPT_ASSETS = listOf(
         "multitts_forwarder.js",
         "next_edge_proxy.js",
@@ -676,6 +678,15 @@ object TtsEngineStore {
                 builtIn.script.contains("// @version 1.3.0") &&
                 builtIn.script.contains("\"profile_source\": \"vv_clone_catalog\"")
         val savedScriptName = parseScriptMetadata(script)["name"]
+        val updatedOptionValues = if (
+            replaceScript &&
+            id == NEXT_EDGE_PROXY_ID &&
+            optionValues["api"] == OLD_NEXT_EDGE_PROXY_URL
+        ) {
+            optionValues + ("api" to DEFAULT_NEXT_EDGE_PROXY_URL)
+        } else {
+            optionValues
+        }
         return copy(
             name = if (
                 (replaceScript && name == savedScriptName) ||
@@ -694,6 +705,7 @@ object TtsEngineStore {
             } else {
                 script
             },
+            optionValues = updatedOptionValues,
             capabilities = if (replaceScript) {
                 builtIn.capabilities
             } else {
@@ -753,9 +765,10 @@ object TtsEngineStore {
                                 script.contains("// @version 1.0.2") ||
                                 script.contains("// @version 1.0.3") ||
                                 script.contains("// @version 1.0.4") ||
-                                script.contains("// @version 1.0.5")
+                                script.contains("// @version 1.0.5") ||
+                                script.contains("// @version 1.0.6")
                         ) &&
-                builtIn.script.contains("// @version 1.0.6")
+                builtIn.script.contains("// @version 1.0.7")
         val shouldUpdateMimoExpressiveFields = id == MIMO_V25_TTS_ID &&
                 script.contains("// @version 1.0.0") &&
                 builtIn.script.contains("// @version 1.0.1") &&

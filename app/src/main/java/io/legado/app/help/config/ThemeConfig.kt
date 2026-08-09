@@ -76,6 +76,43 @@ internal fun resolveThemeModeTransition(
     )
 }
 
+internal fun resolveBundledBackgroundAssetPath(assetPath: String): String = when (assetPath) {
+    "defaultData/theme/reading_ng_warm.png",
+    "bg/暖色渐变.png" -> "bg/暖色渐变.webp"
+    "defaultData/theme/reading_ng_bamboo.png",
+    "bg/竹影之韵.png" -> "bg/竹影之韵.webp"
+    "defaultData/theme/reading_ng_mist.png",
+    "bg/灰色雾霭.png" -> "bg/灰色雾霭.webp"
+    "defaultData/theme/reading_ng_autumn_mountains.png" ->
+        "defaultData/theme/reading_ng_autumn_mountains.webp"
+    "defaultData/theme/reading_ng_autumn_mountains_dark.png" ->
+        "defaultData/theme/reading_ng_autumn_mountains_dark.webp"
+    else -> assetPath
+}
+
+internal fun resolveReinstalledThemeBackgroundPath(
+    currentPath: String?,
+    installedPath: String?,
+    packageRootPath: String?,
+    isFile: (String) -> Boolean = { File(it).isFile },
+): String? {
+    if (currentPath.isNullOrBlank() || installedPath.isNullOrBlank() ||
+        packageRootPath.isNullOrBlank()
+    ) {
+        return currentPath
+    }
+    if (runCatching { isFile(currentPath) }.getOrDefault(false)) return currentPath
+    val belongsToPackage = runCatching {
+        val packageRoot = File(packageRootPath).canonicalFile.toPath()
+        val currentFile = File(currentPath).canonicalFile.toPath()
+        currentFile != packageRoot && currentFile.startsWith(packageRoot)
+    }.getOrDefault(false)
+    if (!belongsToPackage) return currentPath
+    return installedPath.takeIf {
+        runCatching { isFile(it) }.getOrDefault(false)
+    } ?: currentPath
+}
+
 @Keep
 object ThemeConfig {
     const val configFileName = "themeConfig.json"
@@ -238,8 +275,11 @@ object ThemeConfig {
         backgroundPath: String,
         forceRefresh: Boolean = false,
     ): String {
-        val assetPath = backgroundPath.removePrefix(ASSET_BACKGROUND_PREFIX)
-        val filePath = cachedBackgroundPath(context, backgroundPath, preferenceKey)
+        val assetPath = resolveBundledBackgroundAssetPath(
+            backgroundPath.removePrefix(ASSET_BACKGROUND_PREFIX)
+        )
+        val canonicalBackgroundPath = "$ASSET_BACKGROUND_PREFIX$assetPath"
+        val filePath = cachedBackgroundPath(context, canonicalBackgroundPath, preferenceKey)
         val file = File(filePath)
         if (forceRefresh || !file.exists() || file.length() == 0L) {
             FileUtils.createFileIfNotExist(filePath)
@@ -570,6 +610,29 @@ object ThemeConfig {
             AppLog.put("设置主题出错\n$error", error, true)
             false
         }
+    }
+
+    internal fun repairReinstalledThemeBackgrounds(
+        context: Context,
+        theme: NgManagedTheme,
+    ): Boolean {
+        val packageRootPath = theme.packageRootPath ?: return false
+        var repaired = false
+        fun repair(preferenceKey: String, installedPath: String?) {
+            val currentPath = context.getPrefString(preferenceKey)
+            val resolvedPath = resolveReinstalledThemeBackgroundPath(
+                currentPath = currentPath,
+                installedPath = installedPath,
+                packageRootPath = packageRootPath,
+            )
+            if (resolvedPath != currentPath) {
+                context.putPrefString(preferenceKey, resolvedPath)
+                repaired = true
+            }
+        }
+        repair(PreferKey.bgImage, theme.lightBackground.path)
+        repair(PreferKey.bgImageN, theme.darkBackground.path)
+        return repaired
     }
 
     fun getDurConfig(context: Context): Config {

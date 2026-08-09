@@ -244,7 +244,12 @@ internal object NgThemeLibraryStore {
 
     /** 只在尚未选择过 NG 主题时应用发布默认主题，已有选择保持不变。 */
     fun applyDefaultThemeIfNeeded(context: Context) {
-        if (context.defaultSharedPreferences.contains(ACTIVE_THEME_KEY)) return
+        if (context.defaultSharedPreferences.contains(ACTIVE_THEME_KEY)) {
+            activeTheme(context)
+                ?.takeIf { it.isBuiltIn }
+                ?.let { ThemeConfig.repairReinstalledThemeBackgrounds(context, it) }
+            return
+        }
         val defaultTheme = builtInThemes(context)
             .firstOrNull { it.id == NgBuiltInThemes.defaultTheme.id }
             ?: return
@@ -458,6 +463,7 @@ internal object NgThemeLibraryStore {
 
 internal object NgBuiltInThemes {
     private const val BACKGROUND_PREFIX = "asset://defaultData/theme/"
+    private const val READING_BACKGROUND_PREFIX = "asset://bg/"
 
     val classic = theme(
         id = "builtin.ng.classic",
@@ -478,7 +484,7 @@ internal object NgBuiltInThemes {
         lightSecondary = 0xFFFFFFFF.toInt(),
         darkPrimary = 0xFFF78E66.toInt(),
         darkSecondary = 0xFF303030.toInt(),
-        lightBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_warm.png",
+        lightBackgroundPath = "${READING_BACKGROUND_PREFIX}暖色渐变.webp",
         transparentAppBars = true
     )
     val bamboo = theme(
@@ -488,7 +494,7 @@ internal object NgBuiltInThemes {
         lightSecondary = 0xFFFFFFFF.toInt(),
         darkPrimary = 0xFFA8C477.toInt(),
         darkSecondary = 0xFF303030.toInt(),
-        lightBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_bamboo.png",
+        lightBackgroundPath = "${READING_BACKGROUND_PREFIX}竹影之韵.webp",
         transparentAppBars = true
     )
     val mist = theme(
@@ -498,8 +504,8 @@ internal object NgBuiltInThemes {
         lightSecondary = 0xFFFFFFFF.toInt(),
         darkPrimary = 0xFF9DB6DE.toInt(),
         darkSecondary = 0xFF303030.toInt(),
-        lightBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_mist.png",
-        darkBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_mist.png",
+        lightBackgroundPath = "${READING_BACKGROUND_PREFIX}灰色雾霭.webp",
+        darkBackgroundPath = "${READING_BACKGROUND_PREFIX}灰色雾霭.webp",
         lightTopBarTextMode = NgTopBarTextMode.LIGHT,
         darkTopBarTextMode = NgTopBarTextMode.LIGHT,
         reuseLightColorsAtNight = true,
@@ -522,10 +528,10 @@ internal object NgBuiltInThemes {
             darkTopBarTextMode = NgTopBarTextMode.LIGHT,
         ),
         lightBackground = NgThemeBackground(
-            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains.png"
+            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains.webp"
         ),
         darkBackground = NgThemeBackground(
-            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains_dark.png"
+            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains_dark.webp"
         ),
         barProfile = NgThemeBarProfile(
             useFloatingBottomBar = true,

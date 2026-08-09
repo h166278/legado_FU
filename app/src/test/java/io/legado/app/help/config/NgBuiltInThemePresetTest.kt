@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class NgBuiltInThemePresetTest {
 
@@ -24,12 +25,12 @@ class NgBuiltInThemePresetTest {
     @Test
     fun `warm and bamboo presets only provide light backgrounds`() {
         assertEquals(
-            "asset://defaultData/theme/reading_ng_warm.png",
+            "asset://bg/暖色渐变.webp",
             NgBuiltInThemes.warm.lightBackground.path,
         )
         assertNull(NgBuiltInThemes.warm.darkBackground.path)
         assertEquals(
-            "asset://defaultData/theme/reading_ng_bamboo.png",
+            "asset://bg/竹影之韵.webp",
             NgBuiltInThemes.bamboo.lightBackground.path,
         )
         assertNull(NgBuiltInThemes.bamboo.darkBackground.path)
@@ -37,7 +38,7 @@ class NgBuiltInThemePresetTest {
 
     @Test
     fun `mist preset provides both backgrounds and light top bar text`() {
-        val expectedBackground = "asset://defaultData/theme/reading_ng_mist.png"
+        val expectedBackground = "asset://bg/灰色雾霭.webp"
 
         assertEquals(expectedBackground, NgBuiltInThemes.mist.lightBackground.path)
         assertEquals(expectedBackground, NgBuiltInThemes.mist.darkBackground.path)
@@ -56,6 +57,82 @@ class NgBuiltInThemePresetTest {
         assertEquals(
             NgBuiltInThemes.mist.colors.lightSeed,
             NgBuiltInThemes.mist.colors.darkSeed,
+        )
+    }
+
+    @Test
+    fun `legacy bundled background paths resolve to reading background assets`() {
+        assertEquals(
+            "bg/暖色渐变.webp",
+            resolveBundledBackgroundAssetPath("defaultData/theme/reading_ng_warm.png"),
+        )
+        assertEquals(
+            "bg/暖色渐变.webp",
+            resolveBundledBackgroundAssetPath("bg/暖色渐变.png"),
+        )
+        assertEquals(
+            "bg/竹影之韵.webp",
+            resolveBundledBackgroundAssetPath("defaultData/theme/reading_ng_bamboo.png"),
+        )
+        assertEquals(
+            "bg/灰色雾霭.webp",
+            resolveBundledBackgroundAssetPath("defaultData/theme/reading_ng_mist.png"),
+        )
+        assertEquals(
+            "defaultData/theme/reading_ng_autumn_mountains.webp",
+            resolveBundledBackgroundAssetPath(
+                "defaultData/theme/reading_ng_autumn_mountains.png"
+            ),
+        )
+        assertEquals(
+            "defaultData/theme/reading_ng_autumn_mountains_dark.webp",
+            resolveBundledBackgroundAssetPath(
+                "defaultData/theme/reading_ng_autumn_mountains_dark.png"
+            ),
+        )
+    }
+
+    @Test
+    fun `missing installed background is repaired after built in package update`() {
+        val packageRoot = File("build/theme-package").absoluteFile
+        val oldPath = File(packageRoot, "assets/background-light.png").path
+        val installedPath = File(packageRoot, "assets/background-light.webp").path
+
+        assertEquals(
+            installedPath,
+            resolveReinstalledThemeBackgroundPath(
+                currentPath = oldPath,
+                installedPath = installedPath,
+                packageRootPath = packageRoot.path,
+                isFile = { it == installedPath },
+            ),
+        )
+    }
+
+    @Test
+    fun `existing and user managed background paths are not repaired`() {
+        val packageRoot = File("build/theme-package").absoluteFile
+        val existingPath = File(packageRoot, "assets/background-light.png").path
+        val installedPath = File(packageRoot, "assets/background-light.webp").path
+        val userPath = File(packageRoot.parentFile, "user/background.png").path
+
+        assertEquals(
+            existingPath,
+            resolveReinstalledThemeBackgroundPath(
+                currentPath = existingPath,
+                installedPath = installedPath,
+                packageRootPath = packageRoot.path,
+                isFile = { it == existingPath || it == installedPath },
+            ),
+        )
+        assertEquals(
+            userPath,
+            resolveReinstalledThemeBackgroundPath(
+                currentPath = userPath,
+                installedPath = installedPath,
+                packageRootPath = packageRoot.path,
+                isFile = { it == installedPath },
+            ),
         )
     }
 
@@ -93,11 +170,11 @@ class NgBuiltInThemePresetTest {
         )
         assertEquals(NgTopBarTextMode.LIGHT, autumn.colors.darkTopBarTextMode)
         assertEquals(
-            "asset://defaultData/theme/reading_ng_autumn_mountains.png",
+            "asset://defaultData/theme/reading_ng_autumn_mountains.webp",
             autumn.lightBackground.path,
         )
         assertEquals(
-            "asset://defaultData/theme/reading_ng_autumn_mountains_dark.png",
+            "asset://defaultData/theme/reading_ng_autumn_mountains_dark.webp",
             autumn.darkBackground.path,
         )
         assertEquals(

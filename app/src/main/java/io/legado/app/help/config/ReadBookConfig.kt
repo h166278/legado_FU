@@ -37,6 +37,15 @@ import java.io.OutputStream
 /**
  * 阅读界面配置
  */
+internal fun resolveBundledReadBackgroundName(backgroundName: String): String = when (backgroundName) {
+    "暖色渐变.png" -> "暖色渐变.webp"
+    "竹影之韵.png" -> "竹影之韵.webp"
+    "灰色雾霭.png" -> "灰色雾霭.webp"
+    "秋山书意-日间.png" -> "秋山书意-日间.webp"
+    "秋山书意-夜间.png" -> "秋山书意-夜间.webp"
+    else -> backgroundName
+}
+
 @Suppress("ConstPropertyName")
 @Keep
 object ReadBookConfig {
@@ -110,7 +119,7 @@ object ReadBookConfig {
                 e.printOnDebug()
             }
         }
-        shareConfig = c ?: configList.lastOrNull()?.detachedCopy() ?: Config()
+        shareConfig = c?.detachedCopy() ?: configList.lastOrNull()?.detachedCopy() ?: Config()
     }
 
     fun upBg(width: Int, height: Int) {
@@ -223,6 +232,17 @@ object ReadBookConfig {
     }
 
     private fun Config.detachedCopy(): Config = copy(
+        bgStr = if (bgType == 1) resolveBundledReadBackgroundName(bgStr) else bgStr,
+        bgStrNight = if (bgTypeNight == 1) {
+            resolveBundledReadBackgroundName(bgStrNight)
+        } else {
+            bgStrNight
+        },
+        bgStrEInk = if (bgTypeEInk == 1) {
+            resolveBundledReadBackgroundName(bgStrEInk)
+        } else {
+            bgStrEInk
+        },
         highlightRules = ArrayList(highlightRules.map { it.copy() }),
         ngUnknownFields = ngUnknownFields.toMap(),
     )
@@ -909,10 +929,15 @@ object ReadBookConfig {
         }
 
         fun curBgStr(): String {
-            return when {
+            val background = when {
                 AppConfig.isEInkMode -> bgStrEInk
                 ReadBookConfig.isNightTheme -> bgStrNight
                 else -> bgStr
+            }
+            return if (curBgType() == 1) {
+                resolveBundledReadBackgroundName(background)
+            } else {
+                background
             }
         }
 

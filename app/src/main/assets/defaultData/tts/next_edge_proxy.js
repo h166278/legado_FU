@@ -1,10 +1,10 @@
 // @name Next Edge TTS
 // @schema 1
-// @version 1.0.6
+// @version 1.0.7
 // @uuid next_edge_proxy
 // @author Legado
-// @url http://36.248.181.23:22335/tts
-// @enabled false
+// @url http://5.45.99.149:8075/tts
+// @enabled true
 // @cookieJar false
 // @audioType audio/mpeg
 // @defaultSpeed 50
@@ -104,7 +104,6 @@ var EXPRESSIVE_STYLE_ALIASES = [
 ];
 
 var API_OPTIONS = [
-    { label: "36.248.181.23", value: "http://36.248.181.23:22335/tts" },
     { label: "5.45.99.149", value: "http://5.45.99.149:8075/tts" },
     { label: "146.56.188.115", value: "http://146.56.188.115:8080/tts" }
 ];
@@ -237,7 +236,7 @@ function options() {
             key: "api",
             label: "接口",
             type: "select",
-            defaultValue: "http://36.248.181.23:22335/tts",
+            defaultValue: "http://5.45.99.149:8075/tts",
             values: API_OPTIONS
         },
         { key: "timeout", label: "超时秒数", type: "number", defaultValue: "30" }
@@ -297,7 +296,7 @@ function appendAll(target, values) {
 }
 
 function synthesize(text, voice, params, options, ctx) {
-    var api = String(options.api || "http://36.248.181.23:22335/tts").replace(/\/+$/, "");
+    var api = String(options.api || "http://5.45.99.149:8075/tts").replace(/\/+$/, "");
     var voiceId = String((voice && voice.id) || "zh-CN-XiaoxiaoNeural");
     var style = selectedStyleValue(voice) || automaticStyleValue(voice, ctx);
     var rate = clamp((Number(params.speed || 50) - 50) * 2, -100, 100);

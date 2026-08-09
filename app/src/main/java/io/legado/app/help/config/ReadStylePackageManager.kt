@@ -379,6 +379,15 @@ internal object ReadStylePackageManager {
     }
 
     private fun normalizeValues(config: ReadBookConfig.Config, warnings: MutableList<String>) {
+        if (config.bgType == 1) {
+            config.bgStr = resolveBundledReadBackgroundName(config.bgStr)
+        }
+        if (config.bgTypeNight == 1) {
+            config.bgStrNight = resolveBundledReadBackgroundName(config.bgStrNight)
+        }
+        if (config.bgTypeEInk == 1) {
+            config.bgStrEInk = resolveBundledReadBackgroundName(config.bgStrEInk)
+        }
         config.textSize = config.textSize.coerceIn(8, 72)
         config.textBold = normalizeFontWeight(config.textBold)
         config.titleBold = normalizeFontWeight(config.titleBold)

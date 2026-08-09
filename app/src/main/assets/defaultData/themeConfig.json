@@ -14,7 +14,7 @@
     "accentColor": "#f78e66",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE",
-    "backgroundImgPath": "asset://defaultData/theme/reading_ng_warm.png",
+    "backgroundImgPath": "asset://bg/暖色渐变.webp",
     "backgroundImgBlur": 0
   },
   {
@@ -24,7 +24,7 @@
     "accentColor": "#7F9554",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE",
-    "backgroundImgPath": "asset://defaultData/theme/reading_ng_bamboo.png",
+    "backgroundImgPath": "asset://bg/竹影之韵.webp",
     "backgroundImgBlur": 0
   },
   {
@@ -34,7 +34,7 @@
     "accentColor": "#758db4",
     "backgroundColor": "#F5F5F5",
     "bottomBackground": "#EEEEEE",
-    "backgroundImgPath": "asset://defaultData/theme/reading_ng_mist.png",
+    "backgroundImgPath": "asset://bg/灰色雾霭.webp",
     "backgroundImgBlur": 0
   }
 ]
