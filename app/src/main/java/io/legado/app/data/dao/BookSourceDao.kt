@@ -108,11 +108,10 @@ interface BookSourceDao {
         """select * from book_sources_part 
         where enabledExplore = 1 
         and hasExploreUrl = 1 
-        and (bookSourceGroup like '%' || :key || '%' 
-            or bookSourceName like '%' || :key || '%') 
+        and bookSourceName like '%' || :key || '%'
         order by customOrder asc"""
     )
-    fun flowExplore(key: String): Flow<List<BookSourcePart>>
+    fun flowExploreByName(key: String): Flow<List<BookSourcePart>>
 
     @Query(
         """select * from book_sources_part 

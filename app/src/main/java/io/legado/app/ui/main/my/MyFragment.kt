@@ -23,6 +23,7 @@ import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
+import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.utils.LogUtils
@@ -70,6 +71,8 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
     class MyPreferenceFragment : PreferenceFragment(),
         SharedPreferences.OnSharedPreferenceChangeListener {
 
+        private var listBaseBottomPadding = 0
+
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             addPreferencesFromResource(R.xml.pref_main)
             preferenceScreen?.let(::applyMyMenuLayout)
@@ -93,18 +96,29 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
             super.onViewCreated(view, savedInstanceState)
             view.setBackgroundColor(Color.TRANSPARENT)
             listView.setBackgroundColor(Color.TRANSPARENT)
+            listBaseBottomPadding = listView.paddingBottom
             listView.setPadding(
                 0,
                 resources.getDimensionPixelSize(R.dimen.ng_space_l),
                 0,
-                listView.paddingBottom
+                listBaseBottomPadding
             )
+            listView.clipToPadding = false
             listView.setEdgeEffectColor(primaryColor)
+            updateFloatingBottomInset()
         }
 
         override fun onResume() {
             super.onResume()
+            updateFloatingBottomInset()
             preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
+        }
+
+        private fun updateFloatingBottomInset() {
+            (activity as? MainActivity)?.applyFloatingBottomContentInset(
+                target = listView,
+                baseBottomPadding = listBaseBottomPadding
+            )
         }
 
         override fun onPause() {

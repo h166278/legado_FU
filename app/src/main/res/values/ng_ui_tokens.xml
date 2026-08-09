@@ -8,6 +8,7 @@
     <color name="ng_book_detail_card_stroke">@color/ng_settings_item_stroke</color>
     <color name="ng_surface_soft">#FFFAF7</color>
     <color name="ng_surface_panel">#F2FFFFFF</color>
+    <color name="ng_explore_result_background">@color/md_grey_100</color>
     <color name="ng_floating_dock_surface">#99FFFFFF</color>
     <color name="ng_bookshelf_action_surface">#99FFFFFF</color>
     <color name="ng_bookshelf_action_pressed">#B8FFFFFF</color>

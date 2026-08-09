@@ -1,8 +1,6 @@
 package io.legado.app.ui.book.explore
 
 import android.app.Application
-import android.content.Intent
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import io.legado.app.BuildConfig
 import io.legado.app.base.BaseViewModel
@@ -11,117 +9,312 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.book.isNotShelf
+import io.legado.app.help.source.clearExploreKindsCache
+import io.legado.app.help.source.exploreKinds
+import io.legado.app.help.source.isOpenableExploreCategory
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.stackTraceStr
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.mapLatest
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
+internal data class ExploreShowUiState(
+    val source: BookSource? = null,
+    val sourceName: String = "",
+    val kinds: List<io.legado.app.data.entities.rule.ExploreKind> = emptyList(),
+    val selectedKind: io.legado.app.data.entities.rule.ExploreKind? = null,
+    val books: List<SearchBook> = emptyList(),
+    val bookshelfKeys: Set<String> = emptySet(),
+    val isKindsLoading: Boolean = true,
+    val isContentLoading: Boolean = false,
+    val isLoadingPrevious: Boolean = false,
+    val kindsError: String? = null,
+    val contentError: String? = null,
+    val firstLoadedPage: Int = 1,
+    val lastLoadedPage: Int = 0,
+    val hasMore: Boolean = true,
+    val selectionRevision: Long = 0L
+) {
+    val displayPage: Int
+        get() = lastLoadedPage.takeIf { it > 0 } ?: firstLoadedPage
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExploreShowViewModel(application: Application) : BaseViewModel(application) {
-    val bookshelf: MutableSet<String> = ConcurrentHashMap.newKeySet()
-    val upAdapterLiveData = MutableLiveData<String>()
-    val booksData = MutableLiveData<List<SearchBook>>()
-    val addBooksData = MutableLiveData<List<SearchBook>>()
-    val errorLiveData = MutableLiveData<String>()
-    val errorTopLiveData = MutableLiveData<String>()
-    val pageLiveData = MutableLiveData<Int>()
-    private var bookSource: BookSource? = null
-    private var exploreUrl: String? = null
-    private var page = 1
-    private var books = linkedSetOf<SearchBook>()
+
+    private enum class Placement {
+        RESET,
+        APPEND,
+        PREPEND
+    }
+
+    private val _uiState = MutableStateFlow(ExploreShowUiState())
+    internal val uiState: StateFlow<ExploreShowUiState> = _uiState.asStateFlow()
+
+    private var initialized = false
+    private var contentJob: Job? = null
+    private var contentRequestId = 0L
 
     init {
         execute {
             appDb.bookDao.flowAll().mapLatest { books ->
-                val keys = arrayListOf<String>()
-                books.filterNot { it.isNotShelf }
-                    .forEach {
-                        keys.add("${it.name}-${it.author}")
-                        keys.add(it.name)
-                        keys.add(it.bookUrl)
+                buildSet {
+                    books.filterNot { it.isNotShelf }.forEach { book ->
+                        add("${book.name}-${book.author}")
+                        add(book.name)
+                        add(book.bookUrl)
                     }
-                keys
+                }
             }.catch {
                 AppLog.put("发现列表界面获取书籍数据失败\n${it.localizedMessage}", it)
-            }.collect {
-                bookshelf.clear()
-                bookshelf.addAll(it)
-                upAdapterLiveData.postValue("isInBookshelf")
+            }.collect { keys ->
+                _uiState.update { it.copy(bookshelfKeys = keys) }
             }
         }.onError {
             AppLog.put("加载书架数据失败", it)
         }
     }
 
-    fun initData(intent: Intent) {
-        execute {
-            val sourceUrl = intent.getStringExtra("sourceUrl")
-            exploreUrl = intent.getStringExtra("exploreUrl")
-            if (bookSource == null && sourceUrl != null) {
-                bookSource = appDb.bookSourceDao.getBookSource(sourceUrl)
+    fun initData(
+        sourceUrl: String?,
+        sourceName: String?,
+        initialExploreUrl: String?,
+        initialExploreName: String?
+    ) {
+        if (initialized) return
+        initialized = true
+        _uiState.update {
+            it.copy(sourceName = sourceName.orEmpty(), isKindsLoading = true)
+        }
+        viewModelScope.launch {
+            val source = withContext(IO) {
+                sourceUrl?.let { appDb.bookSourceDao.getBookSource(it) }
             }
-            explore()
+            if (source == null) {
+                _uiState.update {
+                    it.copy(
+                        isKindsLoading = false,
+                        kindsError = "Book source not found"
+                    )
+                }
+                return@launch
+            }
+            val kinds = source.exploreKinds()
+            val errorKind = kinds.firstOrNull { it.title.startsWith("ERROR:") }
+            val selectedKind = initialExploreUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                kinds.firstOrNull { it.url == url }
+                    ?: io.legado.app.data.entities.rule.ExploreKind(
+                        title = initialExploreName.orEmpty(),
+                        url = url
+                    )
+            } ?: kinds.firstOrNull { it.isOpenableExploreCategory() }
+
+            _uiState.update {
+                it.copy(
+                    source = source,
+                    sourceName = source.bookSourceName,
+                    kinds = kinds,
+                    selectedKind = selectedKind,
+                    isKindsLoading = false,
+                    kindsError = errorKind?.url
+                )
+            }
+            if (errorKind == null && selectedKind != null) {
+                loadPage(1, Placement.RESET)
+            }
         }
     }
 
-    /**
-     * 上滑触发的增量更新
-     */
-    fun explore(page: Int) {
-        val source = bookSource
-        val url = exploreUrl
-        if (source == null || url == null) return
-        WebBook.exploreBook(viewModelScope, source, url, page)
-            .timeout(if (BuildConfig.DEBUG) 0L else 60000L)
-            .onSuccess(IO) { searchBooks ->
-                val newBooks = linkedSetOf<SearchBook>()
-                newBooks.addAll(searchBooks)
-                newBooks.addAll(books)
-                books = newBooks
-                addBooksData.postValue(searchBooks)
-                appDb.searchBookDao.insert(*searchBooks.toTypedArray())
-                pageLiveData.postValue(page)
-            }.onError {
-                it.printOnDebug()
-                errorTopLiveData.postValue(it.stackTraceStr)
-            }
+    fun selectKind(kind: io.legado.app.data.entities.rule.ExploreKind) {
+        if (!kind.isOpenableExploreCategory()) return
+        contentJob?.cancel()
+        contentRequestId++
+        _uiState.update {
+            it.copy(
+                selectedKind = kind,
+                books = emptyList(),
+                isContentLoading = false,
+                isLoadingPrevious = false,
+                contentError = null,
+                firstLoadedPage = 1,
+                lastLoadedPage = 0,
+                hasMore = true,
+                selectionRevision = it.selectionRevision + 1
+            )
+        }
+        loadPage(1, Placement.RESET)
     }
-    fun skipPage(page: Int) {
-        if (page > 0) {
-            books.clear()
-            this.page = page
+
+    fun reloadKinds() {
+        val source = _uiState.value.source ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isKindsLoading = true, kindsError = null) }
+            source.clearExploreKindsCache()
+            val kinds = source.exploreKinds()
+            val errorKind = kinds.firstOrNull { it.title.startsWith("ERROR:") }
+            val current = _uiState.value.selectedKind
+            val selected = current?.url?.let { url -> kinds.firstOrNull { it.url == url } }
+                ?: kinds.firstOrNull { it.isOpenableExploreCategory() }
+            val selectionChanged = selected?.url != current?.url
+            _uiState.update {
+                it.copy(
+                    kinds = kinds,
+                    selectedKind = selected,
+                    isKindsLoading = false,
+                    kindsError = errorKind?.url,
+                    selectionRevision = if (selectionChanged) {
+                        it.selectionRevision + 1
+                    } else {
+                        it.selectionRevision
+                    }
+                )
+            }
+            if (errorKind == null && selectionChanged && selected != null) {
+                contentJob?.cancel()
+                contentRequestId++
+                _uiState.update {
+                    it.copy(
+                        books = emptyList(),
+                        firstLoadedPage = 1,
+                        lastLoadedPage = 0,
+                        hasMore = true
+                    )
+                }
+                loadPage(1, Placement.RESET)
+            }
         }
     }
 
-    fun explore() {
-        val source = bookSource
-        val url = exploreUrl
-        if (source == null || url == null) return
-        WebBook.exploreBook(viewModelScope, source, url, page)
-            .timeout(if (BuildConfig.DEBUG) 0L else 60000L)
-            .onSuccess(IO) { searchBooks ->
-                books.addAll(searchBooks)
-                booksData.postValue(books.toList())
+    fun retryContent() {
+        val state = _uiState.value
+        if (state.selectedKind == null || state.isContentLoading) return
+        val page = when {
+            state.books.isEmpty() -> state.firstLoadedPage
+            state.hasMore -> state.lastLoadedPage + 1
+            else -> state.lastLoadedPage
+        }.coerceAtLeast(1)
+        loadPage(page, if (state.books.isEmpty()) Placement.RESET else Placement.APPEND)
+    }
+
+    fun loadNextPage() {
+        val state = _uiState.value
+        if (state.selectedKind == null || state.isContentLoading || !state.hasMore) return
+        val page = (state.lastLoadedPage + 1).coerceAtLeast(1)
+        loadPage(page, if (state.books.isEmpty()) Placement.RESET else Placement.APPEND)
+    }
+
+    fun loadPreviousPage() {
+        val state = _uiState.value
+        if (state.selectedKind == null || state.isContentLoading || state.firstLoadedPage <= 1) return
+        loadPage(state.firstLoadedPage - 1, Placement.PREPEND)
+    }
+
+    fun jumpToPage(page: Int) {
+        if (page <= 0 || _uiState.value.selectedKind == null) return
+        contentJob?.cancel()
+        contentRequestId++
+        _uiState.update {
+            it.copy(
+                books = emptyList(),
+                contentError = null,
+                firstLoadedPage = page,
+                lastLoadedPage = 0,
+                hasMore = true,
+                selectionRevision = it.selectionRevision + 1
+            )
+        }
+        loadPage(page, Placement.RESET)
+    }
+
+    private fun loadPage(page: Int, placement: Placement) {
+        val state = _uiState.value
+        val source = state.source ?: return
+        val selected = state.selectedKind ?: return
+        val url = selected.url ?: return
+        val requestId = ++contentRequestId
+        contentJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isContentLoading = true,
+                isLoadingPrevious = placement == Placement.PREPEND,
+                contentError = null
+            )
+        }
+        contentJob = viewModelScope.launch(IO) {
+            try {
+                val searchBooks = if (BuildConfig.DEBUG) {
+                    WebBook.exploreBookAwait(source, url, page)
+                } else {
+                    withTimeout(60_000L) {
+                        WebBook.exploreBookAwait(source, url, page)
+                    }
+                }
+                if (requestId != contentRequestId || _uiState.value.selectedKind?.url != url) {
+                    return@launch
+                }
+                val before = _uiState.value.books
+                val merged = linkedSetOf<SearchBook>().apply {
+                    when (placement) {
+                        Placement.RESET -> addAll(searchBooks)
+                        Placement.APPEND -> {
+                            addAll(before)
+                            addAll(searchBooks)
+                        }
+
+                        Placement.PREPEND -> {
+                            addAll(searchBooks)
+                            addAll(before)
+                        }
+                    }
+                }.toList()
+                val addedNewBooks = merged.size > before.size || placement == Placement.RESET
+                _uiState.update {
+                    it.copy(
+                        books = merged,
+                        isContentLoading = false,
+                        isLoadingPrevious = false,
+                        contentError = null,
+                        firstLoadedPage = when (placement) {
+                            Placement.RESET, Placement.PREPEND -> page
+                            Placement.APPEND -> it.firstLoadedPage
+                        },
+                        lastLoadedPage = when (placement) {
+                            Placement.RESET, Placement.APPEND -> page
+                            Placement.PREPEND -> it.lastLoadedPage
+                        },
+                        hasMore = if (placement == Placement.PREPEND) {
+                            it.hasMore
+                        } else {
+                            searchBooks.isNotEmpty() && addedNewBooks
+                        }
+                    )
+                }
                 appDb.searchBookDao.insert(*searchBooks.toTypedArray())
-                pageLiveData.postValue(page)
-                page++
-            }.onError {
-                it.printOnDebug()
-                errorLiveData.postValue(it.stackTraceStr)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                e.printOnDebug()
+                if (requestId == contentRequestId) {
+                    _uiState.update {
+                        it.copy(
+                            isContentLoading = false,
+                            isLoadingPrevious = false,
+                            contentError = e.stackTraceStr
+                        )
+                    }
+                }
             }
+        }
     }
-
-    fun isInBookShelf(book: SearchBook): Boolean {
-        val name = book.name
-        val author = book.author
-        val bookUrl = book.bookUrl
-        val key = if (author.isNotBlank()) "$name-$author" else name
-        return bookshelf.contains(key) || bookshelf.contains(bookUrl)
-    }
-
 }

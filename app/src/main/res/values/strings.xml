@@ -717,6 +717,9 @@
     <string name="replace_rule_plain">Plain</string>
     <string name="replace_rule_disable">Disable</string>
     <string name="replace_view_list">List</string>
+    <string name="explore_view_grid">Grid</string>
+    <string name="explore_view_group_grid">Grouped grid</string>
+    <string name="explore_direct_entry_empty">This source has no discovery category that can be opened directly.</string>
     <string name="replace_view_group">Group</string>
     <string name="replace_view_scope">Scope</string>
     <string name="select_action">Selection action</string>
@@ -2104,4 +2107,8 @@
     <string name="highlight_rule_image_fit_nine">Nine-slice</string>
     <string name="highlight_rule_image_scale">Image scale</string>
     <string name="highlight_rule_italic">Italic</string>
+    <string name="explore_category_empty">No available categories</string>
+    <string name="explore_category_default">Category</string>
+    <string name="explore_no_more">No more results</string>
+    <string name="explore_error_details">Details</string>
 </resources>

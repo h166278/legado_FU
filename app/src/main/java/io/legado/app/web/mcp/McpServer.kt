@@ -19,6 +19,8 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.ai.AiChatMessageSnapshot
 import io.legado.app.help.ai.AiTtsStoryboardHelper
 import io.legado.app.help.http.NetworkLog
+import io.legado.app.help.source.exploreKinds
+import io.legado.app.help.source.renderRole
 import io.legado.app.model.Debug
 import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.SearchModel
@@ -29,6 +31,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import splitties.init.appCtx
 import java.text.SimpleDateFormat
 import java.util.Collections
@@ -258,6 +262,18 @@ object McpServer {
                 description = "Get one Legado book source by bookSourceUrl.",
                 properties = mapOf(
                     "url" to stringSchema("BookSource.bookSourceUrl")
+                ),
+                required = listOf("url")
+            ),
+            tool(
+                name = "book_source_explore_kinds_get",
+                description = "Run BookSource.exploreKinds() in the app and return the parsed ExploreKind objects with the same render roles used by the Explore UI.",
+                properties = mapOf(
+                    "url" to stringSchema("BookSource.bookSourceUrl"),
+                    "timeout_seconds" to mapOf(
+                        "type" to "number",
+                        "default" to 30
+                    )
                 ),
                 required = listOf("url")
             ),
@@ -633,6 +649,7 @@ object McpServer {
                     BookSourceController.getSource(mapOf("url" to listOf(url)))
                 )
             }
+            "book_source_explore_kinds_get" -> getBookSourceExploreKinds(arguments)
             "book_source_save" -> {
                 val source = arguments.get("source") ?: throw IllegalArgumentException("source is required")
                 normalizeReturnData(
@@ -947,6 +964,60 @@ object McpServer {
                     "event_listener" to parts.count { it.eventListener },
                     "enabled_text" to appDb.bookSourceDao.allTextEnabledPart.size
                 )
+            )
+        )
+    }
+
+    private fun getBookSourceExploreKinds(arguments: JsonObject): Map<String, Any?> {
+        val url = arguments.get("url").asRequiredString("url")
+        val timeoutSeconds = (arguments.get("timeout_seconds").asDoubleOrNull() ?: 30.0)
+            .coerceIn(1.0, 120.0)
+        val source = appDb.bookSourceDao.getBookSource(url)
+            ?: return toolResult(
+                ok = false,
+                upstreamEndpoint = "native://bookSourceExploreKinds",
+                normalizedData = null,
+                warnings = listOf("未找到源，请检查书源地址")
+            )
+        val result = runCatching {
+            runBlocking(Dispatchers.IO) {
+                withTimeout((timeoutSeconds * 1000).toLong()) {
+                    source.exploreKinds()
+                }
+            }
+        }
+        val kinds = result.getOrNull()
+            ?: return toolResult(
+                ok = false,
+                upstreamEndpoint = "native://bookSourceExploreKinds",
+                normalizedData = mapOf(
+                    "bookSourceUrl" to source.bookSourceUrl,
+                    "bookSourceName" to source.bookSourceName,
+                    "error_message" to (result.exceptionOrNull()?.localizedMessage ?: "解析发现分类失败")
+                ),
+                warnings = listOf(result.exceptionOrNull()?.localizedMessage ?: "解析发现分类失败")
+            )
+        return toolResult(
+            ok = true,
+            upstreamEndpoint = "native://bookSourceExploreKinds",
+            normalizedData = mapOf(
+                "bookSourceUrl" to source.bookSourceUrl,
+                "bookSourceName" to source.bookSourceName,
+                "kind_count" to kinds.size,
+                "kinds" to kinds.mapIndexed { index, kind ->
+                    mapOf(
+                        "index" to index,
+                        "title" to kind.title,
+                        "url" to kind.url,
+                        "type" to kind.type,
+                        "action" to kind.action,
+                        "chars" to kind.chars,
+                        "default" to kind.default,
+                        "viewName" to kind.viewName,
+                        "style" to kind.style,
+                        "render_role" to kind.renderRole().wireName
+                    )
+                }
             )
         )
     }

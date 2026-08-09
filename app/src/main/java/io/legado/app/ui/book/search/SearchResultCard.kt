@@ -48,6 +48,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -76,16 +77,27 @@ internal fun SearchResultCard(
     inBookshelf: Boolean,
     originCount: Int,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    outerHorizontalPadding: Dp = 12.dp,
+    outerVerticalPadding: Dp = 4.dp,
+    cardCornerRadius: Dp = 18.dp,
+    cardHeight: Dp = 148.dp,
+    cardContentPadding: Dp = 10.dp,
+    coverWidth: Dp = 78.dp,
+    coverHeight: Dp = 104.dp,
+    contentStartPadding: Dp = 90.dp,
+    cardBackgroundColorRes: Int = R.color.ng_surface_card,
+    cardStrokeColorRes: Int = R.color.ng_settings_item_stroke,
+    cardBorderWidth: Dp = 0.8.dp
 ) {
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val shape = RoundedCornerShape(18.dp)
-    val cardColor = colorResource(R.color.ng_surface_card)
+    val shape = RoundedCornerShape(cardCornerRadius)
+    val cardColor = colorResource(cardBackgroundColorRes)
     val pressedOverlay = colorResource(R.color.ng_surface_pressed)
     val strokeColor = colorResource(
-        if (isPressed) R.color.ng_card_stroke else R.color.ng_settings_item_stroke
+        if (isPressed) R.color.ng_card_stroke else cardStrokeColorRes
     )
     val primaryText = colorResource(R.color.primaryText)
     val secondaryText = colorResource(R.color.secondaryText)
@@ -95,31 +107,36 @@ internal fun SearchResultCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .height(148.dp)
+            .padding(horizontal = outerHorizontalPadding, vertical = outerVerticalPadding)
+            .height(cardHeight)
             .clip(shape)
             .background(cardColor)
             .then(if (isPressed) Modifier.background(pressedOverlay) else Modifier)
-            .border(0.8.dp, strokeColor, shape)
+            .then(
+                if (cardBorderWidth > 0.dp) Modifier.border(cardBorderWidth, strokeColor, shape)
+                else Modifier
+            )
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(10.dp)
+            .padding(cardContentPadding)
     ) {
         SearchBookCover(
             book = book,
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .size(width = 78.dp, height = 104.dp)
+                .size(width = coverWidth, height = coverHeight),
+            coverWidth = coverWidth,
+            coverHeight = coverHeight
         )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 90.dp)
+                .padding(start = contentStartPadding)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -239,11 +256,16 @@ private fun SearchKindLabels(labels: List<String>, accent: Color, onAccent: Colo
 }
 
 @Composable
-private fun SearchBookCover(book: SearchBook, modifier: Modifier = Modifier) {
+internal fun SearchBookCover(
+    book: SearchBook,
+    modifier: Modifier = Modifier,
+    coverWidth: Dp = 78.dp,
+    coverHeight: Dp = 104.dp
+) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val widthPx = with(density) { 78.dp.roundToPx() }
-    val heightPx = with(density) { 104.dp.roundToPx() }
+    val widthPx = with(density) { coverWidth.roundToPx() }
+    val heightPx = with(density) { coverHeight.roundToPx() }
     val coverRadius = with(density) { 12.toDp() }
     val cleanName = remember(book.name) {
         book.name.replace(AppPattern.bdRegex, "").trim()

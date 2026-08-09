@@ -392,6 +392,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val showDiscovery: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showDiscovery, true)
 
+    var exploreLayoutMode: Int
+        get() = appCtx.getPrefInt(PreferKey.exploreLayoutMode, 1).coerceIn(0, 2)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.exploreLayoutMode, value.coerceIn(0, 2))
+        }
+
+    var exploreShowLayoutMode: Int
+        get() = appCtx.getPrefInt(PreferKey.exploreShowLayoutMode, 0).coerceIn(0, 1)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.exploreShowLayoutMode, value.coerceIn(0, 1))
+        }
+
     val showRSS: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showRss, true)
 

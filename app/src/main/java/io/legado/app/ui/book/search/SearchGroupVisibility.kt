@@ -1,6 +1,6 @@
 package io.legado.app.ui.book.search
 
-internal object SearchGroupVisibility {
+object SearchGroupVisibility {
 
     private val technicalAutoGroups = setOf(
         "有登录入口",

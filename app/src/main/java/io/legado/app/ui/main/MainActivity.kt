@@ -12,8 +12,10 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.core.view.doOnNextLayout
 import androidx.core.view.get
 import androidx.core.view.postDelayed
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
@@ -611,6 +613,34 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 )
             )
             floatingBottomNavigation.select(pagePosition, notify = false)
+        }
+    }
+
+    fun resolveFloatingBottomContentInset(onResolved: (Int) -> Unit) = binding.run {
+        fun resolve() {
+            onResolved(
+                if (AppConfig.useFloatingBottomBar) {
+                    floatingBottomNavigationContainer.height
+                } else {
+                    0
+                }
+            )
+        }
+        if (AppConfig.useFloatingBottomBar &&
+            (floatingBottomNavigationContainer.height == 0 ||
+                    floatingBottomNavigationContainer.isLayoutRequested)
+        ) {
+            floatingBottomNavigationContainer.doOnNextLayout { resolve() }
+        } else {
+            resolve()
+        }
+    }
+
+    fun applyFloatingBottomContentInset(target: View, baseBottomPadding: Int = 0) {
+        resolveFloatingBottomContentInset { inset ->
+            if (target.isAttachedToWindow) {
+                target.updatePadding(bottom = baseBottomPadding + inset)
+            }
         }
     }
 

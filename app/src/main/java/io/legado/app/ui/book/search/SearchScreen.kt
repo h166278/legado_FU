@@ -58,6 +58,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.SearchKeyword
+import io.legado.app.ui.book.source.BookSourceGroupIcon
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
 import io.legado.app.ui.design.components.compose.NgSearchBar
@@ -479,7 +480,7 @@ private fun searchMenuItems(
                     NgExpandableActionMenuItem(
                         itemId = SOURCE_SCOPE_ITEM_ID_BASE + index,
                         titleRes = 0,
-                        iconRes = R.drawable.ic_groups,
+                        iconRes = BookSourceGroupIcon.resolve(group),
                         title = group,
                         checked = !isSourceScope && group in scopeNames
                     )
