@@ -10,6 +10,7 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -299,6 +300,12 @@ private enum class CatalogTab { Chapters, Bookmarks }
 private const val CATALOG_PAGE_SIZE = 64
 private const val CATALOG_PRELOAD_ITEMS = 16
 private const val CATALOG_RETAINED_PAGE_RADIUS = 2
+private val catalogUpdateTimeRegex = Regex(
+    """(?:更新)?时间\s*[:：]\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)"""
+)
+private val catalogSourceWordCountRegex = Regex(
+    """(?:章节)?字数\s*[:：]\s*([0-9万千百.]+)\s*字?"""
+)
 
 @Composable
 private fun ReadCatalogPanel(
@@ -324,7 +331,14 @@ private fun ReadCatalogPanel(
     val mutedColor = Color(NgTheme.colors.onSurfaceVariant)
     val accentColor = Color(NgTheme.colors.primary)
     val selectedContentColor = Color(NgTheme.colors.onPrimary)
-    val dockColor = ReadDrawerStyle.dockSurfaceColor(alpha = 0.34f)
+    val drawerSurfaceColor = Color(
+        if (NgTheme.snapshot.isDark) NgTheme.colors.surface else NgTheme.colors.inputContainer
+    )
+    val dockColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
+        Color(NgTheme.colors.surfaceContainerLow)
+    } else {
+        contentColor.copy(alpha = 0.025f)
+    }
     val filteredBookmarks = remember(bookmarks, query) {
         bookmarks.filter {
             query.isBlank() || it.chapterName.contains(query, ignoreCase = true) ||
@@ -342,8 +356,15 @@ private fun ReadCatalogPanel(
         modifier = Modifier.fillMaxSize(),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         style = NgGlassDefaults.style(
-            containerAlpha = NgTheme.effects.dialogAlpha,
-        ).copy(shadowElevation = 0.dp),
+            containerAlpha = 1f,
+        ).copy(
+            containerTop = drawerSurfaceColor,
+            containerBottom = drawerSurfaceColor,
+            accentGlow = Color.Transparent,
+            surfaceGloss = Color.Transparent,
+            depthEdge = Color.Transparent,
+            shadowElevation = 0.dp,
+        ),
     ) {
         Column(
             modifier = Modifier
@@ -376,9 +397,11 @@ private fun ReadCatalogPanel(
             } else {
                 CatalogTopActions(
                     contentColor = contentColor,
+                    dockColor = dockColor,
                     onSearch = { searchVisible = true },
                 )
             }
+            Spacer(Modifier.height(4.dp))
             CatalogTabDock(
                 selectedTab = selectedTab,
                 contentColor = contentColor,
@@ -390,6 +413,7 @@ private fun ReadCatalogPanel(
                     query = ""
                 },
             )
+            Spacer(Modifier.height(4.dp))
             CatalogSummaryRow(
                 selectedTab = selectedTab,
                 itemCount = if (selectedTab == CatalogTab.Chapters) {
@@ -484,28 +508,36 @@ private fun CatalogDragHandle(
 @Composable
 private fun CatalogTopActions(
     contentColor: Color,
+    dockColor: Color,
     onSearch: () -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(40.dp)
             .padding(horizontal = 20.dp),
     ) {
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .size(44.dp)
-                .clip(CircleShape)
+                .size(40.dp)
                 .clickable(onClick = onSearch),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Rounded.Search,
-                contentDescription = stringResource(R.string.search),
-                modifier = Modifier.size(24.dp),
-                tint = contentColor,
-            )
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(dockColor),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Search,
+                    contentDescription = stringResource(R.string.search),
+                    modifier = Modifier.size(20.dp),
+                    tint = contentColor,
+                )
+            }
         }
     }
 }
@@ -523,8 +555,8 @@ private fun CatalogTabDock(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .height(40.dp)
+            .clip(RoundedCornerShape(13.dp))
             .background(dockColor),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -535,8 +567,10 @@ private fun CatalogTabDock(
                     .weight(1f)
                     .fillMaxHeight()
                     .padding(3.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (selected) accentColor else Color.Transparent)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (selected) accentColor.copy(alpha = 0.86f) else Color.Transparent
+                    )
                     .clickable { onTabSelected(tab) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -545,7 +579,7 @@ private fun CatalogTabDock(
                         if (tab == CatalogTab.Chapters) R.string.chapter_list else R.string.bookmark
                     ),
                     color = if (selected) selectedContentColor else contentColor,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
@@ -574,8 +608,9 @@ private fun CatalogSearchField(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .height(40.dp)
+            .padding(bottom = 4.dp)
+            .clip(RoundedCornerShape(13.dp))
             .background(dockColor)
             .padding(start = 14.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -583,7 +618,7 @@ private fun CatalogSearchField(
         Icon(
             imageVector = Icons.Rounded.Search,
             contentDescription = null,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(18.dp),
             tint = accentColor,
         )
         Spacer(Modifier.width(10.dp))
@@ -594,19 +629,19 @@ private fun CatalogSearchField(
                 .weight(1f)
                 .focusRequester(focusRequester),
             singleLine = true,
-            textStyle = TextStyle(color = contentColor, fontSize = 15.sp),
+            textStyle = TextStyle(color = contentColor, fontSize = 14.sp),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
             decorationBox = { inner ->
                 if (query.isEmpty()) {
-                    Text(text = hint, color = mutedColor.copy(alpha = 0.72f), fontSize = 15.sp)
+                    Text(text = hint, color = mutedColor.copy(alpha = 0.72f), fontSize = 14.sp)
                 }
                 inner()
             },
         )
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(36.dp)
                 .clip(CircleShape)
                 .clickable {
                     keyboard?.hide()
@@ -617,7 +652,7 @@ private fun CatalogSearchField(
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = stringResource(R.string.close),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
                 tint = mutedColor,
             )
         }
@@ -633,10 +668,19 @@ private fun CatalogSummaryRow(
     mutedColor: Color,
     onSort: () -> Unit,
 ) {
+    val listBackgroundColor = when {
+        NgTheme.snapshot.isEInk -> Color(NgTheme.colors.inputContainer)
+        NgTheme.snapshot.isDark -> Color(NgTheme.colors.surface)
+        else -> mutedColor.copy(alpha = 0.035f)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(40.dp)
+            .background(
+                if (selectedTab == CatalogTab.Chapters) listBackgroundColor
+                else Color.Transparent
+            )
             .padding(start = 24.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -647,13 +691,13 @@ private fun CatalogSummaryRow(
                 stringResource(R.string.read_catalog_bookmark_count, itemCount)
             },
             color = mutedColor,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
         )
         Spacer(Modifier.weight(1f))
         if (selectedTab == CatalogTab.Chapters) {
             Row(
                 modifier = Modifier
-                    .height(42.dp)
+                    .height(40.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .clickable(onClick = onSort),
                 verticalAlignment = Alignment.CenterVertically,
@@ -664,7 +708,7 @@ private fun CatalogSummaryRow(
                         else R.drawable.ic_catalog_sort_ascending
                     ),
                     contentDescription = stringResource(R.string.swap_sort),
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(17.dp),
                     tint = contentColor,
                 )
                 Spacer(Modifier.width(4.dp))
@@ -771,10 +815,23 @@ private fun CatalogChapterList(
         listState = listState,
         accentColor = accentColor,
     ) {
+        val listBackgroundColor = when {
+            NgTheme.snapshot.isEInk -> Color(NgTheme.colors.inputContainer)
+            NgTheme.snapshot.isDark -> Color(NgTheme.colors.surface)
+            else -> mutedColor.copy(alpha = 0.035f)
+        }
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(listBackgroundColor),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                top = 4.dp,
+                end = 20.dp,
+                bottom = 20.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(count = itemCount, key = { it }) { position ->
                 val pageIndex = position / CATALOG_PAGE_SIZE
@@ -794,10 +851,6 @@ private fun CatalogChapterList(
                         onClick = { onChapterClick(item.chapter) },
                     )
                 }
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    color = mutedColor.copy(alpha = 0.11f),
-                )
             }
         }
     }
@@ -813,21 +866,34 @@ private fun CatalogChapterRow(
     accentColor: Color,
     onClick: () -> Unit,
 ) {
+    val cardColor = if (NgTheme.snapshot.isDark) {
+        Color(NgTheme.colors.surfaceContainerLow)
+    } else {
+        Color(NgTheme.colors.inputContainer)
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 66.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (current) accentColor.copy(alpha = 0.11f) else Color.Transparent)
+            .heightIn(min = 58.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (current) accentColor.copy(alpha = 0.12f)
+                else cardColor
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
     ) {
+        val wordCount = if (cached && AppConfig.tocCountWords) {
+            item.chapter.wordCount?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = item.displayTitle,
                 modifier = Modifier.weight(1f),
                 color = if (current) accentColor else contentColor,
-                fontSize = if (item.chapter.isVolume) 17.sp else 16.sp,
+                fontSize = if (item.chapter.isVolume) 16.sp else 15.sp,
                 fontWeight = if (current || item.chapter.isVolume) {
                     FontWeight.SemiBold
                 } else {
@@ -836,33 +902,34 @@ private fun CatalogChapterRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (current) {
-                Text(
-                    text = stringResource(R.string.read_catalog_current),
-                    color = accentColor,
-                    fontSize = 12.sp,
-                )
-            } else if (!cached) {
+            if (!cached) {
+                Spacer(Modifier.width(6.dp))
                 Icon(
                     painter = painterResource(R.drawable.ic_outline_cloud_24),
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                     tint = mutedColor.copy(alpha = 0.72f),
+                )
+            } else if (wordCount != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = wordCount,
+                    color = if (current) accentColor else mutedColor.copy(alpha = 0.82f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
                 )
             }
         }
-        val metadata = buildList {
-            item.chapter.tag?.takeIf { it.isNotBlank() }?.let(::add)
-            if (AppConfig.tocCountWords) {
-                item.chapter.wordCount?.takeIf { it.isNotBlank() }?.let(::add)
-            }
-        }.joinToString(" · ")
-        if (metadata.isNotBlank()) {
-            Spacer(Modifier.height(5.dp))
+        val chapterTag = item.chapter.tag
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::formatCatalogChapterTag)
+        if (chapterTag != null) {
+            Spacer(Modifier.height(3.dp))
             Text(
-                text = metadata,
+                text = chapterTag,
                 color = mutedColor.copy(alpha = 0.78f),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -872,28 +939,48 @@ private fun CatalogChapterRow(
 
 @Composable
 private fun CatalogChapterPlaceholder(mutedColor: Color) {
+    val cardColor = if (NgTheme.snapshot.isDark) {
+        Color(NgTheme.colors.surfaceContainerLow)
+    } else {
+        Color(NgTheme.colors.inputContainer)
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(66.dp)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .height(58.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(cardColor)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.58f)
-                .height(15.dp)
+                .height(14.dp)
                 .clip(CircleShape)
                 .background(mutedColor.copy(alpha = 0.08f)),
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(7.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.42f)
-                .height(11.dp)
+                .height(10.dp)
                 .clip(CircleShape)
                 .background(mutedColor.copy(alpha = 0.05f)),
         )
     }
+}
+
+private fun formatCatalogChapterTag(tag: String): String {
+    val updateTime = catalogUpdateTimeRegex.find(tag)?.groupValues?.getOrNull(1)?.trim()
+    val sourceWordCount = catalogSourceWordCountRegex.find(tag)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.trim()
+    if (updateTime == null && sourceWordCount == null) return tag
+    return listOfNotNull(
+        updateTime,
+        sourceWordCount?.let { "字数：$it" },
+    ).joinToString("  ")
 }
 
 @Composable
@@ -932,7 +1019,7 @@ private fun CatalogBookmarkList(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
                         .clickable { onBookmarkClick(bookmark) }
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     Text(
                         text = bookmark.chapterName,
@@ -941,19 +1028,19 @@ private fun CatalogBookmarkList(
                         } else {
                             contentColor
                         },
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     val excerpt = bookmark.bookText.ifBlank { bookmark.content }
                     if (excerpt.isNotBlank()) {
-                        Spacer(Modifier.height(5.dp))
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             text = excerpt.replace('\n', ' '),
                             color = mutedColor.copy(alpha = 0.82f),
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -961,7 +1048,7 @@ private fun CatalogBookmarkList(
                 }
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 12.dp),
-                    color = mutedColor.copy(alpha = 0.11f),
+                    color = mutedColor.copy(alpha = 0.10f),
                 )
             }
         }
@@ -995,8 +1082,6 @@ private fun CatalogScrollableList(
                 .align(Alignment.BottomEnd)
                 .padding(end = 20.dp, bottom = 10.dp)
                 .size(40.dp)
-                .clip(CircleShape)
-                .background(accentColor.copy(alpha = 0.13f))
                 .clickable {
                     scope.launch {
                         listState.scrollToItem(
@@ -1006,16 +1091,24 @@ private fun CatalogScrollableList(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = if (jumpToTop) {
-                    Icons.Rounded.KeyboardArrowUp
-                } else {
-                    Icons.Rounded.KeyboardArrowDown
-                },
-                contentDescription = null,
-                modifier = Modifier.size(23.dp),
-                tint = accentColor,
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (jumpToTop) {
+                        Icons.Rounded.KeyboardArrowUp
+                    } else {
+                        Icons.Rounded.KeyboardArrowDown
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(21.dp),
+                    tint = accentColor,
+                )
+            }
         }
     }
 }
@@ -1031,7 +1124,7 @@ private fun CatalogFastScrollbar(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     var trackHeightPx by remember { mutableStateOf(0) }
-    val thumbHeight = 56.dp
+    val thumbHeight = 48.dp
     val thumbHeightPx = with(density) { thumbHeight.toPx() }
     val maxOffsetPx = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
     val visibleCount = listState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
@@ -1062,7 +1155,7 @@ private fun CatalogFastScrollbar(
                 .width(2.dp)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(accentColor.copy(alpha = 0.16f)),
+                .background(accentColor.copy(alpha = 0.09f)),
         )
         Box(
             modifier = Modifier
