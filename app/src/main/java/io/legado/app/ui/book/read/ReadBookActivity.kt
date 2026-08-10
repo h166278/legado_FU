@@ -36,6 +36,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.Bookmark
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
@@ -158,8 +159,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import androidx.core.net.toUri
@@ -221,6 +225,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var menu: Menu? = null
     private var backupJob: Job? = null
     private var aiPurifyJob: Job? = null
+    private var textHighlightObserveJob: Job? = null
+    private var observedTextHighlightBook: Pair<String, String>? = null
+    private var activeTextHighlight: Bookmark? = null
+    private val textHighlightWriteMutex = Mutex()
     private var tts: TTS? = null
     val textActionMenu: TextActionMenu by lazy {
         TextActionMenu(this, this)
@@ -881,19 +889,20 @@ class ReadBookActivity : BaseReadBookActivity(),
     /**
      * 当前选择的文本
      */
-    override val selectedText: String get() = binding.readView.getSelectText()
+    override val selectedText: String
+        get() = activeTextHighlight?.bookText ?: binding.readView.getSelectText()
 
     /**
      * 文本选择菜单操作
      */
     override fun onMenuItemSelected(itemId: Int): Boolean {
         when (itemId) {
-            R.id.menu_aloud -> when (AppConfig.contentSelectSpeakMod) {
-                1 -> lifecycleScope.launch {
+            R.id.menu_aloud -> when {
+                activeTextHighlight != null -> speak(selectedText)
+                AppConfig.contentSelectSpeakMod == 1 -> lifecycleScope.launch {
                     binding.readView.aloudStartSelect()
                 }
-
-                else -> speak(binding.readView.getSelectText())
+                else -> speak(selectedText)
             }
 
             R.id.menu_bookmark -> binding.readView.curPage.let {
@@ -942,6 +951,46 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
         }
         return false
+    }
+
+    override fun onTextHighlightCreate(): Bookmark? {
+        val textHighlight = binding.readView.curPage.createTextHighlight()
+        if (textHighlight == null) {
+            toastOnUi(R.string.create_bookmark_error)
+            return null
+        }
+        activeTextHighlight = textHighlight
+        lifecycleScope.launch(IO) {
+            textHighlightWriteMutex.withLock {
+                appDb.bookmarkDao.insert(textHighlight)
+            }
+        }
+        return textHighlight
+    }
+
+    override fun onTextHighlightOpened(bookmark: Bookmark) {
+        activeTextHighlight = bookmark
+    }
+
+    override fun onTextHighlightUpdate(bookmark: Bookmark) {
+        activeTextHighlight = bookmark
+        lifecycleScope.launch(IO) {
+            textHighlightWriteMutex.withLock {
+                appDb.bookmarkDao.update(bookmark)
+            }
+        }
+    }
+
+    override fun onTextHighlightDelete(bookmark: Bookmark) {
+        lifecycleScope.launch(IO) {
+            textHighlightWriteMutex.withLock {
+                appDb.bookmarkDao.delete(bookmark)
+            }
+        }
+    }
+
+    override fun onTextHighlightMenuDismissed() {
+        activeTextHighlight = null
     }
 
     private fun startAiPurifySelectedText(text: String = selectedText) {
@@ -2278,8 +2327,26 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun upMenuView() {
         handler.post {
+            observeTextHighlights()
             upMenu()
             binding.readMenu.upBookView()
+        }
+    }
+
+    private fun observeTextHighlights() {
+        val book = ReadBook.book
+        val bookKey = book?.let { it.name to it.author }
+        if (bookKey == observedTextHighlightBook) return
+        observedTextHighlightBook = bookKey
+        textHighlightObserveJob?.cancel()
+        binding.readView.setTextHighlights(emptyList())
+        if (book == null) return
+        textHighlightObserveJob = lifecycleScope.launch {
+            appDb.bookmarkDao.flowByBook(book.name, book.author).collectLatest { bookmarks ->
+                binding.readView.setTextHighlights(
+                    bookmarks.filter(Bookmark::isTextHighlight)
+                )
+            }
         }
     }
 
@@ -2357,6 +2424,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         runOnUiThread {
             binding.readView.cancelSelect()
         }
+    }
+
+    override fun dismissTextActionMenu() {
+        textActionMenu.dismiss()
     }
 
     /**
@@ -2739,6 +2810,24 @@ class ReadBookActivity : BaseReadBookActivity(),
         }.onError {
             AppLog.put("执行图片链接click键值出错\n${it.localizedMessage}", it, true)
         }
+    }
+
+    override fun onTextHighlightClick(bookmark: Bookmark, top: Float, bottom: Float) {
+        binding.readView.cancelSelect()
+        activeTextHighlight = bookmark
+        val navigationBarHeight =
+            if (!ReadBookConfig.hideNavigationBar && navigationBarGravity == Gravity.BOTTOM) {
+                binding.navigationBar.height
+            } else {
+                0
+            }
+        textActionMenu.showTextHighlight(
+            view = binding.textMenuPosition,
+            windowHeight = binding.root.height + navigationBarHeight,
+            anchorTopY = top.toInt(),
+            anchorBottomY = bottom.toInt(),
+            textHighlight = bookmark,
+        )
     }
 
 

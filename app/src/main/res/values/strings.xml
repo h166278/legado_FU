@@ -605,9 +605,13 @@
     <string name="chapter_list">Chapters</string>
     <string name="read_catalog_search_chapters">Search chapters</string>
     <string name="read_catalog_search_bookmarks">Search bookmarks</string>
-    <string name="read_catalog_bookmark_count">%1$d bookmarks</string>
+    <string name="read_catalog_reading_progress">Progress: %1$d/%2$d&#160;&#160;%3$.1f%%</string>
+    <string name="read_catalog_bookmark_count">Count: %1$d</string>
     <string name="read_catalog_current">Current</string>
     <string name="read_catalog_no_bookmarks">No bookmarks</string>
+    <string name="read_catalog_delete_bookmark_confirmation">Delete this bookmark?</string>
+    <string name="read_catalog_expand_note">Expand note</string>
+    <string name="read_catalog_collapse_note">Collapse note</string>
     <string name="read_catalog_ascending">Ascending</string>
     <string name="read_catalog_descending">Descending</string>
     <string name="next_chapter">Next</string>
@@ -806,6 +810,12 @@
     <string name="bookmark_content">Bookmark content</string>
     <string name="bookmark_note">Note</string>
     <string name="bookmark_note_hint">Add a note (optional)</string>
+    <string name="text_highlight">Highlight</string>
+    <string name="delete_highlight">Delete highlight</string>
+    <string name="highlight_style_background">Background highlight</string>
+    <string name="highlight_style_underline">Underline</string>
+    <string name="highlight_style_wavy">Wavy underline</string>
+    <string name="highlight_color_option">Highlight color %1$d</string>
     <string name="action_del">Delete</string>
     <string name="load_over_time">Loading timeout</string>
     <string name="join_group">Follow:%s</string>

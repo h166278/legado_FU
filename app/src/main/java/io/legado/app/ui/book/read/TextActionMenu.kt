@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.PopupWindow
 import androidx.activity.ComponentActivity
 import androidx.annotation.DrawableRes
@@ -32,6 +33,7 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.dpToPx
@@ -41,6 +43,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 @SuppressLint("RestrictedApi")
 class TextActionMenu(private val context: ComponentActivity, private val callBack: CallBack) :
@@ -52,9 +55,13 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         R.id.menu_ai_purify,
         R.id.menu_copy,
         R.id.menu_bookmark,
+        R.id.menu_search_content,
     )
     private val currentPageState = mutableIntStateOf(0)
     private val moreMenuVisibleState = mutableStateOf(false)
+    private val textHighlightState = mutableStateOf<Bookmark?>(null)
+    private val noteEditorVisibleState = mutableStateOf(false)
+    private val noteDraftState = mutableStateOf("")
     private val themeSnapshotState = mutableStateOf(ReadDrawerStyle.themeSnapshot(context))
     private var moreMenuPopup: PopupWindow? = null
     private var popupParentView: View? = null
@@ -66,6 +73,8 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
     private var menuSafeRight = 0
     private var menuSafeTop = 0
     private var menuSafeBottom = 0
+    private var toolbarDragX = 0f
+    private var toolbarDragY = 0f
     private val actions: List<TextSelectionAction> by lazy {
         menuItems.map { item ->
             TextSelectionAction(
@@ -102,8 +111,13 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
                     snapshot = themeSnapshotState.value,
                     updateSystemBars = false,
                 ) {
+                    val textHighlight = textHighlightState.value
                     TextSelectionToolbar(
-                        primaryActions = primaryActions,
+                        primaryActions = if (textHighlight == null) {
+                            primaryActions
+                        } else {
+                            highlightPrimaryActions(textHighlight)
+                        },
                         currentPage = currentPageState.intValue,
                         onPageChange = {
                             currentPageState.intValue = it
@@ -112,6 +126,16 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
                         moreMenuVisible = moreMenuVisibleState.value,
                         onMoreMenuVisibleChange = ::setMoreMenuVisible,
                         onLongClick = ::toggleSelectionReadMode,
+                        textHighlight = textHighlight,
+                        onHighlightStyleChange = ::updateTextHighlight,
+                        noteEditorVisible = noteEditorVisibleState.value,
+                        noteDraft = noteDraftState.value,
+                        onNoteEditorVisibleChange = ::setNoteEditorVisible,
+                        onNoteDraftChange = { noteDraftState.value = it },
+                        onNoteDone = { setNoteEditorVisible(false) },
+                        dragEnabled = !noteEditorVisibleState.value,
+                        onDragStart = ::startToolbarDrag,
+                        onDrag = ::dragToolbarBy,
                     )
                 }
             }
@@ -121,10 +145,18 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         isTouchable = true
         isOutsideTouchable = false
         isFocusable = false
+        inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
+        softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         setOnDismissListener {
+            commitTextHighlightNote()
             dismissMoreMenu()
             currentPageState.intValue = 0
             popupParentView = null
+            textHighlightState.value = null
+            noteEditorVisibleState.value = false
+            noteDraftState.value = ""
+            isFocusable = false
+            callBack.onTextHighlightMenuDismissed()
         }
     }
 
@@ -135,10 +167,54 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         startBottomY: Int,
         endBottomY: Int,
     ) {
+        showInternal(
+            view = view,
+            windowHeight = windowHeight,
+            startTopY = startTopY,
+            startBottomY = startBottomY,
+            endBottomY = endBottomY,
+            textHighlight = null,
+        )
+    }
+
+    fun showTextHighlight(
+        view: View,
+        windowHeight: Int,
+        anchorTopY: Int,
+        anchorBottomY: Int,
+        textHighlight: Bookmark,
+    ) {
+        showInternal(
+            view = view,
+            windowHeight = windowHeight,
+            startTopY = anchorTopY,
+            startBottomY = anchorBottomY,
+            endBottomY = anchorBottomY,
+            textHighlight = textHighlight,
+        )
+    }
+
+    private fun showInternal(
+        view: View,
+        windowHeight: Int,
+        startTopY: Int,
+        startBottomY: Int,
+        endBottomY: Int,
+        textHighlight: Bookmark?,
+    ) {
         themeSnapshotState.value = ReadDrawerStyle.themeSnapshot(context)
         currentPageState.intValue = 0
         dismissMoreMenu()
         popupParentView = view
+        textHighlightState.value = textHighlight
+        noteEditorVisibleState.value = false
+        noteDraftState.value = textHighlight?.content.orEmpty()
+        isFocusable = false
+        if (textHighlight == null) {
+            callBack.onTextHighlightMenuDismissed()
+        } else {
+            callBack.onTextHighlightOpened(textHighlight)
+        }
 
         val rootWidth = view.rootView.width.takeIf { it > 0 }
             ?: context.resources.displayMetrics.widthPixels
@@ -156,7 +232,7 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         val desiredWidth = textSelectionToolbarWidthDp(primaryActions.size).dpToPx()
         val popupWidth = desiredWidth.coerceAtMost(safeWidth)
 
-        val desiredHeight = TEXT_SELECTION_TOOLBAR_HEIGHT_DP.dpToPx()
+        val desiredHeight = textSelectionToolbarHeightDp(textHighlight != null).dpToPx()
         val verticalMargin = 8.dpToPx()
         val availableHeight = (
             windowHeight - topInset - bottomInset - verticalMargin * 2
@@ -195,6 +271,8 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         menuSafeTop = topInset + TEXT_SELECTION_MORE_PANEL_SCREEN_MARGIN_DP.dpToPx()
         menuSafeBottom = windowHeight - bottomInset -
             TEXT_SELECTION_MORE_PANEL_SCREEN_MARGIN_DP.dpToPx()
+        toolbarDragX = toolbarX.toFloat()
+        toolbarDragY = toolbarY.toFloat()
 
         showAtLocation(
             view,
@@ -226,18 +304,138 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         return appMenu.visibleItems + processTextMenu.visibleItems
     }
 
+    private fun highlightPrimaryActions(highlight: Bookmark): List<TextSelectionAction> {
+        return menuItems.zip(actions)
+            .filter { (item) -> item.itemId in primaryMenuItemIds }
+            .map { (item, action) ->
+                if (item.itemId == R.id.menu_bookmark) {
+                    action.copy(
+                        title = context.getString(R.string.delete_highlight),
+                        iconRes = R.drawable.ic_book_info_delete,
+                        iconBitmap = null,
+                        onClick = { deleteTextHighlight(highlight) },
+                    )
+                } else {
+                    action
+                }
+            }
+    }
+
     private fun onActionClick(item: MenuItemImpl) {
         dismissMoreMenu()
+        if (item.itemId == R.id.menu_bookmark && textHighlightState.value == null) {
+            val textHighlight = callBack.onTextHighlightCreate()
+            if (textHighlight == null) {
+                callBack.onMenuActionFinally()
+                return
+            }
+            textHighlightState.value = textHighlight
+            noteDraftState.value = textHighlight.content
+            callBack.onTextHighlightOpened(textHighlight)
+            currentPageState.intValue = 0
+            updateToolbarEditorHeight()
+            return
+        }
+        commitTextHighlightNote()
         if (!callBack.onMenuItemSelected(item.itemId)) {
             onMenuItemSelected(item)
         }
         callBack.onMenuActionFinally()
     }
 
+    private fun updateTextHighlight(style: Int, color: Int) {
+        val current = textHighlightState.value ?: return
+        if (current.highlightStyle == style && current.highlightColor == color) return
+        val updated = current.copy(
+            highlightStyle = style,
+            highlightColor = color,
+        )
+        textHighlightState.value = updated
+        callBack.onTextHighlightUpdate(updated)
+    }
+
+    private fun deleteTextHighlight(highlight: Bookmark) {
+        textHighlightState.value = null
+        noteEditorVisibleState.value = false
+        noteDraftState.value = ""
+        isFocusable = false
+        callBack.onTextHighlightDelete(highlight)
+        dismiss()
+        callBack.onMenuActionFinally()
+    }
+
+    private fun setNoteEditorVisible(visible: Boolean) {
+        if (textHighlightState.value == null || noteEditorVisibleState.value == visible) return
+        if (visible) {
+            dismissMoreMenu()
+            isFocusable = true
+            inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
+            noteEditorVisibleState.value = true
+        } else {
+            commitTextHighlightNote()
+            noteEditorVisibleState.value = false
+            isFocusable = false
+        }
+        updateToolbarEditorHeight()
+    }
+
+    private fun commitTextHighlightNote() {
+        val current = textHighlightState.value ?: return
+        val note = noteDraftState.value
+        if (current.content == note) return
+        val updated = current.copy(content = note)
+        textHighlightState.value = updated
+        callBack.onTextHighlightUpdate(updated)
+    }
+
+    private fun updateToolbarEditorHeight() {
+        if (!isShowing) return
+        val desiredHeight = textSelectionToolbarHeightDp(
+            showHighlightEditor = textHighlightState.value != null,
+            showNoteEditor = noteEditorVisibleState.value,
+        ).dpToPx()
+        val safeHeight = (menuSafeBottom - menuSafeTop).coerceAtLeast(1)
+        val expandedHeight = desiredHeight.coerceAtMost(safeHeight)
+        val expandedY = when {
+            toolbarY + expandedHeight <= menuSafeBottom -> toolbarY
+            else -> (toolbarY + toolbarHeight - expandedHeight)
+                .coerceAtLeast(menuSafeTop)
+        }
+        toolbarY = expandedY
+        toolbarHeight = expandedHeight
+        toolbarDragX = toolbarX.toFloat()
+        toolbarDragY = toolbarY.toFloat()
+        height = expandedHeight
+        update(toolbarX, expandedY, toolbarWidth, expandedHeight)
+    }
+
+    private fun startToolbarDrag() {
+        dismissMoreMenu()
+        toolbarDragX = toolbarX.toFloat()
+        toolbarDragY = toolbarY.toFloat()
+    }
+
+    private fun dragToolbarBy(deltaX: Float, deltaY: Float) {
+        if (!isShowing) return
+        val maxX = (menuSafeRight - toolbarWidth).coerceAtLeast(menuSafeLeft)
+        val maxY = (menuSafeBottom - toolbarHeight).coerceAtLeast(menuSafeTop)
+        toolbarDragX = (toolbarDragX + deltaX).coerceIn(menuSafeLeft.toFloat(), maxX.toFloat())
+        toolbarDragY = (toolbarDragY + deltaY).coerceIn(menuSafeTop.toFloat(), maxY.toFloat())
+        val targetX = toolbarDragX.roundToInt()
+        val targetY = toolbarDragY.roundToInt()
+        if (targetX == toolbarX && targetY == toolbarY) return
+        toolbarX = targetX
+        toolbarY = targetY
+        update(toolbarX, toolbarY, toolbarWidth, toolbarHeight)
+    }
+
     private fun setMoreMenuVisible(visible: Boolean) {
         if (!visible) {
             dismissMoreMenu()
             return
+        }
+        if (noteEditorVisibleState.value) {
+            setNoteEditorVisible(false)
         }
         val parentView = popupParentView ?: return
         if (moreActions.isEmpty() || !isShowing) return
@@ -332,7 +530,7 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         R.id.menu_replace -> R.drawable.ic_cfg_replace
         R.id.menu_ai_purify -> R.drawable.ic_ai_purify
         R.id.menu_copy -> R.drawable.ic_copy
-        R.id.menu_bookmark -> R.drawable.ic_bookmark
+        R.id.menu_bookmark -> R.drawable.ic_text_highlight
         R.id.menu_aloud -> R.drawable.ic_read_aloud
         R.id.menu_dict -> R.drawable.ic_translate
         R.id.menu_search_content -> R.drawable.ic_search
@@ -420,6 +618,16 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
         val selectedText: String
 
         fun onMenuItemSelected(itemId: Int): Boolean
+
+        fun onTextHighlightCreate(): Bookmark?
+
+        fun onTextHighlightOpened(bookmark: Bookmark)
+
+        fun onTextHighlightUpdate(bookmark: Bookmark)
+
+        fun onTextHighlightDelete(bookmark: Bookmark)
+
+        fun onTextHighlightMenuDismissed()
 
         fun onMenuActionFinally()
     }

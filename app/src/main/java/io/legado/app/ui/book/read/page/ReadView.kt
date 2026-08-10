@@ -13,6 +13,7 @@ import android.widget.FrameLayout
 import io.legado.app.R
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.entities.BookProgress
+import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ReadAloud
@@ -200,6 +201,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
                     pressOnTextSelected = true
                 } else {
                     pressOnTextSelected = false
+                    callBack.dismissTextActionMenu()
                 }
                 longPressed = false
                 postDelayed(longPressRunnable, longPressTimeout)
@@ -279,6 +281,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
         curPage.upStatusBar()
         prevPage.upStatusBar()
         nextPage.upStatusBar()
+    }
+
+    fun setTextHighlights(bookmarks: List<Bookmark>) {
+        curPage.setTextHighlights(bookmarks)
+        prevPage.setTextHighlights(bookmarks)
+        nextPage.setTextHighlights(bookmarks)
     }
 
     fun upTipVisibility(readerOverlayVisible: Boolean) {
@@ -778,6 +786,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
         fun addBookmark()
         fun changeReplaceRuleState()
         fun openSearchDrawer(searchWord: String?)
+        fun dismissTextActionMenu()
         fun upSystemUiVisibility()
         fun sureNewProgress(progress: BookProgress)
     }

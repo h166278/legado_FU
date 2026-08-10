@@ -16,7 +16,7 @@
 
     <item
         android:id="@+id/menu_bookmark"
-        android:title="@string/bookmark" />
+        android:title="@string/text_highlight" />
 
     <item
         android:id="@+id/menu_aloud"

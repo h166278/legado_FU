@@ -422,6 +422,10 @@ class PageView(context: Context) : FrameLayout(context) {
         binding.contentTextView.selectAble = selectAble
     }
 
+    fun setTextHighlights(bookmarks: List<Bookmark>) {
+        binding.contentTextView.setTextHighlights(bookmarks)
+    }
+
     /**
      * 优先处理页面内单击
      * @return true:已处理, false:未处理
@@ -517,6 +521,10 @@ class PageView(context: Context) : FrameLayout(context) {
 
     fun createBookmark(): Bookmark? {
         return binding.contentTextView.createBookmark()
+    }
+
+    fun createTextHighlight(): Bookmark? {
+        return binding.contentTextView.createTextHighlight()
     }
 
     fun relativePage(relativePagePos: Int): TextPage {

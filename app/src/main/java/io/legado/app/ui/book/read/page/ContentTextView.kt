@@ -3,9 +3,12 @@ package io.legado.app.ui.book.read.page
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.graphics.withTranslation
 import io.legado.app.R
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.book.isOnLineTxt
@@ -51,6 +54,7 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     private val visibleRect = ChapterProvider.visibleRect
     val selectStart = TextPos(0, -1, -1)
     private val selectEnd = TextPos(0, -1, -1)
+    private var textHighlights: List<Bookmark> = emptyList()
     var textPage: TextPage = TextPage()
         private set
     var isMainView = false
@@ -92,6 +96,11 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         }
     }
 
+    fun setTextHighlights(bookmarks: List<Bookmark>) {
+        textHighlights = bookmarks.filter(Bookmark::isTextHighlight)
+        postInvalidate()
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (!isMainView) return
@@ -115,19 +124,144 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
      */
     private fun drawPage(canvas: Canvas) {
         var relativeOffset = relativeOffset(0)
-        textPage.draw(this, canvas, relativeOffset)
+        drawPageWithHighlights(canvas, textPage, relativeOffset)
         if (!callBack.isScroll) return
         //滚动翻页
         if (!pageFactory.hasNext()) return
         val textPage1 = relativePage(1)
         relativeOffset += textPage.height
-        textPage1.draw(this, canvas, relativeOffset)
+        drawPageWithHighlights(canvas, textPage1, relativeOffset)
         if (!pageFactory.hasNextPlus()) return
         relativeOffset += textPage1.height
         if (relativeOffset < ChapterProvider.visibleHeight) {
             val textPage2 = relativePage(2)
-            textPage2.draw(this, canvas, relativeOffset)
+            drawPageWithHighlights(canvas, textPage2, relativeOffset)
         }
+    }
+
+    private fun drawPageWithHighlights(
+        canvas: Canvas,
+        page: TextPage,
+        relativeOffset: Float,
+    ) {
+        drawTextHighlights(canvas, page, relativeOffset, backgroundPass = true)
+        page.draw(this, canvas, relativeOffset)
+        drawTextHighlights(canvas, page, relativeOffset, backgroundPass = false)
+    }
+
+    private fun drawTextHighlights(
+        canvas: Canvas,
+        page: TextPage,
+        relativeOffset: Float,
+        backgroundPass: Boolean,
+    ) {
+        val pageHighlights = textHighlights
+            .filter { it.coversChapter(page.chapterIndex) }
+            .filter {
+                (it.highlightStyle == Bookmark.STYLE_BACKGROUND) == backgroundPass
+            }
+            .sortedBy(Bookmark::time)
+        if (pageHighlights.isEmpty()) return
+        canvas.withTranslation(0f, relativeOffset) {
+            page.lines.forEach { line ->
+                val columns = line.columns.filterIsInstance<TextBaseColumn>()
+                if (columns.isEmpty()) return@forEach
+                pageHighlights.forEach { highlight ->
+                    var chapterPosition = line.chapterPosition
+                    var segmentStart: Float? = null
+                    var segmentEnd = 0f
+                    columns.forEach { column ->
+                        val marked = highlight.containsChapterPosition(
+                            page.chapterIndex,
+                            chapterPosition,
+                        )
+                        chapterPosition += column.charData.length
+                        if (marked) {
+                            if (segmentStart == null) segmentStart = column.start
+                            segmentEnd = column.end
+                        } else if (segmentStart != null) {
+                            drawTextHighlightSegment(
+                                canvas,
+                                line,
+                                segmentStart!!,
+                                segmentEnd,
+                                highlight,
+                            )
+                            segmentStart = null
+                        }
+                    }
+                    segmentStart?.let { start ->
+                        drawTextHighlightSegment(canvas, line, start, segmentEnd, highlight)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun drawTextHighlightSegment(
+        canvas: Canvas,
+        line: TextLine,
+        start: Float,
+        end: Float,
+        highlight: Bookmark,
+    ) {
+        if (end <= start) return
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = highlight.highlightColor
+        }
+        when (highlight.highlightStyle) {
+            Bookmark.STYLE_UNDERLINE -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 2.dpToPx().toFloat()
+                val y = line.lineBottom - line.lineTop - 1.dpToPx()
+                canvas.drawLine(start, line.lineTop + y, end, line.lineTop + y, paint)
+            }
+
+            Bookmark.STYLE_WAVY_UNDERLINE -> {
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 1.8f.dpToPx()
+                val y = line.lineBottom - line.lineTop - 1.dpToPx()
+                drawTextHighlightWave(canvas, paint, start, end, line.lineTop + y)
+            }
+
+            else -> {
+                paint.style = Paint.Style.FILL
+                paint.color = (highlight.highlightColor and 0x00FFFFFF) or (0x48 shl 24)
+                val rect = RectF(
+                    start,
+                    line.lineTop + 1.dpToPx(),
+                    end,
+                    line.lineBottom - 1.dpToPx(),
+                )
+                canvas.drawRoundRect(rect, 2.dpToPx().toFloat(), 2.dpToPx().toFloat(), paint)
+            }
+        }
+    }
+
+    private fun drawTextHighlightWave(
+        canvas: Canvas,
+        paint: Paint,
+        start: Float,
+        end: Float,
+        y: Float,
+    ) {
+        val waveLength = 6.dpToPx().toFloat()
+        val amplitude = 1.8f.dpToPx()
+        val path = Path().apply { moveTo(start, y) }
+        var x = start
+        var upwards = true
+        while (x < end) {
+            val next = (x + waveLength).coerceAtMost(end)
+            path.quadTo(
+                (x + next) / 2,
+                y + if (upwards) -amplitude else amplitude,
+                next,
+                y,
+            )
+            upwards = !upwards
+            x = next
+        }
+        canvas.drawPath(path, paint)
     }
 
     override fun computeScroll() {
@@ -252,7 +386,25 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
             false
         }
         var handled = false
-        touch(x, y) { _, textPos, textPage, textLine, column ->
+        touch(x, y) { relativeOffset, textPos, textPage, textLine, column ->
+            if (column is TextBaseColumn) {
+                val chapterPosition = columnChapterPosition(textLine, column)
+                val highlight = textHighlights
+                    .asSequence()
+                    .filter {
+                        it.containsChapterPosition(textPage.chapterIndex, chapterPosition)
+                    }
+                    .maxByOrNull(Bookmark::time)
+                if (highlight != null) {
+                    callBack.onTextHighlightClick(
+                        highlight,
+                        textLine.lineTop + relativeOffset + callBack.headerHeight,
+                        textLine.lineBottom + relativeOffset + callBack.headerHeight,
+                    )
+                    handled = true
+                    return@touch
+                }
+            }
             when (column) {
                 is ButtonColumn -> {
                     context.toastOnUi("Button Pressed!")
@@ -318,6 +470,15 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
             }
         }
         return handled
+    }
+
+    private fun columnChapterPosition(textLine: TextLine, target: TextBaseColumn): Int {
+        var position = textLine.chapterPosition
+        textLine.columns.forEach { column ->
+            if (column === target) return position
+            if (column is TextBaseColumn) position += column.charData.length
+        }
+        return position
     }
 
     /**
@@ -717,6 +878,52 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         return null
     }
 
+    fun createTextHighlight(): Bookmark? {
+        if (!selectStart.isSelected() || !selectEnd.isSelected()) return null
+        val startPage = relativePage(selectStart.relativePagePos)
+        val endPage = relativePage(selectEnd.relativePagePos)
+        val startPosition = selectionChapterPosition(startPage, selectStart, includeColumnEnd = false)
+        val endPosition = selectionChapterPosition(endPage, selectEnd, includeColumnEnd = true)
+        if (
+            endPage.chapterIndex < startPage.chapterIndex ||
+            endPage.chapterIndex == startPage.chapterIndex && endPosition <= startPosition
+        ) {
+            return null
+        }
+        val book = ReadBook.book ?: return null
+        return book.createBookMark().apply {
+            bookmarkType = Bookmark.TYPE_TEXT_HIGHLIGHT
+            chapterIndex = startPage.chapterIndex
+            chapterPos = startPosition
+            chapterName = startPage.getTextChapter().title
+            endChapterIndex = endPage.chapterIndex
+            endChapterPos = endPosition
+            highlightStyle = Bookmark.STYLE_BACKGROUND
+            highlightColor = Bookmark.DEFAULT_HIGHLIGHT_COLOR
+            bookText = getSelectedText()
+        }
+    }
+
+    private fun selectionChapterPosition(
+        page: TextPage,
+        textPos: TextPos,
+        includeColumnEnd: Boolean,
+    ): Int {
+        val line = page.getLine(textPos.lineIndex)
+        val targetIndex = textPos.columnIndex.coerceIn(0, line.columns.lastIndex)
+        var position = line.chapterPosition
+        line.columns.forEachIndexed { index, column ->
+            if (index == targetIndex) {
+                if (includeColumnEnd && column is TextBaseColumn) {
+                    position += column.charData.length
+                }
+                return position
+            }
+            if (column is TextBaseColumn) position += column.charData.length
+        }
+        return position
+    }
+
     private fun relativeOffset(relativePos: Int): Float {
         return when (relativePos) {
             0 -> pageOffset.toFloat()
@@ -783,5 +990,6 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         fun onLongScreenshotTouchEvent(event: MotionEvent): Boolean
         fun oldClickImg(src: String): Boolean
         fun clickImg(click: String, src: String)
+        fun onTextHighlightClick(bookmark: Bookmark, top: Float, bottom: Float)
     }
 }

@@ -1314,7 +1314,27 @@ object BookshelfMcpTools {
                 ?: input.get("bookText").asStringOrNull()
                 ?: existing?.bookText
                 ?: "",
-            content = input.get("content").asStringOrNull() ?: existing?.content ?: ""
+            content = input.get("content").asStringOrNull() ?: existing?.content ?: "",
+            bookmarkType = input.get("bookmark_type").asIntOrNull()
+                ?: input.get("bookmarkType").asIntOrNull()
+                ?: existing?.bookmarkType
+                ?: Bookmark.TYPE_POSITION,
+            endChapterIndex = input.get("end_chapter_index").asIntOrNull()
+                ?: input.get("endChapterIndex").asIntOrNull()
+                ?: existing?.endChapterIndex
+                ?: 0,
+            endChapterPos = input.get("end_chapter_pos").asIntOrNull()
+                ?: input.get("endChapterPos").asIntOrNull()
+                ?: existing?.endChapterPos
+                ?: 0,
+            highlightStyle = input.get("highlight_style").asIntOrNull()
+                ?: input.get("highlightStyle").asIntOrNull()
+                ?: existing?.highlightStyle
+                ?: Bookmark.STYLE_BACKGROUND,
+            highlightColor = input.get("highlight_color").asIntOrNull()
+                ?: input.get("highlightColor").asIntOrNull()
+                ?: existing?.highlightColor
+                ?: Bookmark.DEFAULT_HIGHLIGHT_COLOR,
         )
         if (bookmark.bookName.isBlank()) throw IllegalArgumentException("bookmark.book_name is required")
         appDb.bookmarkDao.insert(bookmark)
@@ -2165,7 +2185,12 @@ object BookshelfMcpTools {
             "chapter_pos" to chapterPos,
             "chapter_name" to chapterName,
             "book_text" to bookText,
-            "content" to content
+            "content" to content,
+            "bookmark_type" to bookmarkType,
+            "end_chapter_index" to endChapterIndex,
+            "end_chapter_pos" to endChapterPos,
+            "highlight_style" to highlightStyle,
+            "highlight_color" to highlightColor,
         )
     }
 

@@ -25,7 +25,7 @@ object DatabaseMigrations {
             migration_99_100, migration_100_101, migration_101_102, migration_102_103,
             migration_103_104, migration_104_105, migration_105_106, migration_106_107,
             migration_107_108, migration_108_109, migration_109_110, migration_110_111,
-            migration_111_112, migration_112_113,
+            migration_111_112, migration_112_113, migration_113_114,
         )
     }
 
@@ -964,6 +964,31 @@ object DatabaseMigrations {
     private val migration_112_113 = object : Migration(112, 113) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("DROP TABLE IF EXISTS `httpTTS`")
+        }
+    }
+
+    private val migration_113_114 = object : Migration(113, 114) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE `bookmarks` " +
+                    "ADD COLUMN `bookmarkType` INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookmarks` " +
+                    "ADD COLUMN `endChapterIndex` INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookmarks` " +
+                    "ADD COLUMN `endChapterPos` INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookmarks` " +
+                    "ADD COLUMN `highlightStyle` INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE `bookmarks` " +
+                    "ADD COLUMN `highlightColor` INTEGER NOT NULL DEFAULT -32885"
+            )
         }
     }
 
