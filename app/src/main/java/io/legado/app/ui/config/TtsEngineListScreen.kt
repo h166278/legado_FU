@@ -30,7 +30,6 @@ import io.legado.app.ui.design.components.compose.NgListStateContent
 import io.legado.app.ui.design.components.compose.NgManagementLeadingIcon
 import io.legado.app.ui.design.components.compose.NgManagementListCard
 import io.legado.app.ui.design.components.compose.NgManagementTrailingIcon
-import io.legado.app.ui.design.components.compose.NgPullRefreshBox
 import io.legado.app.ui.design.components.compose.NgSearchBar
 import io.legado.app.ui.design.components.compose.NgSwipeToDelete
 import io.legado.app.ui.design.components.compose.NgLazyReorderState
@@ -57,7 +56,6 @@ data class TtsEngineListItemUiModel(
 data class TtsEngineListScreenState(
     val query: String = "",
     val listState: NgListState<TtsEngineListItemUiModel> = NgListState.Loading,
-    val isRefreshing: Boolean = false,
     val showDisabled: Boolean = false,
     val showSearch: Boolean = false
 )
@@ -82,7 +80,6 @@ internal class TtsEngineSnapshotGate {
 sealed interface TtsEngineListAction {
     data class QueryChanged(val query: String) : TtsEngineListAction
     data class SearchSubmitted(val query: String) : TtsEngineListAction
-    data object Refresh : TtsEngineListAction
     data object Retry : TtsEngineListAction
     data class OpenEngine(val engineId: String) : TtsEngineListAction
     data class ReorderCommitted(val orderedEngineIds: List<String>) : TtsEngineListAction
@@ -140,36 +137,29 @@ fun TtsEngineListScreen(
                     )
                 }
             )
-            NgPullRefreshBox(
-                isRefreshing = state.isRefreshing,
-                onRefresh = { onAction(TtsEngineListAction.Refresh) },
-                enabled = !reorderState.isDragging,
-                modifier = Modifier.fillMaxSize()
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = reorderState.listState,
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    top = 8.dp,
+                    end = 16.dp,
+                    bottom = 24.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    state = reorderState.listState,
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        top = 8.dp,
-                        end = 16.dp,
-                        bottom = 24.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(
-                        items = orderedEngines,
-                        key = TtsEngineListItemUiModel::id,
-                        contentType = { "tts_engine" }
-                    ) { engine ->
-                        TtsEngineListCard(
-                            item = engine,
-                            canReorder = state.canRequestReorder(engine),
-                            reorderState = reorderState,
-                            onAction = onAction,
-                            modifier = Modifier
-                        )
-                    }
+                items(
+                    items = orderedEngines,
+                    key = TtsEngineListItemUiModel::id,
+                    contentType = { "tts_engine" }
+                ) { engine ->
+                    TtsEngineListCard(
+                        item = engine,
+                        canReorder = state.canRequestReorder(engine),
+                        reorderState = reorderState,
+                        onAction = onAction,
+                        modifier = Modifier
+                    )
                 }
             }
         }

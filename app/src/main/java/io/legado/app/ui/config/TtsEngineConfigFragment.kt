@@ -215,6 +215,12 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         binding.recyclerVoices.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerVoices.setEdgeEffectColor(accentColor)
         binding.recyclerVoices.adapter = voiceAdapter
+        binding.refreshEngines.setColorSchemeColors(accentColor)
+        // ComposeView 本身不转发 LazyColumn 的纵向滚动能力，需查询其 AndroidComposeView 子节点。
+        binding.refreshEngines.setOnChildScrollUpCallback { _, _ ->
+            binding.composeEngines.getChildAt(0)?.canScrollVertically(-1) == true
+        }
+        binding.refreshEngines.setOnRefreshListener { refreshEnginesAsync() }
 
         binding.layoutEngineDetailTabs.setItems(
             items = listOf(
@@ -280,13 +286,13 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         engineSnapshotGate.invalidate()
         engineRefreshJob?.cancel()
         engineRefreshJob = null
+        binding.refreshEngines.isRefreshing = false
         applyEngineSnapshot(TtsEngineStore.engines())
     }
 
     private fun refreshEnginesAsync() {
         if (engineRefreshJob?.isActive == true) return
         val snapshotToken = engineSnapshotGate.begin()
-        engineScreenState = engineScreenState.copy(isRefreshing = true)
         engineRefreshJob = lifecycleScope.launch {
             try {
                 awaitEngineOrderSaves()
@@ -300,14 +306,13 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                 throw e
             } catch (e: Throwable) {
                 if (engineSnapshotGate.isCurrent(snapshotToken)) {
-                    engineScreenState = engineScreenState.copy(isRefreshing = false)
                     context?.toastOnUi(
                         "刷新朗读引擎失败：${e.localizedMessage ?: e.javaClass.simpleName}"
                     )
                 }
             } finally {
                 if (engineSnapshotGate.isCurrent(snapshotToken)) {
-                    engineScreenState = engineScreenState.copy(isRefreshing = false)
+                    binding.refreshEngines.isRefreshing = false
                     engineRefreshJob = null
                 }
             }
@@ -338,7 +343,6 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             listState = NgListState.Content(
                 visibleEngines.map { it.toListItemUiModel() }
             ),
-            isRefreshing = false,
             showDisabled = showDisabledEngines
         )
     }
@@ -395,8 +399,6 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                     )
                 }
             }
-
-            TtsEngineListAction.Refresh -> refreshEnginesAsync()
 
             TtsEngineListAction.Retry -> refreshEngines()
             TtsEngineListAction.OpenListMenu -> {
@@ -468,8 +470,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                     showDisabled = showDisabledEngines,
                     isEnabled = TtsEngineSetting::enabled
                 ).map { it.toListItemUiModel() }
-            ),
-            isRefreshing = false
+            )
         )
         val previousSave = engineOrderSaveJob
         engineOrderSaveJob = lifecycleScope.launch(Dispatchers.IO) {

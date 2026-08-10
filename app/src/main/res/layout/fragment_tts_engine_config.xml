@@ -11,11 +11,18 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/compose_engines"
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/refresh_engines"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@android:color/transparent" />
+            android:layout_height="match_parent">
+
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/compose_engines"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     </LinearLayout>
 
