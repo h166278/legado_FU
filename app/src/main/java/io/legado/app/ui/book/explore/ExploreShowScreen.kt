@@ -67,6 +67,7 @@ import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.data.entities.rule.ExploreKind.Type
 import io.legado.app.ui.book.search.SearchBookCover
 import io.legado.app.ui.book.search.SearchResultCard
+import io.legado.app.ui.design.components.compose.NgPullRefreshBox
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.ui.main.explore.ExploreInfoStore
@@ -88,6 +89,7 @@ internal fun ExploreShowScreen(
     state: ExploreShowUiState,
     layoutMode: ExploreShowLayoutMode,
     onBack: () -> Unit,
+    onRefresh: () -> Unit,
     onRefreshKinds: () -> Unit,
     onSelectKind: (ExploreKind) -> Unit,
     onLayoutModeChange: (ExploreShowLayoutMode) -> Unit,
@@ -132,60 +134,61 @@ internal fun ExploreShowScreen(
         }
     }
 
-    Column(
+    NgPullRefreshBox(
+        isRefreshing = state.isRefreshing,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .background(colorResource(R.color.ng_background))
-            .statusBarsPadding()
+            .statusBarsPadding(),
+        enabled = !state.isKindsLoading,
+        showIndicator = false
     ) {
-        ExploreShowTopBar(
-            sourceName = state.sourceName,
-            isLoading = state.isKindsLoading,
-            onBack = onBack,
-            onRefresh = onRefreshKinds
-        )
-
-        ExploreCategoryPanel(
-            state = state,
-            kindSections = kindSections,
-            sectionRows = sectionRows,
-            controlRows = controlRows,
-            activeSectionIndex = activeSectionIndex,
-            onSelectKind = onSelectKind,
-            onRefreshKinds = onRefreshKinds,
-            onShowError = onShowError
-        )
-
-        Spacer(
-            Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(colorResource(R.color.ng_background))
-        )
-
-        ExploreContentToolbar(
-            selectedKindLabel = state.selectedKind?.title
-                ?.let(::sanitizeExploreDetailLabel)
-                .orEmpty(),
-            page = state.displayPage,
-            layoutMode = layoutMode,
-            onSelectPage = onSelectPage,
-            onLayoutModeChange = onLayoutModeChange
-        )
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            state = gridState,
-            modifier = Modifier
-                .weight(1f)
-                .background(resultBackground)
-                .navigationBarsPadding(),
-            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(
-                8.dp
+        Column(modifier = Modifier.fillMaxSize()) {
+            ExploreShowTopBar(
+                sourceName = state.sourceName,
+                isLoading = state.isKindsLoading && !state.isRefreshing,
+                onBack = onBack,
+                onRefresh = onRefresh
             )
-        ) {
+
+            ExploreCategoryPanel(
+                state = state,
+                kindSections = kindSections,
+                sectionRows = sectionRows,
+                controlRows = controlRows,
+                activeSectionIndex = activeSectionIndex,
+                onSelectKind = onSelectKind,
+                onRefreshKinds = onRefreshKinds,
+                onShowError = onShowError
+            )
+
+            ExploreContentToolbar(
+                selectedKindLabel = state.selectedKind?.title
+                    ?.let(::sanitizeExploreDetailLabel)
+                    .orEmpty(),
+                page = state.displayPage,
+                layoutMode = layoutMode,
+                onSelectPage = onSelectPage,
+                onLayoutModeChange = onLayoutModeChange
+            )
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                state = gridState,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(resultBackground)
+                    .navigationBarsPadding(),
+                contentPadding = PaddingValues(
+                    start = 8.dp,
+                    top = 8.dp,
+                    end = 8.dp,
+                    bottom = 24.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             if (state.firstLoadedPage > 1) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     ExplorePreviousPageRow(
@@ -267,6 +270,7 @@ internal fun ExploreShowScreen(
                     }
                 }
             }
+            }
         }
     }
 }
@@ -322,31 +326,27 @@ private fun ExploreCategoryPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colorResource(R.color.ng_surface_panel))
-            .padding(start = 12.dp, top = 6.dp, end = 8.dp, bottom = 6.dp)
+            .background(colorResource(R.color.ng_explore_result_background))
+            .padding(start = 12.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)
     ) {
-        val sectionLabels = if (kindSections.useTopLevelGroups) {
-            kindSections.sections.map { section ->
+        if (kindSections.useTopLevelGroups) {
+            val sectionLabels = kindSections.sections.map { section ->
                 section.header?.let { header ->
                     sanitizeExploreDetailLabel(header.displaySectionLabel())
                         .ifBlank { fallbackLabel }
                 } ?: ungroupedLabel
             }
-        } else {
-            listOf(stringResource(R.string.all))
-        }
-        ExploreSectionTabs(
-            labels = sectionLabels,
-            selectedIndex = if (kindSections.useTopLevelGroups) activeSectionIndex else 0,
-            onSelectSection = { index ->
-                if (kindSections.useTopLevelGroups) {
+            ExploreSectionTabs(
+                labels = sectionLabels,
+                selectedIndex = activeSectionIndex,
+                onSelectSection = { index ->
                     kindSections.kindForSectionSelection(index, state.selectedKind)
                         ?.takeIf { nextKind -> nextKind != state.selectedKind }
                         ?.let(onSelectKind)
                 }
-            }
-        )
-        Spacer(Modifier.height(4.dp))
+            )
+            Spacer(Modifier.height(4.dp))
+        }
 
         Box(
             modifier = Modifier
@@ -431,53 +431,60 @@ private fun ExploreShowTopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
-            .background(colorResource(R.color.ng_surface))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .background(colorResource(R.color.ng_explore_result_background))
     ) {
-        ExploreToolbarButton(
-            iconRes = R.drawable.ic_arrow_back,
-            description = stringResource(R.string.back),
-            tint = contentColor,
-            onClick = onBack,
-            modifier = Modifier.align(Alignment.CenterStart)
-        )
-        Text(
-            text = sourceName,
+        Box(
             modifier = Modifier
-                .align(Alignment.Center)
                 .fillMaxWidth()
-                .padding(horizontal = 46.dp),
-            color = contentColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-        if (isLoading) {
-            Box(
+                .height(44.dp)
+                .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                .background(colorResource(R.color.ng_surface))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            ExploreToolbarButton(
+                iconRes = R.drawable.ic_arrow_back,
+                description = stringResource(R.string.back),
+                tint = contentColor,
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterStart)
+            )
+            Text(
+                text = sourceName,
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(colorResource(R.color.ng_surface_soft)),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = contentColor
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .padding(horizontal = 46.dp),
+                color = contentColor,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colorResource(R.color.ng_surface_soft)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = contentColor
+                    )
+                }
+            } else {
+                ExploreToolbarButton(
+                    iconRes = R.drawable.ic_refresh_black_24dp,
+                    description = stringResource(R.string.refresh_sort),
+                    tint = contentColor,
+                    onClick = onRefresh,
+                    modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
-        } else {
-            ExploreToolbarButton(
-                iconRes = R.drawable.ic_refresh_black_24dp,
-                description = stringResource(R.string.refresh_sort),
-                tint = contentColor,
-                onClick = onRefresh,
-                modifier = Modifier.align(Alignment.CenterEnd)
-            )
         }
     }
 }
@@ -650,15 +657,10 @@ private fun ExploreCategoryTile(
     }
     val tileColor = Color(tileColorInt)
     val tileContentColor = remember(tileColorInt) { sourceTileContentColor(tileColorInt) }
-    val containerColor = colorResource(R.color.ng_surface_card)
-    val shape = RoundedCornerShape(12.dp)
-
     if (wide) {
         Row(
             modifier = modifier
                 .height(ExploreCategoryTileHeight)
-                .clip(shape)
-                .background(containerColor)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -680,8 +682,6 @@ private fun ExploreCategoryTile(
         Column(
             modifier = modifier
                 .height(ExploreCategoryTileHeight)
-                .clip(shape)
-                .background(containerColor)
                 .clickable(onClick = onClick),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center

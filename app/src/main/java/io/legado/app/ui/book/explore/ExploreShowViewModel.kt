@@ -37,6 +37,7 @@ internal data class ExploreShowUiState(
     val books: List<SearchBook> = emptyList(),
     val bookshelfKeys: Set<String> = emptySet(),
     val isKindsLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val isContentLoading: Boolean = false,
     val isLoadingPrevious: Boolean = false,
     val kindsError: String? = null,
@@ -158,6 +159,7 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
 
     fun reloadKinds() {
         val source = _uiState.value.source ?: return
+        if (_uiState.value.isRefreshing) return
         viewModelScope.launch {
             _uiState.update { it.copy(isKindsLoading = true, kindsError = null) }
             source.clearExploreKindsCache()
@@ -192,6 +194,69 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
                     )
                 }
                 loadPage(1, Placement.RESET)
+            }
+        }
+    }
+
+    fun refresh() {
+        val source = _uiState.value.source ?: return
+        if (_uiState.value.isRefreshing) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isRefreshing = true,
+                    isKindsLoading = true,
+                    kindsError = null,
+                    contentError = null
+                )
+            }
+            try {
+                source.clearExploreKindsCache()
+                val kinds = source.exploreKinds()
+                val errorKind = kinds.firstOrNull { it.title.startsWith("ERROR:") }
+                val current = _uiState.value.selectedKind
+                val selected = current?.url?.let { url -> kinds.firstOrNull { it.url == url } }
+                    ?: kinds.firstOrNull { it.isOpenableExploreCategory() }
+
+                contentJob?.cancel()
+                contentRequestId++
+                _uiState.update {
+                    it.copy(
+                        kinds = kinds,
+                        selectedKind = selected,
+                        books = emptyList(),
+                        isKindsLoading = false,
+                        isContentLoading = false,
+                        isLoadingPrevious = false,
+                        kindsError = errorKind?.url,
+                        contentError = null,
+                        firstLoadedPage = 1,
+                        lastLoadedPage = 0,
+                        hasMore = true,
+                        selectionRevision = it.selectionRevision + 1
+                    )
+                }
+                if (errorKind == null && selected != null) {
+                    loadPage(1, Placement.RESET)
+                    contentJob?.join()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                e.printOnDebug()
+                _uiState.update {
+                    it.copy(
+                        isKindsLoading = false,
+                        kindsError = e.stackTraceStr
+                    )
+                }
+            } finally {
+                _uiState.update {
+                    it.copy(
+                        isRefreshing = false,
+                        isKindsLoading = false
+                    )
+                }
             }
         }
     }

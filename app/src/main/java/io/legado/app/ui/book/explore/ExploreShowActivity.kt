@@ -57,6 +57,7 @@ class ExploreShowActivity :
                     state = state,
                     layoutMode = layoutMode,
                     onBack = ::finish,
+                    onRefresh = viewModel::refresh,
                     onRefreshKinds = viewModel::reloadKinds,
                     onSelectKind = viewModel::selectKind,
                     onLayoutModeChange = ::updateLayoutMode,

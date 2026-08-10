@@ -230,6 +230,7 @@ fun NgPullRefreshBox(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    showIndicator: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
     val state = rememberPullToRefreshState()
@@ -241,13 +242,15 @@ fun NgPullRefreshBox(
         modifier = modifier.testTag("management_refresh"),
         state = state,
         indicator = {
-            PullToRefreshDefaults.Indicator(
-                state = state,
-                isRefreshing = isRefreshing,
-                modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = Color(NgTheme.colors.cardContainer),
-                color = Color(NgTheme.colors.primary)
-            )
+            if (showIndicator) {
+                PullToRefreshDefaults.Indicator(
+                    state = state,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = Color(NgTheme.colors.cardContainer),
+                    color = Color(NgTheme.colors.primary)
+                )
+            }
         },
         content = content
     )
