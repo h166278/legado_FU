@@ -1,6 +1,5 @@
 package io.legado.app.ui.widget
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.util.TypedValue
@@ -11,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.annotation.DrawableRes
+import androidx.appcompat.view.menu.MenuItemImpl
 import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
@@ -272,7 +272,8 @@ object NgMenuPopup {
     private fun ActionMenuView.findNativeOverflowButton(): View? {
         for (index in 0 until childCount) {
             val child = getChildAt(index)
-            if (child.javaClass.name.contains("OverflowMenuButton")) {
+            val layoutParams = child.layoutParams as? ActionMenuView.LayoutParams
+            if (layoutParams?.isOverflowButton == true) {
                 return child
             }
         }
@@ -285,17 +286,11 @@ object NgMenuPopup {
         return ContextCompat.getDrawable(context, outValue.resourceId)
     }
 
-    private fun MenuItem.wantsActionButton(): Boolean {
-        return reflectBoolean("requiresActionButton") || reflectBoolean("requestsActionButton")
-    }
-
-    @SuppressLint("PrivateApi")
-    private fun MenuItem.reflectBoolean(methodName: String): Boolean {
-        return runCatching {
-            javaClass.getDeclaredMethod(methodName).apply { isAccessible = true }
-                .invoke(this) as? Boolean
-        }.getOrNull() == true
-    }
+    @Suppress("RestrictedApi")
+    private fun MenuItem.wantsActionButton(): Boolean =
+        (this as? MenuItemImpl)?.let { item ->
+            item.requiresActionButton() || item.requestsActionButton()
+        } == true
 
     @DrawableRes
     private fun MenuItem.defaultIconRes(): Int {
