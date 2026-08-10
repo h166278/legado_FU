@@ -1,148 +1,189 @@
 package io.legado.app.ui.rss.source.manage
 
-import android.annotation.SuppressLint
-import android.content.Context
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogRecyclerViewBinding
-import io.legado.app.databinding.ItemGroupManageBinding
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.requestInputMethod
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 
-
-class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
-    Toolbar.OnMenuItemClickListener {
+class GroupManageDialog : DialogFragment() {
 
     private val viewModel: RssSourceViewModel by activityViewModels()
-    private val binding by viewBinding(DialogRecyclerViewBinding::bind)
-    private val adapter by lazy { GroupAdapter(requireContext()) }
+    private var groups by mutableStateOf<List<String>>(emptyList())
+    private var editingGroup by mutableStateOf<String?>(null)
+    private var addingGroup by mutableStateOf(false)
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View = ComposeView(requireContext()).apply {
+        setBackgroundColor(AndroidColor.TRANSPARENT)
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        (view as ComposeView).setContent {
+            NgAppTheme(updateSystemBars = false) {
+                GroupManagePanel(
+                    groups = groups,
+                    onAdd = { addingGroup = true },
+                    onEdit = { editingGroup = it },
+                    onDelete = viewModel::delGroup,
+                    onDismiss = { dismissAllowingStateLoss() }
+                )
+                if (addingGroup) {
+                    RssSourceTextDialog(
+                        title = stringResource(R.string.add_group),
+                        onDismiss = { addingGroup = false },
+                        onConfirm = {
+                            if (it.isNotBlank()) viewModel.addGroup(it.trim())
+                            addingGroup = false
+                        }
+                    )
+                }
+                editingGroup?.let { oldGroup ->
+                    RssSourceTextDialog(
+                        title = stringResource(R.string.group_edit),
+                        initialValue = oldGroup,
+                        onDismiss = { editingGroup = null },
+                        onConfirm = {
+                            viewModel.upGroup(oldGroup, it.trim().ifBlank { null })
+                            editingGroup = null
+                        }
+                    )
+                }
+            }
+        }
+        lifecycleScope.launch {
+            appDb.rssSourceDao.flowGroups().conflate().collect { groups = it }
+        }
+    }
 
     override fun onStart() {
         super.onStart()
         setLayout(0.9f, 0.9f)
     }
+}
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) = binding.run {
-        toolBar.setBackgroundColor(primaryColor)
-        toolBar.title = getString(R.string.group_manage)
-        toolBar.inflateMenu(R.menu.group_manage)
-        toolBar.menu.applyTint(requireContext())
-        toolBar.setOnMenuItemClickListener(this@GroupManageDialog)
-        recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-        recyclerView.adapter = adapter
-        tvOk.setTextColor(requireContext().accentColor)
-        tvOk.visible()
-        tvOk.setOnClickListener {
-            dismissAllowingStateLoss()
-        }
-        initData()
-    }
-
-    private fun initData() {
-        lifecycleScope.launch {
-            appDb.rssSourceDao.flowGroups().conflate().collect {
-                adapter.setItems(it)
+@Composable
+private fun GroupManagePanel(
+    groups: List<String>,
+    onAdd: () -> Unit,
+    onEdit: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(NgTheme.colors.surface)
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 8.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.group_manage),
+                    modifier = Modifier.weight(1f),
+                    color = Color(NgTheme.colors.onSurface),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clickable(onClick = onAdd),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_add),
+                        contentDescription = stringResource(R.string.add_group),
+                        tint = Color(NgTheme.colors.onSurface)
+                    )
+                }
             }
-        }
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_add -> addGroup()
-        }
-        return true
-    }
-
-    @SuppressLint("InflateParams")
-    private fun addGroup() {
-        alert(title = getString(R.string.add_group)) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotBlank()) {
-                        viewModel.addGroup(it)
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(groups, key = { it }) { group ->
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(NgTheme.colors.surfaceContainerLow)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = group,
+                                modifier = Modifier.weight(1f),
+                                color = Color(NgTheme.colors.onSurface),
+                                fontSize = 15.sp
+                            )
+                            TextButton(onClick = { onEdit(group) }) {
+                                Text(stringResource(R.string.edit))
+                            }
+                            TextButton(onClick = { onDelete(group) }) {
+                                Text(stringResource(R.string.delete))
+                            }
+                        }
                     }
                 }
             }
-            cancelButton()
-        }.requestInputMethod()
-    }
-
-    @SuppressLint("InflateParams")
-    private fun editGroup(group: String) {
-        alert(title = getString(R.string.group_edit)) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setText(group)
-            }
-            customView { alertBinding.root }
-            okButton {
-                viewModel.upGroup(group, alertBinding.editView.text?.toString())
-            }
-            cancelButton()
-        }.requestInputMethod()
-    }
-
-    private inner class GroupAdapter(context: Context) :
-        RecyclerAdapter<String, ItemGroupManageBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemGroupManageBinding {
-            return ItemGroupManageBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemGroupManageBinding,
-            item: String,
-            payloads: MutableList<Any>
-        ) {
-            binding.run {
-                root.setBackgroundColor(context.backgroundColor)
-                tvGroup.text = item
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemGroupManageBinding) {
-            binding.apply {
-                tvEdit.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let {
-                        editGroup(it)
-                    }
-                }
-
-                tvDel.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let {
-                        viewModel.delGroup(it)
-                    }
-                }
-            }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.End)
+            ) { Text(stringResource(R.string.close)) }
         }
     }
-
 }

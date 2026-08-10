@@ -10,14 +10,11 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
@@ -28,15 +25,16 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.script.rhino.runScriptWithContext
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityRssReadBinding
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.config.AppConfig
@@ -45,22 +43,16 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
 import io.legado.app.utils.isTrue
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
-import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
@@ -69,15 +61,15 @@ import io.legado.app.utils.textArray
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.Jsoup
-import splitties.views.bottomPadding
 import java.io.ByteArrayInputStream
 import java.util.regex.PatternSyntaxException
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
 import io.legado.app.ui.rss.article.ReadRecordDialog
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.rss.RssComposeBinding
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.utils.StartActivityContract
 import kotlinx.coroutines.runBlocking
@@ -106,17 +98,21 @@ import androidx.core.graphics.createBitmap
 /**
  * rss阅读界面
  */
-class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>(),
+class ReadRssActivity : VMBaseActivity<RssComposeBinding, ReadRssViewModel>(),
     RssFavoritesDialog.Callback {
 
-    override val binding by viewBinding(ActivityRssReadBinding::inflate)
+    override val binding by viewBinding(RssComposeBinding::inflate)
     override val viewModel by viewModels<ReadRssViewModel>()
 
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
 
-    private var starMenuItem: MenuItem? = null
-    private var ttsMenuItem: MenuItem? = null
+    private var pageTitle by mutableStateOf("")
+    private var pageProgress by mutableIntStateOf(0)
+    private var starred by mutableStateOf(false)
+    private var ttsPlaying by mutableStateOf(false)
+    private var loginVisible by mutableStateOf(false)
+    private var customView by mutableStateOf<View?>(null)
     private var isFullscreen = false
     private var wasScreenOff = false
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -156,17 +152,33 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
-        binding.webViewContainer.addView(currentWebView)
-        viewModel.upStarMenuData.observe(this) { upStarMenu() }
+        binding.root.setContent {
+            NgAppTheme {
+                ReadRssScreen(
+                    title = pageTitle,
+                    webView = currentWebView,
+                    progress = pageProgress,
+                    starred = starred,
+                    ttsPlaying = ttsPlaying,
+                    loginVisible = loginVisible,
+                    customView = customView,
+                    onBack = { onBackPressedDispatcher.onBackPressed() },
+                    onAction = ::handleToolbarAction
+                )
+            }
+        }
+        viewModel.upStarMenuData.observe(this) {
+            upStarMenu()
+            loginVisible = !viewModel.rssSource?.loginUrl.isNullOrBlank()
+        }
         viewModel.upTtsMenuData.observe(this) { upTtsMenu(it) }
-        viewModel.upTitleData.observe(this) { binding.titleBar.title = it }
-        initView()
+        viewModel.upTitleData.observe(this) { pageTitle = it.orEmpty() }
         initWebView()
         initLiveData()
         viewModel.initData(intent)
         currentWebView.clearHistory()
         onBackPressedDispatcher.addCallback(this) {
-            if (binding.customWebView.size > 0) { //关闭全屏
+            if (customView != null) { //关闭全屏
                 customWebViewCallback?.onCustomViewHidden()
                 return@addCallback
             }
@@ -218,8 +230,7 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        binding.progressBar.visible()
-        binding.progressBar.setDurProgress(30)
+        pageProgress = 30
         setIntent(intent)
         viewModel.initData(intent)
     }
@@ -241,25 +252,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_read, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        starMenuItem = menu.findItem(R.id.menu_rss_star)
-        ttsMenuItem = menu.findItem(R.id.menu_aloud)
-        upStarMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !viewModel.rssSource?.loginUrl.isNullOrBlank()
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    private fun handleToolbarAction(itemId: Int) {
+        when (itemId) {
             R.id.menu_rss_refresh -> refresh()
 
             R.id.menu_rss_star -> {
@@ -295,7 +289,6 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             R.id.menu_network_log -> showDialogFragment<NetworkLogDialog>()
             R.id.menu_read_record -> showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     override fun updateFavorite(title: String?, group: String?) {
@@ -314,18 +307,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         viewModel.delFavorite()
     }
 
-    private fun initView() {
-        binding.root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
-            val insets = windowInsets.getInsets(typeMask)
-            view.bottomPadding = insets.bottom
-            windowInsets
-        }
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView() {
-        binding.progressBar.fontColor = accentColor
         currentWebView.webChromeClient = CustomWebChromeClient()
         //添加屏幕方向控制，网页关闭，openUI
         currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
@@ -437,28 +420,11 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     private fun upStarMenu() {
-        starMenuItem?.isVisible = viewModel.rssArticle != null
-        if (viewModel.rssStar != null) {
-            starMenuItem?.setIcon(R.drawable.ic_star)
-            starMenuItem?.setTitle(R.string.in_favorites)
-        } else {
-            starMenuItem?.setIcon(R.drawable.ic_star_border)
-            starMenuItem?.setTitle(R.string.out_favorites)
-        }
-        starMenuItem?.icon?.setTintMutate(primaryTextColor)
+        starred = viewModel.rssStar != null
     }
 
     private fun upTtsMenu(isPlaying: Boolean) {
-        lifecycleScope.launch {
-            if (isPlaying) {
-                ttsMenuItem?.setIcon(R.drawable.ic_stop_black_24dp)
-                ttsMenuItem?.setTitle(R.string.aloud_stop)
-            } else {
-                ttsMenuItem?.setIcon(R.drawable.ic_volume_up)
-                ttsMenuItem?.setTitle(R.string.read_aloud)
-            }
-            ttsMenuItem?.icon?.setTintMutate(primaryTextColor)
-        }
+        ttsPlaying = isPlaying
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -539,14 +505,12 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
         override fun onProgressChanged(view: WebView?, newProgress: Int) {
             super.onProgressChanged(view, newProgress)
-            binding.progressBar.setDurProgress(newProgress)
-            binding.progressBar.gone(newProgress == 100)
+            pageProgress = newProgress
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
             isFullscreen = true
-            binding.llView.invisible()
-            binding.customWebView.addView(view)
+            customView = view
             customWebViewCallback = callback
             keepScreenOn(true)
             toggleSystemBar(false)
@@ -557,8 +521,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
         override fun onHideCustomView() {
             isFullscreen = false
-            binding.customWebView.removeAllViews()
-            binding.llView.visible()
+            customView = null
+            customWebViewCallback = null
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
             toggleSystemBar(true)
@@ -719,9 +683,9 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                     && title.isNotBlank()
                     && url != BLANK_HTML
                     && !url.contains(title)) {
-                    binding.titleBar.title = title
+                    pageTitle = title
                 } else {
-                    binding.titleBar.title = viewModel.upTitleData.value
+                    pageTitle = viewModel.upTitleData.value.orEmpty()
                 }
             }
             viewModel.rssSource?.injectJs?.let {

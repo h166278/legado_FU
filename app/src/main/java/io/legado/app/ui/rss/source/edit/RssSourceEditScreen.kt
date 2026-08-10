@@ -1,0 +1,464 @@
+package io.legado.app.ui.rss.source.edit
+
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.legado.app.R
+import io.legado.app.data.entities.RssSource
+import io.legado.app.ui.design.components.compose.NgFormSelectField
+import io.legado.app.ui.design.components.compose.NgFormSelectOption
+import io.legado.app.ui.design.components.compose.NgFormSwitchRow
+import io.legado.app.ui.design.theme.NgTheme
+import io.legado.app.ui.rss.RssPageScaffold
+import io.legado.app.ui.rss.RssToolbarAction
+
+@Immutable
+internal data class RssSourceEditField(
+    val key: String,
+    val label: String,
+    val value: String,
+    val boolean: Boolean = false
+)
+
+internal sealed interface RssSourceEditAction {
+    data object Back : RssSourceEditAction
+    data object Save : RssSourceEditAction
+    data object Debug : RssSourceEditAction
+    data object Login : RssSourceEditAction
+    data object SetVariable : RssSourceEditAction
+    data object ClearCookie : RssSourceEditAction
+    data object Copy : RssSourceEditAction
+    data object Paste : RssSourceEditAction
+    data object ImportQr : RssSourceEditAction
+    data object ShareText : RssSourceEditAction
+    data object ShareQr : RssSourceEditAction
+    data object AppLog : RssSourceEditAction
+    data object NetworkLog : RssSourceEditAction
+    data object Help : RssSourceEditAction
+    data object InsertUrlOption : RssSourceEditAction
+    data object JsHelp : RssSourceEditAction
+    data object RegexHelp : RssSourceEditAction
+    data object SelectFile : RssSourceEditAction
+    data class SelectTab(val index: Int) : RssSourceEditAction
+    data class UpdateField(val key: String, val value: String) : RssSourceEditAction
+    data class FocusField(
+        val key: String,
+        val selectionStart: Int,
+        val selectionEnd: Int
+    ) : RssSourceEditAction
+    data class ExpandField(val key: String, val label: String) : RssSourceEditAction
+    data class UpdateSource(val source: RssSource) : RssSourceEditAction
+    data class AutoCompleteChanged(val enabled: Boolean) : RssSourceEditAction
+}
+
+@Composable
+internal fun RssSourceEditScreen(
+    source: RssSource,
+    selectedTab: Int,
+    autoComplete: Boolean,
+    onAction: (RssSourceEditAction) -> Unit
+) {
+    val editFields = sourceEditFields(source, selectedTab)
+    val actions = buildList {
+        add(RssToolbarAction(R.id.menu_save, R.string.action_save, R.drawable.ic_save))
+        add(
+            RssToolbarAction(
+                R.id.menu_debug_source,
+                R.string.debug_source,
+                R.drawable.ic_bug_report
+            )
+        )
+        if (source.loginUrl?.isNotBlank() == true) {
+            add(RssToolbarAction(R.id.menu_login, R.string.login, R.drawable.ic_lock_outline))
+        }
+        add(
+            RssToolbarAction(
+                R.id.menu_set_source_variable,
+                R.string.set_source_variable,
+                R.drawable.ic_code
+            )
+        )
+        add(
+            RssToolbarAction(
+                R.id.menu_clear_cookie,
+                R.string.cookie,
+                R.drawable.ic_baseline_close
+            )
+        )
+        add(RssToolbarAction(R.id.menu_copy_source, R.string.copy_source, R.drawable.ic_copy))
+        add(RssToolbarAction(R.id.menu_paste_source, R.string.paste_source, R.drawable.ic_import))
+        add(
+            RssToolbarAction(
+                R.id.menu_qr_code_camera,
+                R.string.import_by_qr_code,
+                R.drawable.ic_import
+            )
+        )
+        add(RssToolbarAction(R.id.menu_share_str, R.string.str_share, R.drawable.ic_share))
+        add(RssToolbarAction(R.id.menu_share_qr, R.string.qr_share, R.drawable.ic_share))
+        add(RssToolbarAction(R.id.menu_log, R.string.log, R.drawable.ic_code))
+        add(
+            RssToolbarAction(
+                R.id.menu_network_log,
+                R.string.network_request_log,
+                R.drawable.ic_web_outline
+            )
+        )
+        add(RssToolbarAction(R.id.menu_help, R.string.help, R.drawable.ic_help))
+    }
+    RssPageScaffold(
+        title = stringResource(R.string.rss_source_edit),
+        onBack = { onAction(RssSourceEditAction.Back) },
+        actions = actions,
+        onAction = { id ->
+            onAction(
+                when (id) {
+                    R.id.menu_save -> RssSourceEditAction.Save
+                    R.id.menu_debug_source -> RssSourceEditAction.Debug
+                    R.id.menu_login -> RssSourceEditAction.Login
+                    R.id.menu_set_source_variable -> RssSourceEditAction.SetVariable
+                    R.id.menu_clear_cookie -> RssSourceEditAction.ClearCookie
+                    R.id.menu_copy_source -> RssSourceEditAction.Copy
+                    R.id.menu_paste_source -> RssSourceEditAction.Paste
+                    R.id.menu_qr_code_camera -> RssSourceEditAction.ImportQr
+                    R.id.menu_share_str -> RssSourceEditAction.ShareText
+                    R.id.menu_share_qr -> RssSourceEditAction.ShareQr
+                    R.id.menu_log -> RssSourceEditAction.AppLog
+                    R.id.menu_network_log -> RssSourceEditAction.NetworkLog
+                    else -> RssSourceEditAction.Help
+                }
+            )
+        }
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    SourceGlobalOptions(
+                        source = source,
+                        autoComplete = autoComplete,
+                        onSourceChange = {
+                            onAction(RssSourceEditAction.UpdateSource(it))
+                        },
+                        onAutoCompleteChange = {
+                            onAction(RssSourceEditAction.AutoCompleteChanged(it))
+                        }
+                    )
+                }
+                item {
+                    SourceEditTabs(selectedTab) {
+                        onAction(RssSourceEditAction.SelectTab(it))
+                    }
+                }
+                items(editFields, key = RssSourceEditField::key) { field ->
+                    if (field.boolean) {
+                        NgFormSwitchRow(
+                            title = field.label,
+                            checked = field.value.toBoolean(),
+                            onCheckedChange = {
+                                onAction(RssSourceEditAction.UpdateField(field.key, it.toString()))
+                            }
+                        )
+                    } else {
+                        var fieldValue by remember(field.key) {
+                            mutableStateOf(TextFieldValue(field.value))
+                        }
+                        LaunchedEffect(field.value) {
+                            if (fieldValue.text != field.value) {
+                                fieldValue = TextFieldValue(
+                                    text = field.value,
+                                    selection = TextRange(field.value.length)
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = fieldValue,
+                            onValueChange = { next ->
+                                fieldValue = next
+                                onAction(RssSourceEditAction.UpdateField(field.key, next.text))
+                                onAction(
+                                    RssSourceEditAction.FocusField(
+                                        field.key,
+                                        next.selection.start,
+                                        next.selection.end
+                                    )
+                                )
+                            },
+                            label = { Text(field.label) },
+                            trailingIcon = {
+                                TextButton(
+                                    onClick = {
+                                        onAction(
+                                            RssSourceEditAction.ExpandField(field.key, field.label)
+                                        )
+                                    }
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_code),
+                                        contentDescription = stringResource(R.string.edit_content)
+                                    )
+                                }
+                            },
+                            minLines = if (field.key in compactSourceFields) 1 else 3,
+                            maxLines = if (field.key in compactSourceFields) 3 else 12,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        onAction(
+                                            RssSourceEditAction.FocusField(
+                                                field.key,
+                                                fieldValue.selection.start,
+                                                fieldValue.selection.end
+                                            )
+                                        )
+                                    }
+                                }
+                        )
+                    }
+                }
+            }
+            SourceEditorHelpers(onAction)
+        }
+    }
+}
+
+@Composable
+private fun SourceGlobalOptions(
+    source: RssSource,
+    autoComplete: Boolean,
+    onSourceChange: (RssSource) -> Unit,
+    onAutoCompleteChange: (Boolean) -> Unit
+) {
+    val sourceTypes = stringArrayResource(R.array.rss_type)
+    val layoutTypes = stringArrayResource(R.array.layout_type)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        NgFormSwitchRow(
+            title = stringResource(R.string.is_enable),
+            checked = source.enabled,
+            onCheckedChange = { onSourceChange(source.copy(enabled = it)) }
+        )
+        NgFormSwitchRow(
+            title = stringResource(R.string.single_url),
+            checked = source.singleUrl,
+            onCheckedChange = { onSourceChange(source.copy(singleUrl = it)) }
+        )
+        NgFormSwitchRow(
+            title = stringResource(R.string.auto_save_cookie),
+            checked = source.enabledCookieJar == true,
+            onCheckedChange = { onSourceChange(source.copy(enabledCookieJar = it)) }
+        )
+        NgFormSwitchRow(
+            title = stringResource(R.string.enable_preload),
+            checked = source.preload,
+            onCheckedChange = { onSourceChange(source.copy(preload = it)) }
+        )
+        NgFormSwitchRow(
+            title = stringResource(R.string.auto_complete),
+            checked = autoComplete,
+            onCheckedChange = onAutoCompleteChange
+        )
+        NgFormSelectField(
+            label = stringResource(R.string.book_type),
+            selectedValue = source.type.coerceIn(sourceTypes.indices).toString(),
+            options = sourceTypes.mapIndexed { index, value ->
+                NgFormSelectOption(value, index.toString())
+            },
+            onValueChange = {
+                onSourceChange(source.copy(type = it.toIntOrNull() ?: 0))
+            },
+            arrowIcon = painterResource(R.drawable.ic_arrow_drop_down)
+        )
+        NgFormSelectField(
+            label = stringResource(R.string.layout_type),
+            selectedValue = source.articleStyle.coerceIn(layoutTypes.indices).toString(),
+            options = layoutTypes.mapIndexed { index, value ->
+                NgFormSelectOption(value, index.toString())
+            },
+            onValueChange = {
+                onSourceChange(source.copy(articleStyle = it.toIntOrNull() ?: 0))
+            },
+            arrowIcon = painterResource(R.drawable.ic_arrow_drop_down)
+        )
+    }
+}
+
+@Composable
+private fun SourceEditTabs(selected: Int, onSelect: (Int) -> Unit) {
+    val titles = listOf(
+        stringResource(R.string.source_tab_base),
+        stringResource(R.string.source_tab_start),
+        stringResource(R.string.source_tab_list),
+        "WEB_VIEW"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        titles.forEachIndexed { index, title ->
+            Surface(
+                onClick = { onSelect(index) },
+                shape = RoundedCornerShape(15.dp),
+                color = Color(
+                    if (selected == index) NgTheme.colors.selectedContainer
+                    else NgTheme.colors.surfaceContainerLow
+                )
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    color = Color(NgTheme.colors.onSurface),
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SourceEditorHelpers(onAction: (RssSourceEditAction) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        TextButton(onClick = { onAction(RssSourceEditAction.InsertUrlOption) }) {
+            Text("插入URL参数", maxLines = 1)
+        }
+        TextButton(onClick = { onAction(RssSourceEditAction.Help) }) {
+            Text("订阅源教程", maxLines = 1)
+        }
+        TextButton(onClick = { onAction(RssSourceEditAction.JsHelp) }) {
+            Text("JS教程", maxLines = 1)
+        }
+        TextButton(onClick = { onAction(RssSourceEditAction.RegexHelp) }) {
+            Text("正则教程", maxLines = 1)
+        }
+        TextButton(onClick = { onAction(RssSourceEditAction.SelectFile) }) {
+            Text("选择文件", maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun sourceEditFields(source: RssSource, tab: Int): List<RssSourceEditField> {
+    return when (tab) {
+        1 -> listOf(
+            RssSourceEditField("startHtml", stringResource(R.string.r_startHtml), source.startHtml.orEmpty()),
+            RssSourceEditField("startStyle", stringResource(R.string.r_startStyle), source.startStyle.orEmpty()),
+            RssSourceEditField("startJs", stringResource(R.string.r_startJs), source.startJs.orEmpty()),
+            RssSourceEditField("preloadJs", stringResource(R.string.r_preloadJs), source.preloadJs.orEmpty())
+        )
+        2 -> listOf(
+            RssSourceEditField("ruleArticles", stringResource(R.string.r_articles), source.ruleArticles.orEmpty()),
+            RssSourceEditField("ruleNextPage", stringResource(R.string.r_next), source.ruleNextPage.orEmpty()),
+            RssSourceEditField("ruleTitle", stringResource(R.string.r_title), source.ruleTitle.orEmpty()),
+            RssSourceEditField("rulePubDate", stringResource(R.string.r_date), source.rulePubDate.orEmpty()),
+            RssSourceEditField("ruleDescription", stringResource(R.string.r_description), source.ruleDescription.orEmpty()),
+            RssSourceEditField("ruleImage", stringResource(R.string.r_image), source.ruleImage.orEmpty()),
+            RssSourceEditField("ruleLink", stringResource(R.string.r_link), source.ruleLink.orEmpty())
+        )
+        3 -> listOf(
+            RssSourceEditField("enableJs", stringResource(R.string.enable_js), source.enableJs.toString(), true),
+            RssSourceEditField("loadWithBaseUrl", stringResource(R.string.load_with_base_url), source.loadWithBaseUrl.toString(), true),
+            RssSourceEditField("showWebLog", stringResource(R.string.load_with_web_log), source.showWebLog.toString(), true),
+            RssSourceEditField("cacheFirst", stringResource(R.string.cache_first), source.cacheFirst.toString(), true),
+            RssSourceEditField("ruleContent", stringResource(R.string.r_content), source.ruleContent.orEmpty()),
+            RssSourceEditField("style", stringResource(R.string.r_style), source.style.orEmpty()),
+            RssSourceEditField("injectJs", stringResource(R.string.r_inject_js), source.injectJs.orEmpty()),
+            RssSourceEditField("contentWhitelist", stringResource(R.string.c_whitelist), source.contentWhitelist.orEmpty()),
+            RssSourceEditField("contentBlacklist", stringResource(R.string.c_blacklist), source.contentBlacklist.orEmpty()),
+            RssSourceEditField(
+                "shouldOverrideUrlLoading",
+                "url跳转拦截",
+                source.shouldOverrideUrlLoading.orEmpty()
+            )
+        )
+        else -> listOf(
+            RssSourceEditField("sourceName", stringResource(R.string.source_name), source.sourceName),
+            RssSourceEditField("sourceUrl", stringResource(R.string.source_url), source.sourceUrl),
+            RssSourceEditField("sourceIcon", stringResource(R.string.source_icon), source.sourceIcon),
+            RssSourceEditField("sourceGroup", stringResource(R.string.source_group), source.sourceGroup.orEmpty()),
+            RssSourceEditField("sourceComment", stringResource(R.string.comment), source.sourceComment.orEmpty()),
+            RssSourceEditField("searchUrl", stringResource(R.string.r_search_url), source.searchUrl.orEmpty()),
+            RssSourceEditField("sortUrl", stringResource(R.string.sort_url), source.sortUrl.orEmpty()),
+            RssSourceEditField("loginUrl", stringResource(R.string.login_url), source.loginUrl.orEmpty()),
+            RssSourceEditField("loginUi", stringResource(R.string.login_ui), source.loginUi.orEmpty()),
+            RssSourceEditField("loginCheckJs", stringResource(R.string.login_check_js), source.loginCheckJs.orEmpty()),
+            RssSourceEditField("coverDecodeJs", stringResource(R.string.cover_decode_js), source.coverDecodeJs.orEmpty()),
+            RssSourceEditField("header", stringResource(R.string.source_http_header), source.header.orEmpty()),
+            RssSourceEditField("variableComment", stringResource(R.string.variable_comment), source.variableComment.orEmpty()),
+            RssSourceEditField("concurrentRate", stringResource(R.string.concurrent_rate), source.concurrentRate.orEmpty()),
+            RssSourceEditField("jsLib", "jsLib", source.jsLib.orEmpty())
+        )
+    }
+}
+
+private val compactSourceFields = setOf(
+    "sourceName",
+    "sourceUrl",
+    "sourceIcon",
+    "sourceGroup",
+    "concurrentRate"
+)
+
+@Composable
+internal fun RssSourceExitDialog(
+    onDismiss: () -> Unit,
+    onDiscard: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.exit)) },
+        text = { Text(stringResource(R.string.exit_no_save)) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.yes)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDiscard) { Text(stringResource(R.string.no)) }
+        }
+    )
+}

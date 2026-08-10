@@ -1,48 +1,34 @@
 package io.legado.app.ui.rss.source.manage
 
-import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
-import io.legado.app.databinding.ActivityRssSourceBinding
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.association.ImportRssSourceDialog
-import io.legado.app.utils.CreateFileContract
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.rss.RssComposeBinding
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
-import io.legado.app.ui.widget.SelectActionBar
-import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.dpToPx
+import io.legado.app.utils.CreateFileContract
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.takePersistableReadPermission
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -52,24 +38,33 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
-/**
- * 订阅源管理
- */
-class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceViewModel>(),
-    PopupMenu.OnMenuItemClickListener,
-    SelectActionBar.CallBack,
-    RssSourceAdapter.CallBack {
+private enum class SourceInputRequest { IMPORT_ONLINE, ADD_GROUP, REMOVE_GROUP }
 
-    override val binding by viewBinding(ActivityRssSourceBinding::inflate)
+private sealed interface SourceDeleteRequest {
+    data class One(val source: RssSource) : SourceDeleteRequest
+    data class Selection(val sources: List<RssSource>) : SourceDeleteRequest
+}
+
+/** 订阅源管理。选择、筛选、拖排、导入导出和批量动作均保留，UI 使用 Compose。 */
+class RssSourceActivity :
+    VMBaseActivity<RssComposeBinding, RssSourceViewModel>() {
+
+    override val binding by viewBinding(RssComposeBinding::inflate)
     override val viewModel by viewModels<RssSourceViewModel>()
+
     private val importRecordKey = "rssSourceRecordKey"
-    private val adapter by lazy { RssSourceAdapter(this, this) }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
+    private var sources by mutableStateOf<List<RssSource>>(
+        emptyList(),
+        referentialEqualityPolicy()
+    )
+    private var groups by mutableStateOf<List<String>>(emptyList())
+    private var query by mutableStateOf("")
+    private var selectedUrls by mutableStateOf<Set<String>>(emptySet())
+    private var inputRequest by mutableStateOf<SourceInputRequest?>(null)
+    private var deleteRequest by mutableStateOf<SourceDeleteRequest?>(null)
+    private var exportedPath by mutableStateOf<String?>(null)
     private var sourceFlowJob: Job? = null
-    private var groups = arrayListOf<String>()
-    private var groupMenu: SubMenu? = null
+
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportRssSourceDialog(it))
@@ -81,339 +76,212 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         }
     }
     private val exportResult = registerForActivityResult(CreateFileContract()) {
-        it.save(this, this) { uri ->
-            alert(R.string.export_success) {
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
-                    sendToClip(uri.toString())
-                }
-            }
-        }
+        it.save(this, this) { uri -> exportedPath = uri.toString() }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initRecyclerView()
-        initSearchView()
-        initGroupFlow()
-        upSourceFlow()
-        initSelectActionBar()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_source, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add -> startActivity<RssSourceEditActivity>()
-            R.id.menu_import_local -> importDoc.launch(arrayOf("text/*", "application/json"))
-
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_import_default -> viewModel.importDefault()
-            R.id.menu_enabled_group -> {
-                searchView.setQuery(getString(R.string.enabled), true)
-            }
-
-            R.id.menu_disabled_group -> {
-                searchView.setQuery(getString(R.string.disabled), true)
-            }
-
-            R.id.menu_group_login -> {
-                searchView.setQuery(getString(R.string.need_login), true)
-            }
-
-            R.id.menu_group_null -> {
-                searchView.setQuery(getString(R.string.no_group), true)
-            }
-
-            R.id.menu_help -> showHelp("SourceMRssHelp")
-            else -> if (item.groupId == R.id.source_group) {
-                searchView.setQuery("group:${item.title}", true)
+        binding.root.setContent {
+            NgAppTheme {
+                RssSourceManageScreen(
+                    sources = sources,
+                    groups = groups,
+                    query = query,
+                    selectedUrls = selectedUrls,
+                    onAction = ::handleAction
+                )
+                inputRequest?.let { request ->
+                    val title = when (request) {
+                        SourceInputRequest.IMPORT_ONLINE -> getString(R.string.import_on_line)
+                        SourceInputRequest.ADD_GROUP -> getString(R.string.add_group)
+                        SourceInputRequest.REMOVE_GROUP -> getString(R.string.remove_group)
+                    }
+                    RssSourceTextDialog(
+                        title = title,
+                        suggestions = if (request == SourceInputRequest.IMPORT_ONLINE) {
+                            importHistory()
+                        } else {
+                            groups
+                        },
+                        onDismiss = { inputRequest = null },
+                        onConfirm = { handleInput(request, it) }
+                    )
+                }
+                deleteRequest?.let { request ->
+                    val message = when (request) {
+                        is SourceDeleteRequest.One -> {
+                            "${getString(R.string.sure_del)}\n${request.source.sourceName}"
+                        }
+                        is SourceDeleteRequest.Selection -> {
+                            "${getString(R.string.sure_del)}\n${request.sources.size}"
+                        }
+                    }
+                    RssSourceConfirmDialog(
+                        title = getString(R.string.draw),
+                        message = message,
+                        onDismiss = { deleteRequest = null },
+                        onConfirm = {
+                            when (request) {
+                                is SourceDeleteRequest.One -> viewModel.del(request.source)
+                                is SourceDeleteRequest.Selection -> {
+                                    viewModel.del(*request.sources.toTypedArray())
+                                    selectedUrls = emptySet()
+                                }
+                            }
+                            deleteRequest = null
+                        }
+                    )
+                }
+                exportedPath?.let { path ->
+                    RssSourceTextDialog(
+                        title = getString(R.string.export_success),
+                        initialValue = path,
+                        onDismiss = { exportedPath = null },
+                        onConfirm = {
+                            sendToClip(it)
+                            exportedPath = null
+                        }
+                    )
+                }
             }
         }
-        return super.onCompatOptionsItemSelected(item)
+        lifecycleScope.launch {
+            appDb.rssSourceDao.flowGroups().conflate().collect { groups = it }
+        }
+        updateSourceFlow()
     }
 
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(adapter.selection)
-            R.id.menu_disable_selection -> viewModel.disableSelection(adapter.selection)
-            R.id.menu_add_group -> selectionAddToGroups()
-            R.id.menu_remove_group -> selectionRemoveFromGroups()
-            R.id.menu_top_sel -> viewModel.topSource(*adapter.selection.toTypedArray())
-            R.id.menu_bottom_sel -> viewModel.bottomSource(*adapter.selection.toTypedArray())
-            R.id.menu_export_selection -> viewModel.saveToFile(adapter.selection) { file, name ->
-                exportResult.launch(
-                    CreateFileContract.FileData(
-                        name, file, "application/json"
-                    )
-                )
+    private fun handleAction(action: RssSourceManageAction) {
+        val selection = selectedSources()
+        when (action) {
+            RssSourceManageAction.Back -> finish()
+            RssSourceManageAction.Add -> startActivity<RssSourceEditActivity>()
+            RssSourceManageAction.ImportLocal -> {
+                importDoc.launch(arrayOf("text/*", "application/json"))
             }
-
-            R.id.menu_share_source -> viewModel.saveToFile(adapter.selection) { file, name ->
+            RssSourceManageAction.ImportOnline -> inputRequest = SourceInputRequest.IMPORT_ONLINE
+            RssSourceManageAction.ImportQr -> qrCodeResult.launch()
+            RssSourceManageAction.ImportDefault -> viewModel.importDefault()
+            RssSourceManageAction.ManageGroups -> showDialogFragment<GroupManageDialog>()
+            RssSourceManageAction.Help -> showHelp("SourceMRssHelp")
+            RssSourceManageAction.DeleteSelection -> {
+                if (selection.isNotEmpty()) deleteRequest = SourceDeleteRequest.Selection(selection)
+            }
+            RssSourceManageAction.EnableSelection -> viewModel.enableSelection(selection)
+            RssSourceManageAction.DisableSelection -> viewModel.disableSelection(selection)
+            RssSourceManageAction.AddSelectionToGroup -> {
+                if (selection.isNotEmpty()) inputRequest = SourceInputRequest.ADD_GROUP
+            }
+            RssSourceManageAction.RemoveSelectionFromGroup -> {
+                if (selection.isNotEmpty()) inputRequest = SourceInputRequest.REMOVE_GROUP
+            }
+            RssSourceManageAction.TopSelection -> viewModel.topSource(*selection.toTypedArray())
+            RssSourceManageAction.BottomSelection -> viewModel.bottomSource(*selection.toTypedArray())
+            RssSourceManageAction.ExportSelection -> viewModel.saveToFile(selection) { file, name ->
+                exportResult.launch(CreateFileContract.FileData(name, file, "application/json"))
+            }
+            RssSourceManageAction.ShareSelection -> viewModel.saveToFile(selection) { file, _ ->
                 share(file)
             }
-
-            R.id.menu_check_selected_interval -> adapter.checkSelectedInterval()
-        }
-        return true
-    }
-
-    private fun initRecyclerView() {
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        binding.recyclerView.adapter = adapter
-        // When this page is opened, it is in selection mode
-        val dragSelectTouchHelper: DragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
-        dragSelectTouchHelper.activeSlideSelect()
-        // Note: need judge selection first, so add ItemTouchHelper after it.
-        val itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-    }
-
-    private fun initSearchView() {
-        binding.titleBar.findViewById<SearchView>(R.id.search_view).let {
-            it.applyTint(primaryTextColor)
-            it.onActionViewExpanded()
-            it.queryHint = getString(R.string.search_rss_source)
-            it.clearFocus()
-            it.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?): Boolean {
-                    return false
-                }
-
-                override fun onQueryTextChange(newText: String?): Boolean {
-                    upSourceFlow(newText)
-                    return false
-                }
-            })
-        }
-    }
-
-    private fun initSelectActionBar() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.rss_source_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
-    }
-
-    private fun initGroupFlow() {
-        lifecycleScope.launch {
-            appDb.rssSourceDao.flowGroups().conflate().collect {
-                groups.clear()
-                groups.addAll(it)
-                upGroupMenu()
+            RssSourceManageAction.CompleteSelectionInterval -> completeSelectionInterval()
+            RssSourceManageAction.SelectAll -> {
+                selectedUrls = sources.mapTo(linkedSetOf(), RssSource::sourceUrl)
             }
-        }
-    }
-
-    @SuppressLint("InflateParams")
-    private fun selectionAddToGroups() {
-        alert(titleResource = R.string.add_group) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
-                editView.dropDownHeight = 180.dpToPx()
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        viewModel.selectionAddToGroups(adapter.selection, it)
-                    }
+            RssSourceManageAction.InvertSelection -> {
+                selectedUrls = sources.mapNotNullTo(linkedSetOf()) {
+                    it.sourceUrl.takeUnless(selectedUrls::contains)
                 }
             }
-            cancelButton()
-        }
-    }
-
-    @SuppressLint("InflateParams")
-    private fun selectionRemoveFromGroups() {
-        alert(titleResource = R.string.remove_group) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
-                editView.dropDownHeight = 180.dpToPx()
+            is RssSourceManageAction.QueryChanged -> {
+                query = action.query
+                selectedUrls = emptySet()
+                updateSourceFlow(action.query)
             }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    if (it.isNotEmpty()) {
-                        viewModel.selectionRemoveFromGroups(adapter.selection, it)
-                    }
+            is RssSourceManageAction.ToggleSelected -> {
+                selectedUrls = selectedUrls.toMutableSet().apply {
+                    if (!add(action.source.sourceUrl)) remove(action.source.sourceUrl)
                 }
             }
-            cancelButton()
+            is RssSourceManageAction.ToggleEnabled -> {
+                viewModel.update(action.source.copy(enabled = action.enabled))
+            }
+            is RssSourceManageAction.Edit -> startActivity<RssSourceEditActivity> {
+                putExtra("sourceUrl", action.source.sourceUrl)
+            }
+            is RssSourceManageAction.Delete -> {
+                selectedUrls = selectedUrls - action.source.sourceUrl
+                deleteRequest = SourceDeleteRequest.One(action.source)
+            }
+            is RssSourceManageAction.Top -> viewModel.topSource(action.source)
+            is RssSourceManageAction.Bottom -> viewModel.bottomSource(action.source)
+            is RssSourceManageAction.Reorder -> {
+                val reordered = action.sources.mapIndexed { index, source ->
+                    source.copy(customOrder = index + 1)
+                }
+                viewModel.update(*reordered.toTypedArray())
+            }
         }
     }
 
-    override fun selectAll(selectAll: Boolean) {
-        if (selectAll) {
-            adapter.selectAll()
-        } else {
-            adapter.revertSelection()
-        }
-    }
-
-    override fun revertSelection() {
-        adapter.revertSelection()
-    }
-
-    override fun onClickSelectBarMainAction() {
-        delSourceDialog()
-    }
-
-    private fun delSourceDialog() {
-        alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton { viewModel.del(*adapter.selection.toTypedArray()) }
-            noButton()
-        }
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.source_group)
-        groups.forEach {
-            menu.add(R.id.source_group, Menu.NONE, Menu.NONE, it)
-        }
-    }
-
-    private fun upSourceFlow(searchKey: String? = null) {
+    private fun updateSourceFlow(searchKey: String? = query) {
         sourceFlowJob?.cancel()
         sourceFlowJob = lifecycleScope.launch {
             when {
-                searchKey.isNullOrBlank() -> {
-                    appDb.rssSourceDao.flowAll()
-                }
-
-                searchKey == getString(R.string.enabled) -> {
-                    appDb.rssSourceDao.flowEnabled()
-                }
-
-                searchKey == getString(R.string.disabled) -> {
-                    appDb.rssSourceDao.flowDisabled()
-                }
-
-                searchKey == getString(R.string.need_login) -> {
-                    appDb.rssSourceDao.flowLogin()
-                }
-
-                searchKey == getString(R.string.no_group) -> {
-                    appDb.rssSourceDao.flowNoGroup()
-                }
-
+                searchKey.isNullOrBlank() -> appDb.rssSourceDao.flowAll()
+                searchKey == getString(R.string.enabled) -> appDb.rssSourceDao.flowEnabled()
+                searchKey == getString(R.string.disabled) -> appDb.rssSourceDao.flowDisabled()
+                searchKey == getString(R.string.need_login) -> appDb.rssSourceDao.flowLogin()
+                searchKey == getString(R.string.no_group) -> appDb.rssSourceDao.flowNoGroup()
                 searchKey.startsWith("group:") -> {
-                    val key = searchKey.substringAfter("group:")
-                    appDb.rssSourceDao.flowGroupSearch(key)
+                    appDb.rssSourceDao.flowGroupSearch(searchKey.substringAfter("group:"))
                 }
-
-                else -> {
-                    appDb.rssSourceDao.flowSearch(searchKey)
-                }
+                else -> appDb.rssSourceDao.flowSearch(searchKey)
             }.catch {
                 AppLog.put("订阅源管理界面更新数据出错", it)
-            }.flowOn(IO).conflate().collect {
-                adapter.setItems(it, adapter.diffItemCallback)
+            }.flowOn(IO).conflate().collect { list ->
+                sources = list
+                selectedUrls = selectedUrls.intersect(list.mapTo(hashSetOf(), RssSource::sourceUrl))
                 delay(100)
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        adapter.upResumed(true)
+    private fun selectedSources(): List<RssSource> {
+        return sources.filter { it.sourceUrl in selectedUrls }
     }
 
-    override fun onPause() {
-        adapter.upResumed(false)
-        super.onPause()
+    private fun completeSelectionInterval() {
+        val selectedIndices = sources.indices.filter { sources[it].sourceUrl in selectedUrls }
+        val min = selectedIndices.minOrNull() ?: return
+        val max = selectedIndices.maxOrNull() ?: return
+        selectedUrls = selectedUrls + sources.subList(min, max + 1).map(RssSource::sourceUrl)
     }
 
-    override fun upCountView() {
-        binding.selectActionBar.upCountView(
-            adapter.selection.size,
-            adapter.itemCount
-        )
+    private fun handleInput(request: SourceInputRequest, value: String) {
+        val text = value.trim()
+        when (request) {
+            SourceInputRequest.IMPORT_ONLINE -> if (text.isNotBlank()) {
+                val history = importHistory().toMutableList()
+                if (text.isAbsUrl() && text !in history) {
+                    history.add(0, text)
+                    ACache.get(cacheDir = false).put(importRecordKey, history.joinToString(","))
+                }
+                showDialogFragment(ImportRssSourceDialog(text))
+            }
+            SourceInputRequest.ADD_GROUP -> if (text.isNotBlank()) {
+                viewModel.selectionAddToGroups(selectedSources(), text)
+            }
+            SourceInputRequest.REMOVE_GROUP -> if (text.isNotBlank()) {
+                viewModel.selectionRemoveFromGroups(selectedSources(), text)
+            }
+        }
+        inputRequest = null
     }
 
-    @SuppressLint("InflateParams")
-    private fun showImportDialog() {
-        val aCache = ACache.get(cacheDir = false)
-        val cacheUrls: MutableList<String> = aCache
+    private fun importHistory(): List<String> {
+        return ACache.get(cacheDir = false)
             .getAsString(importRecordKey)
             ?.splitNotBlank(",")
-            ?.toMutableList() ?: mutableListOf()
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
-                    cacheUrls.remove(it)
-                    aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
-                        aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                    }
-                    showDialogFragment(
-                        ImportRssSourceDialog(it)
-                    )
-                }
-            }
-            cancelButton()
-        }
+            ?.toList()
+            .orEmpty()
     }
-
-    override fun del(source: RssSource) {
-        alert(R.string.draw) {
-            setMessage(getString(R.string.sure_del) + "\n" + source.sourceName)
-            noButton()
-            yesButton {
-                viewModel.del(source)
-            }
-        }
-    }
-
-    override fun edit(source: RssSource) {
-        startActivity<RssSourceEditActivity> {
-            putExtra("sourceUrl", source.sourceUrl)
-        }
-    }
-
-    override fun update(vararg source: RssSource) {
-        viewModel.update(*source)
-    }
-
-    override fun toTop(source: RssSource) {
-        viewModel.topSource(source)
-    }
-
-    override fun toBottom(source: RssSource) {
-        viewModel.bottomSource(source)
-    }
-
-    override fun upOrder() {
-        viewModel.upOrder()
-    }
-
 }

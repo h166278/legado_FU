@@ -45,6 +45,30 @@ object ReadRss {
         readNoHtml(activity, record, type)
     }
 
+    fun readRss(
+        activity: AppCompatActivity,
+        rssArticle: RssArticle,
+        rssSource: RssSource? = null
+    ) {
+        val record = rssArticle.toRecord()
+        appDb.rssReadRecordDao.insertRecord(record)
+        when (rssArticle.type) {
+            0 -> ReadRssActivity.start(
+                activity,
+                rssArticle.origin,
+                rssArticle.title,
+                link = rssArticle.link,
+                sort = rssArticle.sort
+            )
+            2 -> activity.startActivity<VideoPlayerActivity> {
+                putExtra("sourceKey", rssArticle.origin)
+                putExtra("sourceType", SourceType.rss)
+                putExtra("record", rssArticle.link)
+            }
+            else -> readNoHtml(activity, record, rssArticle.type, rssSource)
+        }
+    }
+
     fun readRss(fragment: Fragment, rssArticle: RssArticle,rssSource: RssSource? = null) {
         val rssReadRecord = rssArticle.toRecord()
         appDb.rssReadRecordDao.insertRecord(rssReadRecord)
@@ -97,8 +121,13 @@ object ReadRss {
         }
     }
 
-    private fun readNoHtml(activity: AppCompatActivity, record: RssReadRecord, type: Int) {
-        val rssSource = appDb.rssSourceDao.getByKey(record.origin)
+    private fun readNoHtml(
+        activity: AppCompatActivity,
+        record: RssReadRecord,
+        type: Int,
+        source: RssSource? = null
+    ) {
+        val rssSource = source ?: appDb.rssSourceDao.getByKey(record.origin)
         rssSource?.let { s ->
             val ruleContent = s.ruleContent
             if (ruleContent.isNullOrBlank()) {

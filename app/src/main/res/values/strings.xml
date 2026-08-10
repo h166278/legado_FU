@@ -1194,6 +1194,7 @@
     <string name="web_dav_account">WebDav account</string>
     <string name="web_dav_account_s">Input your WebDav account</string>
     <string name="rss_source">RSS source</string>
+    <string name="rss_source_manage">RSS source management</string>
     <string name="rss_source_edit">Edit RSS source</string>
     <string name="screen">Filter</string>
     <string name="screen_find">Search Discovery sources</string>
