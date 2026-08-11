@@ -10,6 +10,7 @@ colorpicker = "1.1.0"
 constraintlayout = "2.2.1"
 core = "1.17.0"
 flexbox = "3.0.0"
+lottie = "6.6.6"
 fragment = "1.8.9"
 documentfile = "1.1.0"
 
@@ -197,6 +198,7 @@ commons-text = { module = "org.apache.commons:commons-text", version.ref = "comm
 desugar = { group = "com.android.tools", name = "desugar_jdk_libs_nio", version.ref = "desugar" }
 
 flexbox = { module = "com.google.android.flexbox:flexbox", version.ref = "flexbox" }
+lottie = { module = "com.airbnb.android:lottie", version.ref = "lottie" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
