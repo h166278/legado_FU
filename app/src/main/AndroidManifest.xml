@@ -546,6 +546,10 @@
             </intent-filter>
         </receiver>
 
+        <activity
+            android:name=".ui.config.AdvancedTitleManageActivity"
+            android:exported="false" />
+
         <provider
             android:name=".api.ReaderProvider"
             android:authorities="${applicationId}.readerProvider"

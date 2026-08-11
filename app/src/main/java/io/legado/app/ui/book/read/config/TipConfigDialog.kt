@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.View
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -39,8 +41,10 @@ import io.legado.app.R
 import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
+import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
+import io.legado.app.ui.config.AdvancedTitleManageActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.config.NgInlineColorPicker
 import io.legado.app.ui.design.theme.NgAppTheme
@@ -79,7 +83,9 @@ class TipConfigDialog : BaseComposeDialogFragment() {
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        if (ReadBookConfig.titleMode !in 0..2) ReadBookConfig.titleMode = 0
+        if (ReadBookConfig.titleMode !in 0..AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+            ReadBookConfig.titleMode = 0
+        }
         composeView = view as ComposeView
         composeView.setBackgroundColor(AndroidColor.TRANSPARENT)
         composeView.setViewCompositionStrategy(
@@ -109,6 +115,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         var titleBottom by remember { mutableIntStateOf(ReadBookConfig.titleBottomSpacing) }
         var revision by remember { mutableIntStateOf(0) }
         var activePicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
+        val context = LocalContext.current
         externalRevision
         revision
 
@@ -182,6 +189,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                             getString(R.string.title_left),
                             getString(R.string.title_center),
                             getString(R.string.title_hide),
+                            getString(R.string.advanced_title_mode_label),
                         ),
                         selectedIndex = titleMode,
                         onSelected = {
@@ -191,6 +199,22 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                         },
                         accessibilityLabel = getString(R.string.title),
                     )
+                    if (titleMode == AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+                        Text(
+                            text = getString(R.string.advanced_title_manage),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    context.startActivity(
+                                        Intent(context, AdvancedTitleManageActivity::class.java)
+                                    )
+                                }
+                                .padding(vertical = 10.dp),
+                            color = NgTheme.colors.primary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     ReadConfigSliderRow(
                         title = getString(R.string.title_font_size),

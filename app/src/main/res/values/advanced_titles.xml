@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="advanced_title_preview_template">s1: %1$s\ns2: %2$s</string>
+    <string name="advanced_title_import_title">Import advanced title</string>
+    <string name="advanced_title_invalid_json">Invalid Lottie JSON</string>
+    <string name="advanced_title_manage">Advanced title management</string>
+    <string name="advanced_title_manage_summary">Manage multiple Lottie titles.</string>
+    <string name="advanced_title_builtin">Built-in advanced title</string>
+    <string name="advanced_title_migrated">Migrated advanced title</string>
+    <string name="advanced_title_unnamed">Unnamed advanced title</string>
+    <string name="advanced_title_too_large">Lottie JSON exceeds the 2 MB limit</string>
+    <string name="advanced_title_package_limit">Up to 64 advanced titles can be stored</string>
+    <string name="advanced_title_apply">Apply</string>
+    <string name="advanced_title_current">Current</string>
+    <string name="advanced_title_source_builtin">Built-in</string>
+    <string name="advanced_title_source_local">Local</string>
+    <string name="advanced_title_name">Title name</string>
+    <string name="advanced_title_mode_label">Advanced</string>
+</resources>
