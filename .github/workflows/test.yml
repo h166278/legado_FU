@@ -3,6 +3,7 @@ name: Test Build
 on:
   push:
     branches:
+      - main
       - release
       - 'beta-*'
   pull_request:
