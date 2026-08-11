@@ -31,7 +31,7 @@ jobs:
       release_body: ${{ steps.release-info.outputs.body }}
       build_matrix: ${{ steps.set-matrix.outputs.build_matrix }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: set-ver
@@ -113,7 +113,7 @@ jobs:
       VERSIONL: ${{ needs.prepare.outputs.versionL }}
       CHANNEL: ${{ needs.prepare.outputs.channel }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up JDK 17
@@ -227,7 +227,7 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
       - uses: actions/download-artifact@v8
