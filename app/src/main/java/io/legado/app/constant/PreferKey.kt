@@ -283,6 +283,11 @@ object PreferKey {
     const val tNavBarN = "transparentNavBarNight"
 
     const val showReadTitleAddition = "showReadTitleAddition"
+    const val advancedTitleConfig = "advancedTitleConfig"
+    const val advancedTitleLottieJson = "advancedTitleLottieJson"
+    const val advancedTitleLottiePath = "advancedTitleLottiePath"
+    const val advancedTitlePackage = "advancedTitlePackage"
+    const val advancedTitleHeightFactor = "advancedTitleHeightFactor"
     const val readBarStyleFollowPage = "readBarStyleFollowPage"
     const val contentSelectSpeakMod = "contentReadAloudMod"
     const val editFontScale = "editFontScale"

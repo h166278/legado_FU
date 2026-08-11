@@ -229,6 +229,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.flexbox)
     implementation(libs.gson)
+    implementation(libs.lottie)
 
     //lifecycle
     implementation(libs.lifecycle.common.java8)
