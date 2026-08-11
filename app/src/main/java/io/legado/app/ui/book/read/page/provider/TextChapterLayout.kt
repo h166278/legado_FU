@@ -963,7 +963,7 @@ class TextChapterLayout(
 
     private fun resolveAdvancedTitleLayout(json: String): AdvancedTitleLayout? {
         if (visibleWidth <= 0 || visibleHeight <= 0) return null
-        val maxHeight = visibleHeight - titleTopSpacing - titleBottomSpacing
+        val maxHeight = (visibleHeight - titleTopSpacing - titleBottomSpacing).toFloat()
         if (maxHeight <= 0f) return null
         val heightScale = AdvancedTitleConfig.heightFactor /
             AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR.toFloat()
