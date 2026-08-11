@@ -1,0 +1,279 @@
+package io.legado.app.help.book
+
+import android.os.Build
+import io.legado.app.constant.AppLog
+import io.legado.app.constant.AppPattern
+import io.legado.app.constant.AppPattern.spaceRegex
+import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.ReplaceRule
+import io.legado.app.exception.RegexTimeoutException
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.utils.ChineseUtils
+import io.legado.app.utils.escapeRegex
+import io.legado.app.utils.replace
+import io.legado.app.utils.stackTraceStr
+import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
+import splitties.init.appCtx
+import java.lang.ref.WeakReference
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.regex.Pattern
+
+class ContentProcessor private constructor(
+    private val bookName: String,
+    private val bookOrigin: String
+) {
+
+    companion object {
+        private val processors = hashMapOf<String, WeakReference<ContentProcessor>>()
+        private val isAndroid8 = Build.VERSION.SDK_INT in 26..27
+
+        fun get(book: Book) = get(book.name, book.origin)
+
+        fun get(bookName: String, bookOrigin: String): ContentProcessor {
+            val processorWr = processors[bookName + bookOrigin]
+            var processor: ContentProcessor? = processorWr?.get()
+            if (processor == null) {
+                processor = ContentProcessor(bookName, bookOrigin)
+                processors[bookName + bookOrigin] = WeakReference(processor)
+            }
+            return processor
+        }
+
+        fun upReplaceRules() {
+            processors.forEach {
+                it.value.get()?.upReplaceRules()
+            }
+        }
+
+    }
+
+    private val titleReplaceRules = CopyOnWriteArrayList<ReplaceRule>()
+    private val contentReplaceRules = CopyOnWriteArrayList<ReplaceRule>()
+
+    private fun String.limitLogText(maxLength: Int = 80): String {
+        return replace("\n", "\\n").let {
+            if (it.length > maxLength) {
+                it.take(maxLength) + "..."
+            } else {
+                it
+            }
+        }
+    }
+
+    private fun logReplaceRule(
+        rule: ReplaceRule,
+        chapter: BookChapter,
+        beforeLength: Int,
+        afterLength: Int,
+        sample: String?
+    ) {
+        AppLog.putDebug(
+            buildString {
+                append("替换净化调试: 命中规则\n")
+                append("书籍: ").append(bookName).append('\n')
+                append("书源: ").append(bookOrigin).append('\n')
+                append("章节: ").append(chapter.title).append('\n')
+                append("规则: ").append(rule.name).append(" #").append(rule.id).append('\n')
+                append("正则: ").append(rule.isRegex).append('\n')
+                append("pattern: ").append(rule.pattern.limitLogText()).append('\n')
+                append("replacement: ").append(rule.replacement.limitLogText()).append('\n')
+                append("长度: ").append(beforeLength).append(" -> ").append(afterLength)
+                sample?.let {
+                    append('\n').append("样例: ").append(it.limitLogText())
+                }
+            }
+        )
+    }
+
+    private fun logReplaceRuleMiss(rule: ReplaceRule, chapter: BookChapter) {
+        AppLog.putDebug(
+            buildString {
+                append("替换净化调试: 未命中规则\n")
+                append("书籍: ").append(bookName).append('\n')
+                append("书源: ").append(bookOrigin).append('\n')
+                append("章节: ").append(chapter.title).append('\n')
+                append("规则: ").append(rule.name).append(" #").append(rule.id).append('\n')
+                append("正则: ").append(rule.isRegex).append('\n')
+                append("pattern: ").append(rule.pattern.limitLogText())
+            }
+        )
+    }
+
+    init {
+        upReplaceRules()
+    }
+
+    fun upReplaceRules() {
+        titleReplaceRules.run {
+            clear()
+            addAll(appDb.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin))
+        }
+        contentReplaceRules.run {
+            clear()
+            addAll(appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin))
+        }
+    }
+
+    fun getTitleReplaceRules(): List<ReplaceRule> {
+        return titleReplaceRules
+    }
+
+    @Suppress("MemberVisibilityCanBePrivate")
+    fun getContentReplaceRules(): List<ReplaceRule> {
+        return contentReplaceRules
+    }
+
+    fun getContent(
+        book: Book,
+        chapter: BookChapter,
+        content: String,
+        includeTitle: Boolean = true,
+        useReplace: Boolean = true,
+        chineseConvert: Boolean = true,
+        reSegment: Boolean = true
+    ): BookContent {
+        var mContent = content
+        var sameTitleRemoved = false
+        var effectiveReplaceRules: ArrayList<ReplaceRule>? = null
+        val replaceBook by lazy { book.toReplaceBook() }
+        if (content != "null") {
+            //去除重复标题
+            if (book.getRemoveSameTitle()) try {
+                val name = Pattern.quote(book.name)
+                var title = chapter.title.escapeRegex().replace(spaceRegex, "\\\\s*")
+                var matcher = Pattern.compile("^(\\s|\\p{P}|${name})*${title}(\\s)*")
+                    .matcher(mContent)
+                if (matcher.find()) {
+                    mContent = mContent.substring(matcher.end())
+                    sameTitleRemoved = true
+                } else if (useReplace && book.getUseReplaceRule()) {
+                    title = Pattern.quote(
+                        chapter.getDisplayTitle(
+                            titleReplaceRules,
+                            chineseConvert = false,
+                            replaceBook = replaceBook
+                        )
+                    )
+                    matcher = Pattern.compile("^(\\s|\\p{P}|${name})*${title}(\\s)*")
+                        .matcher(mContent)
+                    if (matcher.find()) {
+                        mContent = mContent.substring(matcher.end())
+                        sameTitleRemoved = true
+                    }
+                }
+            } catch (e: Exception) {
+                AppLog.put("去除重复标题出错\n${e.localizedMessage}", e)
+            }
+            if (reSegment && book.getReSegment()) {
+                //重新分段
+                mContent = ContentHelp.reSegment(mContent, chapter.title)
+            }
+            if (chineseConvert) {
+                //简繁转换
+                try {
+                    when (AppConfig.chineseConverterType) {
+                        1 -> mContent = ChineseUtils.t2s(mContent)
+                        2 -> mContent = ChineseUtils.s2t(mContent)
+                    }
+                } catch (_: Exception) {
+                    appCtx.toastOnUi("简繁转换出错")
+                }
+            }
+            val useHtmlMap = mutableMapOf<String, String>()
+            if (AppConfig.adaptSpecialStyle) { //html处理
+                mContent = AppPattern.useHtmlRegex.replace(mContent) { matchResult ->
+                    val placeholder = "特殊格式的占位不应该被看见${useHtmlMap.size}。"
+                    useHtmlMap[placeholder] = "\n${matchResult.value.replace("\n","")}\n"
+                    placeholder
+                }
+            }
+            if (useReplace && book.getUseReplaceRule()) {
+                //替换
+                effectiveReplaceRules = arrayListOf()
+                mContent = mContent.lines().joinToString("\n") { it.trim() }
+                AppLog.putDebug(
+                    "替换净化调试: 开始正文替换\n" +
+                            "书籍: ${book.name}\n" +
+                            "书源: ${book.origin}\n" +
+                            "章节: ${chapter.title}\n" +
+                            "规则数量: ${getContentReplaceRules().size}\n" +
+                            "正文长度: ${mContent.length}"
+                )
+                getContentReplaceRules().forEach { item ->
+                    if (item.pattern.isEmpty()) {
+                        return@forEach
+                    }
+                    try {
+                        val beforeLength = mContent.length
+                        val sample = if (item.isRegex) {
+                            item.regex.find(mContent)?.value
+                        } else {
+                            val index = mContent.indexOf(item.pattern)
+                            if (index >= 0) item.pattern else null
+                        }
+                        val tmp = if (item.isRegex) {
+                            mContent.replace(
+                                item.name,
+                                item.regex,
+                                item.replacement,
+                                item.getValidTimeoutMillisecond(),
+                                chapter,
+                                replaceBook
+                            )
+                        } else {
+                            mContent.replace(item.pattern, item.replacement)
+                        }
+                        if (mContent != tmp) {
+                            effectiveReplaceRules.add(item)
+                            logReplaceRule(item, chapter, beforeLength, tmp.length, sample)
+                            mContent = tmp
+                        } else {
+                            logReplaceRuleMiss(item, chapter)
+                        }
+                    } catch (e: RegexTimeoutException) {
+                        item.isEnabled = false
+                        appDb.replaceRuleDao.update(item)
+                        mContent = item.name + e.stackTraceStr
+                    } catch (_: CancellationException) {
+                    } catch (e: Exception) {
+                        AppLog.put("替换净化: 规则 ${item.name}替换出错.\n${mContent}", e)
+                        appCtx.toastOnUi("替换净化: 规则 ${item.name}替换出错")
+                    }
+                }
+            }
+            useHtmlMap.forEach { (placeholder, originalContent) ->
+                mContent = mContent.replace(placeholder, originalContent)
+            }
+        }
+        if (includeTitle) {
+            //重新添加标题
+            mContent = chapter.getDisplayTitle(
+                getTitleReplaceRules(),
+                useReplace = useReplace && book.getUseReplaceRule(),
+                replaceBook = replaceBook
+            ) + "\n" + mContent
+        }
+        if (isAndroid8) {
+            mContent = mContent.replace('\u00A0', ' ')
+        }
+        val contents = arrayListOf<String>()
+        mContent.split("\n").forEach { str ->
+            val paragraph = str.trim {
+                it.code <= 0x20 || it == '　'
+            }
+            if (paragraph.isNotEmpty()) {
+                if (contents.isEmpty() && includeTitle) {
+                    contents.add(paragraph)
+                } else {
+                    contents.add("${ReadBookConfig.paragraphIndent}$paragraph")
+                }
+            }
+        }
+        return BookContent(sameTitleRemoved, contents, effectiveReplaceRules)
+    }
+
+}

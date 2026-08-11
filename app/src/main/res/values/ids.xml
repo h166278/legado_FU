@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <item name="tag" type="id" />
+    <item name="tag1" type="id" />
+    <item name="tag2" type="id" />
+
+    <item name="menu_group_1" type="id" />
+    <item name="menu_group_2" type="id" />
+
+    <item name="menu_1" type="id" />
+    <item name="menu_tts_engine_more" type="id" />
+    <item name="menu_tts_engine_add" type="id" />
+    <item name="menu_tts_engine_import_local" type="id" />
+    <item name="menu_tts_engine_import_online" type="id" />
+    <item name="menu_show_disabled" type="id" />
+    <item name="menu_copy_all" type="id" />
+
+    <item name="menu_ai_assistant" type="id" />
+    <item name="menu_add_books" type="id" />
+    <item name="menu_add_local" type="id" />
+    <item name="menu_remote" type="id" />
+    <item name="menu_add_url" type="id" />
+    <item name="menu_bookshelf_layout" type="id" />
+    <item name="menu_bookshelf_backup" type="id" />
+    <item name="menu_export_bookshelf" type="id" />
+    <item name="menu_import_bookshelf" type="id" />
+    <item name="menu_diagnostics" type="id" />
+    <item name="menu_source_groups" type="id" />
+    <item name="menu_clear_history" type="id" />
+    <item name="menu_precision_search" type="id" />
+    <item name="menu_block_source_dialogs" type="id" />
+    <item name="menu_search_scope" type="id" />
+
+    <item name="fast_scroller" type="id" />
+
+    <item name="bettermovementmethod_highlight_background_span" type="id" />
+    <item name="small_id" type="id" />
+    <item name="full_id" type="id" />
+    <item name="text_watcher" type="id" />
+    <item name="read_aloud_mini_player" type="id" />
+    <item name="iv_read_aloud_mini_cover" type="id" />
+    <item name="btn_read_aloud_mini_play" type="id" />
+    <item name="tv_read_aloud_mini_status" type="id" />
+    <item name="btn_read_aloud_mini_close" type="id" />
+
+</resources>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?android:attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:minHeight="52dp"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="8dp">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/iv_font"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_interface_setting" />
+
+    <TextView
+        android:id="@+id/tv_font"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:textColor="@color/primaryText"
+        android:textSize="16sp" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/iv_checked"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ng_ic_popup_selected"
+        android:visibility="invisible"
+        app:tint="@color/primaryText" />
+
+</LinearLayout>

@@ -1,0 +1,53 @@
+package io.legado.app.ui.config
+
+import io.legado.app.help.ai.AiProviderSetting
+import io.legado.app.help.ai.AiProviderType
+import io.legado.app.help.ai.normalizeAiApiPath
+
+internal fun AiProviderSetting.toProviderFormScreenState(
+    providerTypeLabel: String
+): AiProviderFormScreenState {
+    return AiProviderFormScreenState(
+        providerId = id,
+        builtIn = builtIn,
+        providerType = providerTypeLabel,
+        name = name,
+        apiKey = apiKey,
+        baseUrl = baseUrl,
+        chatPath = chatCompletionsPath,
+        timeoutSeconds = timeoutSeconds.toString(),
+        enabled = enabled,
+        streamResponseEnabled = streamResponseEnabled,
+        openAiCompatible = type == AiProviderType.OPENAI,
+        useCustomBalanceUrl = useCustomBalanceUrl,
+        balanceUrl = normalizeAiApiPath(baseUrl, balanceUrl),
+        balanceJsonPath = balanceJsonPath,
+        useCustomModelsUrl = useCustomModelsUrl,
+        modelsUrl = normalizeAiApiPath(baseUrl, modelsUrl)
+    )
+}
+
+internal fun AiProviderFormScreenState.applyTo(
+    source: AiProviderSetting
+): AiProviderSetting {
+    val resolvedBaseUrl = baseUrl.trim().ifBlank { source.baseUrl }
+    return source.copy(
+        enabled = enabled,
+        name = name.trim().ifBlank { source.name },
+        apiKey = apiKey.trim(),
+        baseUrl = resolvedBaseUrl,
+        model = source.model,
+        timeoutSeconds = timeoutSeconds
+            .toIntOrNull()
+            ?.coerceIn(5, 600)
+            ?: source.timeoutSeconds,
+        chatCompletionsPath = chatPath.trim()
+            .ifBlank { source.chatCompletionsPath },
+        modelsUrl = normalizeAiApiPath(resolvedBaseUrl, modelsUrl.trim()),
+        useCustomModelsUrl = useCustomModelsUrl,
+        balanceUrl = normalizeAiApiPath(resolvedBaseUrl, balanceUrl.trim()),
+        balanceJsonPath = balanceJsonPath.trim(),
+        useCustomBalanceUrl = useCustomBalanceUrl,
+        streamResponseEnabled = streamResponseEnabled
+    )
+}
