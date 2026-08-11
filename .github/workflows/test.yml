@@ -135,7 +135,7 @@ jobs:
             printf '%s\n' "$UPDATE_LOG_CONTENT"
           } > "$GITHUB_WORKSPACE/app/src/main/assets/updateLog.md"
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Release Apk Sign
         env:
