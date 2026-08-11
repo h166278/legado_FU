@@ -4,7 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.drawable.LayerDrawable
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
@@ -15,6 +19,8 @@ import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.databinding.ViewBookPageBinding
+import io.legado.app.help.config.AdvancedTitleConfig
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
@@ -56,6 +62,7 @@ class PageView(context: Context) : FrameLayout(context) {
     private var tvTimeBattery: BatteryView? = null
     private var tvTimeBatteryP: BatteryView? = null
     private var isMainView = false
+    private var advancedTitleKey: String? = null
     var isScroll = false
 
     val headerHeight: Int
@@ -343,6 +350,7 @@ class PageView(context: Context) : FrameLayout(context) {
      * 设置内容
      */
     fun setContent(textPage: TextPage, resetPageOffset: Boolean = true) {
+        upAdvancedTitle(textPage)
         if (isMainView && !isScroll) {
             setProgress(textPage)
         } else {
@@ -354,6 +362,72 @@ class PageView(context: Context) : FrameLayout(context) {
             resetPageOffset()
         }
         binding.contentTextView.setContent(textPage)
+    }
+
+    private fun upAdvancedTitle(textPage: TextPage) {
+        val lottie = binding.advancedTitleLottie
+        val fallback = binding.advancedTitleFallback
+        fun hide() {
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
+            fallback.visibility = View.GONE
+            advancedTitleKey = null
+        }
+        if (ReadBookConfig.titleMode != AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+            hide()
+            return
+        }
+        val block = textPage.advancedTitleBlocks.firstOrNull() ?: run {
+            hide()
+            return
+        }
+        val width = block.width.toInt().coerceAtLeast(1)
+        val height = block.height.toInt().coerceAtLeast(1)
+        if (isScroll) {
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
+            val params = fallback.layoutParams as ViewGroup.LayoutParams
+            params.width = width
+            params.height = height
+            fallback.layoutParams = params
+            fallback.translationX = titleTranslationX(block.offsetX, width)
+            fallback.translationY = titleTranslationY(block.offsetY, height)
+            fallback.text = textPage.title
+            fallback.visibility = View.VISIBLE
+            return
+        }
+        fallback.visibility = View.GONE
+        val params = lottie.layoutParams as ViewGroup.LayoutParams
+        params.width = width
+        params.height = height
+        lottie.layoutParams = params
+        lottie.translationX = titleTranslationX(block.offsetX, width)
+        lottie.translationY = titleTranslationY(block.offsetY, height)
+        lottie.setFontAssetDelegate(advancedTitleFontDelegate)
+        if (advancedTitleKey != block.json) {
+            lottie.cancelAnimation()
+            lottie.setAnimationFromJson(block.json, null)
+            advancedTitleKey = block.json
+        }
+        lottie.repeatCount = LottieDrawable.INFINITE
+        lottie.visibility = View.VISIBLE
+        lottie.playAnimation()
+    }
+
+    private fun titleTranslationX(offsetX: Float, targetWidth: Int): Float {
+        val contentWidth = binding.contentTextView.width
+        if (contentWidth <= 0) return offsetX
+        return offsetX - (contentWidth - targetWidth) / 2f
+    }
+
+    private fun titleTranslationY(offsetY: Float, targetHeight: Int): Float {
+        val contentHeight = binding.contentTextView.height
+        if (contentHeight <= 0) return offsetY
+        return offsetY.coerceIn(0f, (contentHeight - targetHeight).coerceAtLeast(0).toFloat())
+    }
+
+    private val advancedTitleFontDelegate = AdvancedTitleFontAssetDelegate {
+        ChapterProvider.typeface
     }
 
     fun invalidateContentView() {

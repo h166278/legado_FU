@@ -58,6 +58,15 @@ data class TextPage(
     var paddingTop = ChapterProvider.paddingTop
     var isCompleted = false
     var hasReadAloudSpan = false
+    val advancedTitleBlocks = arrayListOf<AdvancedTitleBlock>()
+
+    data class AdvancedTitleBlock(
+        val offsetX: Float,
+        val offsetY: Float,
+        val width: Float,
+        val height: Float,
+        val json: String
+    )
 
     @JvmField
     var textChapter = emptyTextChapter
