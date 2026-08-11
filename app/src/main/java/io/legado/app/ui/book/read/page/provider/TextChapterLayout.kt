@@ -976,7 +976,7 @@ class TextChapterLayout(
                 if (width > 0f && height > 0f) height / width else 112f / 720f
             }
         }.getOrDefault(112f / 720f)
-        val requestedWidth = (visibleWidth * 0.86f * titleScale * heightScale)
+        val requestedWidth = (visibleWidth.toFloat() * 0.86f * titleScale * heightScale)
             .coerceIn(1f, visibleWidth.toFloat())
         val requestedHeight = requestedWidth * ratio
         val blockHeight = requestedHeight.coerceAtMost(maxHeight)

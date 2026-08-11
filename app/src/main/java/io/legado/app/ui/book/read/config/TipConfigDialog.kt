@@ -210,7 +210,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                                     )
                                 }
                                 .padding(vertical = 10.dp),
-                            color = NgTheme.colors.primary,
+                            color = Color(NgTheme.colors.primary),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
