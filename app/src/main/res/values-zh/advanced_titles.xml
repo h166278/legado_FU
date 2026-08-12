@@ -16,4 +16,14 @@
     <string name="advanced_title_source_local">本地</string>
     <string name="advanced_title_name">标题名称</string>
     <string name="advanced_title_mode_label">高级</string>
+    <string name="advanced_title_font_weight">字重</string>
+    <string name="advanced_title_text_color">文字颜色</string>
+    <string name="advanced_title_add">添加</string>
+    <string name="advanced_title_applied">已应用</string>
+    <string name="advanced_title_current_source">当前 · %1$s</string>
+    <string name="advanced_title_create_builtin">从内置模板新建</string>
+    <string name="advanced_title_import_file">从文件导入</string>
+    <string name="advanced_title_import_network">网络导入</string>
+    <string name="advanced_title_builtin_copy">内置高级标题副本</string>
+    <string name="advanced_title_network_url">HTTPS JSON 地址</string>
 </resources>

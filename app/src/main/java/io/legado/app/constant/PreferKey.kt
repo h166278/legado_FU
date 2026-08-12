@@ -288,6 +288,8 @@ object PreferKey {
     const val advancedTitleLottiePath = "advancedTitleLottiePath"
     const val advancedTitlePackage = "advancedTitlePackage"
     const val advancedTitleHeightFactor = "advancedTitleHeightFactor"
+    const val advancedTitleFontWeight = "advancedTitleFontWeight"
+    const val advancedTitleTextColor = "advancedTitleTextColor"
     const val readBarStyleFollowPage = "readBarStyleFollowPage"
     const val contentSelectSpeakMod = "contentReadAloudMod"
     const val editFontScale = "editFontScale"
