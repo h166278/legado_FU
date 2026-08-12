@@ -154,13 +154,19 @@ internal fun ReadConfigSliderRow(
     valueRange: IntRange,
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    stepSize: Int = 1,
 ) {
+    require(stepSize > 0)
     val colors = NgTheme.colors
-    val dragState = remember { mutableIntStateOf(value.coerceIn(valueRange)) }
+    val normalizedValue = value.coerceIn(valueRange).let { candidate ->
+        valueRange.first + ((candidate - valueRange.first) / stepSize) * stepSize
+    }
+    val dragState = remember { mutableIntStateOf(normalizedValue) }
     val trackingState = remember { mutableStateOf(false) }
     val currentCallback = rememberUpdatedState(onValueChange)
     val currentRange = rememberUpdatedState(valueRange)
-    val committedValue = value.coerceIn(valueRange)
+    val currentStepSize = rememberUpdatedState(stepSize)
+    val committedValue = normalizedValue
     val displayValue = if (trackingState.value) dragState.intValue else committedValue
     Row(
         modifier = modifier
@@ -181,8 +187,8 @@ internal fun ReadConfigSliderRow(
                 .height(36.dp),
             factory = { context ->
                 AppCompatSeekBar(context).apply {
-                    max = currentRange.value.last - currentRange.value.first
-                    progress = displayValue - currentRange.value.first
+                    max = (currentRange.value.last - currentRange.value.first) / currentStepSize.value
+                    progress = (displayValue - currentRange.value.first) / currentStepSize.value
                     applyTint(colors.primary)
                     setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                         override fun onProgressChanged(
@@ -192,19 +198,22 @@ internal fun ReadConfigSliderRow(
                         ) {
                             if (fromUser) {
                                 val range = currentRange.value
-                                dragState.intValue = (progress + range.first).coerceIn(range)
+                                dragState.intValue = (progress * currentStepSize.value + range.first)
+                                    .coerceIn(range)
                             }
                         }
 
                         override fun onStartTrackingTouch(seekBar: SeekBar) {
                             val range = currentRange.value
-                            dragState.intValue = (seekBar.progress + range.first).coerceIn(range)
+                            dragState.intValue = (seekBar.progress * currentStepSize.value + range.first)
+                                .coerceIn(range)
                             trackingState.value = true
                         }
 
                         override fun onStopTrackingTouch(seekBar: SeekBar) {
                             val range = currentRange.value
-                            val finalValue = (seekBar.progress + range.first).coerceIn(range)
+                            val finalValue = (seekBar.progress * currentStepSize.value + range.first)
+                                .coerceIn(range)
                             dragState.intValue = finalValue
                             currentCallback.value(finalValue)
                             trackingState.value = false
@@ -213,8 +222,8 @@ internal fun ReadConfigSliderRow(
                 }
             },
             update = { seekBar ->
-                seekBar.max = valueRange.last - valueRange.first
-                val progress = displayValue - valueRange.first
+                seekBar.max = (valueRange.last - valueRange.first) / stepSize
+                val progress = (displayValue - valueRange.first) / stepSize
                 if (!seekBar.isPressed && seekBar.progress != progress) {
                     seekBar.progress = progress
                 }

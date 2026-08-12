@@ -71,7 +71,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         private const val POSITION_RIGHT = 2
     }
 
-    private enum class ColorPickerTarget { TIP, DIVIDER }
+    private enum class ColorPickerTarget { TIP, DIVIDER, ADVANCED_TITLE }
 
     private lateinit var composeView: ComposeView
     private var externalRevision by mutableIntStateOf(0)
@@ -113,6 +113,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         var titleSize by remember { mutableIntStateOf(ReadBookConfig.titleSize) }
         var titleTop by remember { mutableIntStateOf(ReadBookConfig.titleTopSpacing) }
         var titleBottom by remember { mutableIntStateOf(ReadBookConfig.titleBottomSpacing) }
+        var advancedTitleWeight by remember { mutableIntStateOf(AdvancedTitleConfig.fontWeight) }
         var revision by remember { mutableIntStateOf(0) }
         var activePicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
         val context = LocalContext.current
@@ -161,10 +162,10 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                 val target = requireNotNull(activePicker)
                 NgInlineColorPicker(
                     title = getString(
-                        if (target == ColorPickerTarget.TIP) {
-                            R.string.tip_text_color
-                        } else {
-                            R.string.tip_divider_color
+                        when (target) {
+                            ColorPickerTarget.TIP -> R.string.tip_text_color
+                            ColorPickerTarget.DIVIDER -> R.string.tip_divider_color
+                            ColorPickerTarget.ADVANCED_TITLE -> R.string.advanced_title_text_color
                         }
                     ),
                     initialColor = initialColorFor(target),
@@ -209,6 +210,27 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                                         Intent(context, AdvancedTitleManageActivity::class.java)
                                     )
                                 }
+                                .padding(vertical = 10.dp),
+                            color = Color(NgTheme.colors.primary),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        ReadConfigSliderRow(
+                            title = getString(R.string.advanced_title_font_weight),
+                            value = advancedTitleWeight,
+                            valueRange = 100..900,
+                            stepSize = 100,
+                            onValueChange = {
+                                advancedTitleWeight = it
+                                AdvancedTitleConfig.fontWeight = it
+                                postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                            },
+                        )
+                        Text(
+                            text = getString(R.string.advanced_title_text_color),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { activePicker = ColorPickerTarget.ADVANCED_TITLE }
                                 .padding(vertical = 10.dp),
                             color = Color(NgTheme.colors.primary),
                             fontSize = 14.sp,
@@ -499,23 +521,28 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             0 -> ReadBookConfig.textColor
             else -> color
         }
+
+        ColorPickerTarget.ADVANCED_TITLE -> AdvancedTitleConfig.textColor
+            ?: ReadBookConfig.resolvedTitleColor
     }
 
     private fun applySelectedColor(target: ColorPickerTarget, color: Int) {
         when (target) {
             ColorPickerTarget.TIP -> ReadTipConfig.tipColor = color
             ColorPickerTarget.DIVIDER -> ReadTipConfig.tipDividerColor = color
+            ColorPickerTarget.ADVANCED_TITLE -> AdvancedTitleConfig.textColor = color
         }
         postEvent(EventBus.TIP_COLOR, "")
-        postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+        postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
     }
 
     private fun resetSelectedColor(target: ColorPickerTarget) {
         when (target) {
             ColorPickerTarget.TIP -> ReadTipConfig.tipColor = 0
             ColorPickerTarget.DIVIDER -> ReadTipConfig.tipDividerColor = -1
+            ColorPickerTarget.ADVANCED_TITLE -> AdvancedTitleConfig.textColor = null
         }
-        postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+        postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
     }
 
     private fun currentTipValue(section: Int, position: Int): Int = ReadTipConfig.run {
