@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.page
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.LayerDrawable
 import android.view.LayoutInflater
 import android.view.View
@@ -393,6 +394,8 @@ class PageView(context: Context) : FrameLayout(context) {
             fallback.translationX = titleTranslationX(block.offsetX, width)
             fallback.translationY = titleTranslationY(block.offsetY, height)
             fallback.text = textPage.title
+            fallback.typeface = advancedTitleTypeface()
+            fallback.setTextColor(AdvancedTitleConfig.textColor ?: ReadBookConfig.resolvedTitleColor)
             fallback.visibility = View.VISIBLE
             return
         }
@@ -426,8 +429,19 @@ class PageView(context: Context) : FrameLayout(context) {
         return offsetY.coerceIn(0f, (contentHeight - targetHeight).coerceAtLeast(0).toFloat())
     }
 
-    private val advancedTitleFontDelegate = AdvancedTitleFontAssetDelegate {
-        ChapterProvider.typeface
+    private val advancedTitleFontDelegate = AdvancedTitleFontAssetDelegate(
+        preferredTypeface = { ChapterProvider.typeface },
+        preferredWeight = { AdvancedTitleConfig.fontWeight },
+    )
+
+    private fun advancedTitleTypeface(): Typeface {
+        val weight = AdvancedTitleConfig.fontWeight
+        val base = ChapterProvider.typeface ?: Typeface.DEFAULT
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            Typeface.create(base, weight, false)
+        } else {
+            Typeface.create(base, if (weight >= 700) Typeface.BOLD else Typeface.NORMAL)
+        }
     }
 
     fun invalidateContentView() {
