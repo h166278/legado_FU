@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassStyle
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.theme.NgTheme
@@ -760,7 +759,7 @@ private fun TextSelectionSubtleGlassSurface(
 
 @Composable
 private fun textSelectionBaseContainerColor(): Color {
-    val floatingStyle = NgGlassDefaults.floatingStyle()
+    val floatingStyle = readFloatingGlassStyle()
     return lerp(floatingStyle.containerTop, floatingStyle.containerBottom, 0.5f)
 }
 
@@ -769,7 +768,7 @@ private fun textSelectionSubtleGlassStyle(
     containerColor: Color? = null,
     prominentContent: Boolean = false,
 ): NgGlassStyle {
-    val floatingStyle = NgGlassDefaults.floatingStyle()
+    val floatingStyle = readFloatingGlassStyle()
     val isEInk = NgTheme.snapshot.isEInk
     fun prominent(color: Color): Color {
         if (!prominentContent || isEInk) return color

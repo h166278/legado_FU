@@ -370,7 +370,7 @@ private fun ChineseConverterSelector(
                             modifier = Modifier.weight(1f),
                             color = Color(
                                 if (selected) {
-                                    NgTheme.colors.primary
+                                    NgTheme.colors.secondary
                                 } else {
                                     NgTheme.colors.onSurface
                                 }

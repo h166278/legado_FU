@@ -43,7 +43,6 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.book.read.config.showReadConfirmDialog
 import io.legado.app.ui.browser.WebViewActivity
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgThemeSnapshot
@@ -274,6 +273,7 @@ class ReadMenu @JvmOverloads constructor(
     }
 
     fun reset() {
+        ReadFloatingAppearanceState.refreshFromConfig()
         readMenuThemeSnapshot = resolveReadMenuThemeSnapshot()
         upColorConfig()
         initGlassSurfaces()
@@ -343,7 +343,7 @@ class ReadMenu @JvmOverloads constructor(
                 NgGlassSurface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(12.dp),
-                    style = NgGlassDefaults.floatingStyle()
+                    style = readFloatingGlassStyle()
                 ) {}
             }
         }
@@ -355,7 +355,7 @@ class ReadMenu @JvmOverloads constructor(
                 NgGlassSurface(
                     modifier = Modifier.fillMaxSize(),
                     shape = RoundedCornerShape(12.dp),
-                    style = NgGlassDefaults.floatingStyle()
+                    style = readFloatingGlassStyle()
                 ) {}
             }
         }
@@ -891,7 +891,7 @@ class ReadMenu @JvmOverloads constructor(
         enabled: Boolean = ReadBook.bookSource?.enabled != false
     ) = binding.tvSourceName.run {
         setTextColor(
-            if (enabled) readMenuThemeSnapshot.colors.primary
+            if (enabled) readMenuThemeSnapshot.colors.secondary
             else readMenuThemeSnapshot.colors.onSurfaceVariant
         )
         paintFlags = if (enabled) {

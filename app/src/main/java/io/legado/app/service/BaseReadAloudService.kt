@@ -108,6 +108,8 @@ abstract class BaseReadAloudService : BaseService(),
             return isRun && (actualPlaybackConfirmed || !pause)
         }
 
+        fun isActualPlaybackConfirmed(): Boolean = isRun && actualPlaybackConfirmed
+
         fun isPreparing(): Boolean = isRun && preparationStage != PREPARATION_NONE
 
         fun preparationMessage(): String = when (preparationStage) {
@@ -528,6 +530,7 @@ abstract class BaseReadAloudService : BaseService(),
      */
     protected fun syncActualPlaybackState(isPlaying: Boolean) {
         if (playbackStateOwner !== this) return
+        val stateChanged = actualPlaybackConfirmed != isPlaying
         actualPlaybackConfirmed = isPlaying
         if (isPlaying && pause) {
             pause = false
@@ -535,6 +538,8 @@ abstract class BaseReadAloudService : BaseService(),
             needResumeOnCallStateIdle = false
             upReadAloudNotification()
             upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
+            postEvent(EventBus.ALOUD_STATE, Status.PLAY)
+        } else if (isPlaying && stateChanged) {
             postEvent(EventBus.ALOUD_STATE, Status.PLAY)
         }
     }

@@ -27,6 +27,7 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.dpToPx
@@ -40,6 +41,7 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
 
     private var selectedTab by mutableStateOf(ReadMoreConfigTab.INTERFACE)
     private var screenState by mutableStateOf<ReadMoreConfigUiState?>(null)
+    private var themeSnapshot by mutableStateOf<NgThemeSnapshot?>(null)
     private var bottomDialogRegistered = false
 
     private val readActivity: ReadBookActivity?
@@ -70,6 +72,7 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
             }
         }
         refreshUi()
+        themeSnapshot = ReadDrawerStyle.themeSnapshot(requireContext())
         val actions = createActions()
         (view as ComposeView).apply {
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -77,16 +80,18 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
             )
             setContent {
-                NgAppTheme(
-                    snapshot = ReadDrawerStyle.themeSnapshot(requireContext()),
-                    updateSystemBars = false,
-                ) {
-                    screenState?.let { state ->
-                        ReadMoreConfigScreen(
-                            tab = selectedTab,
-                            state = state,
-                            actions = actions,
-                        )
+                themeSnapshot?.let { snapshot ->
+                    NgAppTheme(
+                        snapshot = snapshot,
+                        updateSystemBars = false,
+                    ) {
+                        screenState?.let { state ->
+                            ReadMoreConfigScreen(
+                                tab = selectedTab,
+                                state = state,
+                                actions = actions,
+                            )
+                        }
                     }
                 }
             }

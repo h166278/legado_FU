@@ -1,10 +1,12 @@
 package io.legado.app.ui.design.theme
 
+import com.materialkolor.hct.Hct
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 
 class NgThemeResolverTest {
 
@@ -63,6 +65,55 @@ class NgThemeResolverTest {
         assertEquals(1f, snapshot.effects.dialogAlpha)
         assertEquals(0, snapshot.effects.blurRadiusDp)
         assertEquals(0, snapshot.motion.mediumDurationMs)
+    }
+
+    @Test
+    fun chromaScalingKeepsToneAndUsesTheOriginalColorAsTheEndpoint() {
+        val sourceColor = 0xFFF78E66.toInt()
+        val source = Hct.fromInt(sourceColor)
+        val neutral = Hct.fromInt(NgColorMath.scaleChroma(sourceColor, 0f))
+        val middle = Hct.fromInt(NgColorMath.scaleChroma(sourceColor, 0.5f))
+        val original = Hct.fromInt(NgColorMath.scaleChroma(sourceColor, 1f))
+
+        assertEquals(source.tone, neutral.tone, 1.0)
+        assertEquals(source.tone, middle.tone, 1.0)
+        assertEquals(source.tone, original.tone, 1.0)
+        assertTrue(neutral.chroma < middle.chroma)
+        assertEquals(source.chroma * 0.5, middle.chroma, 1.5)
+        assertEquals(source.chroma, original.chroma, 1.0)
+    }
+
+    @Test
+    fun neutralToPrimaryBlendLinearlyChangesEveryArgbChannel() {
+        val neutralContainer = 0xFFEEEEEE.toInt()
+        val targetColor = 0xFFF78E66.toInt()
+        fun channel(color: Int, shift: Int): Int = (color ushr shift) and 0xFF
+
+        (0..100).forEach { percent ->
+            val fraction = percent / 100f
+            val actual = NgColorMath.blend(neutralContainer, targetColor, fraction)
+            val inverse = 1f - fraction
+            assertEquals(
+                (channel(neutralContainer, 24) * inverse +
+                    channel(targetColor, 24) * fraction).roundToInt(),
+                channel(actual, 24),
+            )
+            assertEquals(
+                (channel(neutralContainer, 16) * inverse +
+                    channel(targetColor, 16) * fraction).roundToInt(),
+                channel(actual, 16),
+            )
+            assertEquals(
+                (channel(neutralContainer, 8) * inverse +
+                    channel(targetColor, 8) * fraction).roundToInt(),
+                channel(actual, 8),
+            )
+            assertEquals(
+                (channel(neutralContainer, 0) * inverse +
+                    channel(targetColor, 0) * fraction).roundToInt(),
+                channel(actual, 0),
+            )
+        }
     }
 
     private fun lightInput() = NgLegacyThemeInput(

@@ -225,6 +225,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         override fun onStart(s: String) {
             LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
+            syncActualPlaybackState(isPlaying = true)
             textChapter?.let {
                 if (isReadAloudTextSilent()) {
                     nextParagraph()

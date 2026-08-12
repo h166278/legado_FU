@@ -245,7 +245,8 @@ class ReadAloudModeSheet(
 
     private fun applyReadAloudModeCardStyles() = binding.run {
         val safeContext = root.context
-        val activeColor = ReadDrawerStyle.accentColor(safeContext)
+        val activeIndicatorColor = ReadDrawerStyle.indicatorColor(safeContext)
+        val activeTextColor = ReadDrawerStyle.accentColor(safeContext)
         val innerSurfaceColor = ContextCompat.getColor(safeContext, R.color.ng_surface)
         val textColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface)
         val inactiveIconColor = ContextCompat.getColor(safeContext, R.color.ng_on_surface_variant)
@@ -285,8 +286,10 @@ class ReadAloudModeSheet(
                 cornerRadius = 14.dpToPx().toFloat()
                 setColor(innerSurfaceColor)
             }
-            icon.imageTintList = ColorStateList.valueOf(if (selected) activeColor else inactiveIconColor)
-            title.setTextColor(if (selected) activeColor else textColor)
+            icon.imageTintList = ColorStateList.valueOf(
+                if (selected) activeIndicatorColor else inactiveIconColor
+            )
+            title.setTextColor(if (selected) activeTextColor else textColor)
             title.typeface = Typeface.defaultFromStyle(
                 if (selected) Typeface.BOLD else Typeface.NORMAL
             )
@@ -458,7 +461,7 @@ class ReadAloudModeSheet(
 }
 
 private fun SeekBar.applyReadAloudSliderStyle() {
-    val accent = ReadDrawerStyle.accentColor(context)
+    val accent = ReadDrawerStyle.indicatorColor(context)
     val trackBackgroundTint = ColorStateList.valueOf(ColorUtils.adjustAlpha(accent, 0.18f))
     progressDrawable = ContextCompat.getDrawable(context, R.drawable.ng_read_aloud_progress)?.mutate()
     progressTintList = ColorStateList.valueOf(accent)
@@ -516,7 +519,7 @@ class ReadAloudMoreSheet : ReadAloudBottomSheet(R.layout.dialog_read_aloud_more_
         }
         seekWorkerCount.applyReadAloudSliderStyle()
         seekWorkerCount.tickMarkTintList = ColorStateList.valueOf(
-            ReadDrawerStyle.accentColor(view.context)
+            ReadDrawerStyle.indicatorColor(view.context)
         )
         seekWorkerCount.progress = AppConfig.readAloudWorkerCount - 1
         syncWorkerCount(seekWorkerCount.progress + 1)
@@ -667,7 +670,7 @@ class ReadAloudCatalogSheet(
             setTrackVisible(true)
             setHideScrollbar(false)
             setBubbleVisible(false)
-            setHandleColor(ReadDrawerStyle.accentColor(activity))
+            setHandleColor(ReadDrawerStyle.indicatorColor(activity))
             setTrackColor(
                 ColorUtils.adjustAlpha(
                     ContextCompat.getColor(activity, R.color.ng_on_surface_variant),
@@ -694,14 +697,14 @@ class ReadAloudCatalogSheet(
                         shape = GradientDrawable.OVAL
                         setColor(
                             ColorUtils.adjustAlpha(
-                                ReadDrawerStyle.accentColor(activity),
+                                ReadDrawerStyle.indicatorColor(activity),
                                 0.12f,
                             )
                         )
                         setStroke(
                             1.dpToPx(),
                             ColorUtils.adjustAlpha(
-                                ReadDrawerStyle.accentColor(activity),
+                                ReadDrawerStyle.indicatorColor(activity),
                                 0.2f,
                             )
                         )
@@ -713,7 +716,7 @@ class ReadAloudCatalogSheet(
             }
             imageTintList = ColorStateList.valueOf(
                 ColorUtils.adjustAlpha(
-                    ReadDrawerStyle.accentColor(activity),
+                    ReadDrawerStyle.indicatorColor(activity),
                     0.9f,
                 )
             )

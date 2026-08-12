@@ -24,6 +24,7 @@ fun NgDockSlider(
     valueText: String,
     minimumText: String,
     maximumText: String,
+    showBoundLabels: Boolean = true,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
@@ -65,14 +66,16 @@ fun NgDockSlider(
             variant = NgSliderVariant.CONTINUOUS,
             onValueChangeFinished = onValueChangeFinished
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            BoundLabel(minimumText)
-            BoundLabel(maximumText)
+        if (showBoundLabels) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                BoundLabel(minimumText)
+                BoundLabel(maximumText)
+            }
         }
     }
 }

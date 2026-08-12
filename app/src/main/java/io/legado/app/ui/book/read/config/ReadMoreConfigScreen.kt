@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -58,7 +59,7 @@ import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.ui.book.read.ReadDrawerStyle
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.book.read.readFloatingGlassStyle
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSlider
 import io.legado.app.ui.design.components.compose.NgSliderVariant
@@ -129,9 +130,7 @@ internal fun ReadMoreConfigScreen(
             .padding(horizontal = 8.dp, vertical = 8.dp)
             .fillMaxSize(),
         shape = RoundedCornerShape(20.dp),
-        style = NgGlassDefaults.style(
-            containerAlpha = NgTheme.effects.dialogAlpha
-        ),
+        style = readFloatingGlassStyle(),
     ) {
         Column(
             modifier = Modifier
@@ -345,7 +344,7 @@ private fun ContentSettingsPage(
     SettingsColumn {
         ReadMoreSectionLabel(
             text = stringResource(R.string.read_settings_current_book),
-            color = accentColor,
+            color = Color(NgTheme.colors.secondary),
         )
         ActionSettingRow(
             title = stringResource(R.string.simulated_reading),
@@ -365,7 +364,7 @@ private fun ContentSettingsPage(
         ReadMoreDivider(contentColor)
         ReadMoreSectionLabel(
             text = stringResource(R.string.read_settings_all_books),
-            color = accentColor,
+            color = Color(NgTheme.colors.secondary),
         )
         SwitchSettingRow(
             title = stringResource(R.string.use_zh_layout),
@@ -548,7 +547,7 @@ private fun ChoiceSettingRow(
                     NgGlassSurface(
                         modifier = Modifier.width(156.dp),
                         shape = RoundedCornerShape(12.dp),
-                        style = NgGlassDefaults.floatingStyle(),
+                        style = readFloatingGlassStyle(),
                     ) {
                         options.forEach { option ->
                             DropdownMenuItem(
@@ -561,7 +560,7 @@ private fun ChoiceSettingRow(
                                     Text(
                                         text = option.label,
                                         color = if (option.value == selectedValue) {
-                                            Color(NgTheme.colors.primary)
+                                            Color(NgTheme.colors.secondary)
                                         } else {
                                             contentColor
                                         },
@@ -637,7 +636,7 @@ internal fun ReadThresholdSliderDialog(
     NgGlassSurface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        style = NgGlassDefaults.floatingStyle(),
+        style = readFloatingGlassStyle(),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -669,7 +668,7 @@ internal fun ReadThresholdSliderDialog(
             Text(
                 text = valueLabel(value),
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(NgTheme.colors.primary),
+                color = Color(NgTheme.colors.secondary),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,

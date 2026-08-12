@@ -25,6 +25,7 @@ import androidx.core.view.doOnLayout
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.NgColorConfigStore
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReadFloatingColorStyle
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
@@ -93,19 +94,35 @@ object ReadDrawerStyle {
     /**
      * 阅读抽屉跟随阅读页自己的日夜模式，而不是应用主题的日夜模式。
      */
-    fun themeSnapshot(context: Context): NgThemeSnapshot = if (AppConfig.isEInkMode) {
+    fun themeSnapshot(
+        context: Context,
+        primaryStrengthPercent: Int = ReadBookConfig.durConfig.curReadFloatingPrimaryStrength(),
+        colorStyle: ReadFloatingColorStyle = ReadBookConfig.durConfig.curReadFloatingColorStyle(),
+    ): NgThemeSnapshot = if (AppConfig.isEInkMode) {
         NgThemeResolver.resolve(context)
     } else {
-        NgThemeResolver.resolve(
+        val isDark = ReadBookConfig.isNightTheme
+        val base = NgThemeResolver.resolve(
             context = context,
             colors = NgColorConfigStore.current(context),
-            isDark = ReadBookConfig.isNightTheme,
+            isDark = isDark,
+        )
+        val seeded = ReadFloatingPalette.applySeed(
+            base = base,
+            seed = ReadBookConfig.durConfig.curReadFloatingSeed(),
+        )
+        ReadFloatingPalette.applySemanticRoles(
+            snapshot = seeded,
+            primaryStrengthPercent = primaryStrengthPercent,
+            colorStyle = colorStyle,
         )
     }
 
     fun contentColor(context: Context): Int = themeSnapshot(context).colors.onSurface
 
-    fun accentColor(context: Context): Int = themeSnapshot(context).colors.primary
+    fun accentColor(context: Context): Int = themeSnapshot(context).colors.secondary
+
+    fun indicatorColor(context: Context): Int = themeSnapshot(context).colors.primary
 
     fun surfaceColor(context: Context): Int = themeSnapshot(context).colors.surface
 

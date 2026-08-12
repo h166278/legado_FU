@@ -135,6 +135,7 @@ object NgThemeResolver {
             background = background,
             onBackground = onBackground,
             surface = surface,
+            surfaceTint = primary,
             onSurface = onSurface,
             surfaceVariant = surfaceVariant,
             onSurfaceVariant = NgColorMath.blend(surface, onSurface, 0.72f),
@@ -264,6 +265,7 @@ object NgThemeResolver {
             background = background,
             onBackground = manual.primaryText,
             surface = surface,
+            surfaceTint = primary,
             onSurface = manual.primaryText,
             surfaceVariant = surfaceVariant,
             onSurfaceVariant = manual.secondaryText,
@@ -302,6 +304,7 @@ object NgThemeResolver {
         background = background.toArgb(),
         onBackground = onBackground.toArgb(),
         surface = surface.toArgb(),
+        surfaceTint = surfaceTint.toArgb(),
         onSurface = onSurface.toArgb(),
         surfaceVariant = surfaceVariant.toArgb(),
         onSurfaceVariant = onSurfaceVariant.toArgb(),
@@ -337,6 +340,7 @@ object NgThemeResolver {
             background = WHITE,
             onBackground = BLACK,
             surface = WHITE,
+            surfaceTint = BLACK,
             onSurface = BLACK,
             surfaceVariant = WHITE,
             onSurfaceVariant = BLACK,
@@ -418,6 +422,16 @@ internal object NgColorMath {
             green = (green(start) * inverse + green(end) * amount).roundToInt(),
             blue = (blue(start) * inverse + blue(end) * amount).roundToInt()
         )
+    }
+
+    fun scaleChroma(@ColorInt color: Int, fraction: Float): Int {
+        val source = Hct.fromInt(opaque(color))
+        val scaled = Hct.from(
+            source.hue,
+            source.chroma * fraction.coerceIn(0f, 1f),
+            source.tone,
+        ).toInt()
+        return withAlpha(scaled, alpha(color) / 255f)
     }
 
     fun contentColorFor(@ColorInt background: Int): Int {

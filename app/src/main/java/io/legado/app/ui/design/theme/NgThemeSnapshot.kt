@@ -30,6 +30,7 @@ data class NgColorScheme(
     @ColorInt val background: Int,
     @ColorInt val onBackground: Int,
     @ColorInt val surface: Int,
+    @ColorInt val surfaceTint: Int,
     @ColorInt val onSurface: Int,
     @ColorInt val surfaceVariant: Int,
     @ColorInt val onSurfaceVariant: Int,

@@ -48,6 +48,7 @@ import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.components.compose.NgFormActionButton
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgTheme
 
 internal data class AiPurifyPreviewUi(
@@ -420,7 +421,7 @@ internal fun AiPurifyRuleDetailDialogContent(
                 .padding(top = 8.dp)
                 .height(40.dp),
             colors = ButtonDefaults.textButtonColors(
-                contentColor = Color(NgTheme.colors.primary),
+                contentColor = Color(NgTheme.colors.secondary),
             ),
             contentPadding = PaddingValues(horizontal = 14.dp),
         ) {
@@ -564,7 +565,7 @@ private fun AiPurifyRuleHeader(
         ) {
             Text(
                 text = selectionLabel,
-                color = Color(NgTheme.colors.primary),
+                color = Color(NgTheme.colors.secondary),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

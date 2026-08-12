@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.activity.ComponentDialog
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,9 +28,12 @@ import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadHighlightRule
+import io.legado.app.help.config.ReadFloatingAppearanceConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.book.read.ReadFloatingAppearanceState
+import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.utils.ChineseUtils
@@ -63,6 +67,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     private var page by mutableStateOf(ReadStylePage.PRESET)
     private var screenState by mutableStateOf<ReadStyleUiState?>(null)
     private var editorBackgroundCache: List<ReadStyleBackgroundUi>? = null
+    private var backgroundColorPickerDialog: ComponentDialog? = null
     private var editingHighlightIndex: Int? = null
     private var highlightDraft: ReadHighlightRule? = null
     private var highlightColorMode = 0
@@ -107,11 +112,17 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
             )
             setContent {
-                NgAppTheme(
-                    updateSystemBars = false,
-                    darkModeOverride = ReadBookConfig.isNightTheme,
-                ) {
-                    screenState?.let { state ->
+                screenState?.let { state ->
+                    val primaryStrength = ReadFloatingAppearanceState.primaryStrengthPercent
+                    val colorStyle = ReadFloatingAppearanceState.colorStyle
+                    NgAppTheme(
+                        snapshot = ReadDrawerStyle.themeSnapshot(
+                            context = requireContext(),
+                            primaryStrengthPercent = primaryStrength,
+                            colorStyle = colorStyle,
+                        ),
+                        updateSystemBars = false,
+                    ) {
                         ReadStyleScreen(
                             page = page,
                             state = state,
@@ -129,6 +140,12 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
         super.onDismiss(dialog)
         ReadBookConfig.save()
         (activity as ReadBookActivity).bottomDialog--
+    }
+
+    override fun onDestroyView() {
+        backgroundColorPickerDialog?.dismiss()
+        backgroundColorPickerDialog = null
+        super.onDestroyView()
     }
 
     private fun createActions() = ReadStyleActions(
@@ -183,6 +200,48 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             selectBackgroundImage.launch(arrayOf("image/*"))
         },
         onSelectBackground = ::selectBackground,
+        onFloatingColorSourceChanged = ::setFloatingColorSource,
+        onPickFloatingColor = ::pickFloatingColor,
+        onFloatingTransparencyChanged = { value ->
+            val config = ReadBookConfig.durConfig
+            config.readFloatingTransparency = ReadFloatingAppearanceConfig.normalizePercent(value)
+            updateEditorState {
+                copy(editorFloatingTransparency = config.curReadFloatingTransparency())
+            }
+            ReadFloatingAppearanceState.update(
+                config.curReadFloatingTransparency(),
+                config.curReadFloatingPrimaryStrength(),
+                config.curReadFloatingColorStyle(),
+            )
+        },
+        onFloatingPrimaryStrengthChanged = { value ->
+            val config = ReadBookConfig.durConfig
+            config.readFloatingPrimaryStrength = ReadFloatingAppearanceConfig.normalizePercent(value)
+            updateEditorState {
+                copy(editorFloatingPrimaryStrength = config.curReadFloatingPrimaryStrength())
+            }
+            ReadFloatingAppearanceState.update(
+                config.curReadFloatingTransparency(),
+                config.curReadFloatingPrimaryStrength(),
+                config.curReadFloatingColorStyle(),
+            )
+        },
+        onFloatingColorStyleChanged = { style ->
+            val config = ReadBookConfig.durConfig
+            config.readFloatingColorStyle = style
+            updateEditorState { copy(editorFloatingColorStyle = style) }
+            ReadFloatingAppearanceState.update(
+                config.curReadFloatingTransparency(),
+                config.curReadFloatingPrimaryStrength(),
+                config.curReadFloatingColorStyle(),
+            )
+            ReadBookConfig.save()
+            notifyFloatingAppearanceChanged()
+        },
+        onFloatingAppearanceChangeFinished = {
+            ReadBookConfig.save()
+            notifyFloatingAppearanceChanged()
+        },
         onFullLineUnderlineEnabledChanged = { enabled ->
             ReadBookConfig.fullLineUnderlineEnabled = enabled
             refreshFullLineUnderlineState()
@@ -368,6 +427,11 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             editorBackgroundColor = backgroundColor,
             editorTextAccentColor = config.curTextAccentColor(),
             editorBackgroundAlpha = ReadBookConfig.bgAlpha.coerceIn(0, 100),
+            editorFloatingColorSeed = config.curReadFloatingSeed(),
+            editorFloatingColorFromBackground = config.curReadFloatingSeed() != 0,
+            editorFloatingTransparency = config.curReadFloatingTransparency(),
+            editorFloatingPrimaryStrength = config.curReadFloatingPrimaryStrength(),
+            editorFloatingColorStyle = config.curReadFloatingColorStyle(),
             fullLineUnderline = currentFullLineUnderlineState(),
             highlightDraft = highlightDraft,
             editingHighlightIndex = editingHighlightIndex,
@@ -387,11 +451,10 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
         val oldIndex = ReadBookConfig.styleSelect
         if (index !in ReadBookConfig.configList.indices || index == oldIndex) return
         ReadBookConfig.styleSelect = index
+        ReadFloatingAppearanceState.refreshFromConfig()
         refreshUi()
         postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
-        if (AppConfig.readBarStyleFollowPage) {
-            postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-        }
+        notifyFloatingAppearanceChanged()
     }
 
     private fun openEditor(index: Int) {
@@ -641,6 +704,61 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
         postEditorBackgroundChanged()
     }
 
+    private fun setFloatingColorSource(fromBackground: Boolean) {
+        val config = ReadBookConfig.durConfig
+        if (fromBackground) {
+            updateEditorState { copy(editorFloatingColorFromBackground = true) }
+            return
+        }
+        if (config.curReadFloatingSeed() != 0) {
+            config.clearCurReadFloatingSeed()
+            ReadBookConfig.save()
+        }
+        refreshUi()
+        notifyFloatingAppearanceChanged()
+    }
+
+    private fun pickFloatingColor() {
+        val config = ReadBookConfig.durConfig
+        if (config.curBgType() == 0) {
+            runCatching { config.curBgStr().toColorInt() }
+                .onSuccess(::applyFloatingColor)
+                .onFailure {
+                    it.printOnDebug()
+                    toastOnUi(R.string.read_style_floating_color_error)
+                }
+            return
+        }
+        val decorView = activity?.window?.decorView ?: return
+        val width = decorView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val height = decorView.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        val background = runCatching {
+            renderCurrentReadBackground(width, height)
+        }.onFailure {
+            it.printOnDebug()
+            toastOnUi(it.localizedMessage ?: getString(R.string.read_style_floating_color_error))
+        }.getOrNull() ?: return
+        backgroundColorPickerDialog?.dismiss()
+        backgroundColorPickerDialog = showReadBackgroundColorPicker(
+            context = requireContext(),
+            background = background,
+            onPicked = { result -> applyFloatingColor(result.color) },
+        )
+    }
+
+    private fun applyFloatingColor(color: Int) {
+        ReadBookConfig.durConfig.setCurReadFloatingSeed(color)
+        ReadBookConfig.save()
+        refreshUi()
+        notifyFloatingAppearanceChanged()
+    }
+
+    private fun notifyFloatingAppearanceChanged() {
+        ReadFloatingAppearanceState.refreshFromConfig()
+        postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
+        callBack?.let(ReadAloudMiniPlayer::refreshAppearance)
+    }
+
     private fun loadEditorBackgrounds(): List<ReadStyleBackgroundUi> {
         editorBackgroundCache?.let { return it }
         val customBackgrounds = linkedMapOf<String, String>()
@@ -812,6 +930,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
                     editorBackgroundCache = null
                     refreshUi()
                     postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+                    notifyFloatingAppearanceChanged()
                 } else {
                     toastOnUi(R.string.read_style_keep_one_preset)
                 }
@@ -863,9 +982,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
 
     private fun notifyPresetRestored() {
         postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
-        if (AppConfig.readBarStyleFollowPage) {
-            postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
-        }
+        notifyFloatingAppearanceChanged()
     }
 
     private fun applyHighlightRules(rules: List<ReadHighlightRule>) {
@@ -967,6 +1084,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             editorBackgroundCache = null
             refreshUi()
             postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+            notifyFloatingAppearanceChanged()
             if (result.warnings.isEmpty()) {
                 toastOnUi("导入成功")
             } else {

@@ -663,6 +663,14 @@ object ReadBookConfig {
         var bgType: Int = 1,//白天背景类型 0:颜色, 1:assets图片, 2其它图片
         var bgTypeNight: Int = 0,//夜间背景类型
         var bgTypeEInk: Int = 0,//EInk背景类型
+        @SerializedName("readFloatingSeed") var readFloatingSeed: Int = 0,
+        @SerializedName("readFloatingSeedNight") var readFloatingSeedNight: Int = 0,
+        @SerializedName("readFloatingTransparency")
+        var readFloatingTransparency: Int = ReadFloatingAppearanceConfig.DEFAULT_TRANSPARENCY_PERCENT,
+        @SerializedName("readFloatingPrimaryStrength")
+        var readFloatingPrimaryStrength: Int = ReadFloatingAppearanceConfig.DEFAULT_PRIMARY_STRENGTH_PERCENT,
+        @SerializedName("readFloatingColorStyle")
+        var readFloatingColorStyle: ReadFloatingColorStyle = ReadFloatingColorStyle.VIBRANT,
         private var darkStatusIcon: Boolean = true,//白天是否暗色状态栏
         private var darkStatusIconNight: Boolean = false,//晚上是否暗色状态栏
         private var darkStatusIconEInk: Boolean = true,
@@ -927,6 +935,37 @@ object ReadBookConfig {
                 }
             }
         }
+
+        fun setCurReadFloatingSeed(color: Int) {
+            val opaqueColor = color or 0xFF000000.toInt()
+            if (ReadBookConfig.isNightTheme) {
+                readFloatingSeedNight = opaqueColor
+            } else {
+                readFloatingSeed = opaqueColor
+            }
+        }
+
+        fun clearCurReadFloatingSeed() {
+            if (ReadBookConfig.isNightTheme) {
+                readFloatingSeedNight = 0
+            } else {
+                readFloatingSeed = 0
+            }
+        }
+
+        fun curReadFloatingSeed(): Int = when {
+            AppConfig.isEInkMode -> 0
+            ReadBookConfig.isNightTheme -> readFloatingSeedNight
+            else -> readFloatingSeed
+        }
+
+        fun curReadFloatingTransparency(): Int =
+            ReadFloatingAppearanceConfig.normalizePercent(readFloatingTransparency)
+
+        fun curReadFloatingPrimaryStrength(): Int =
+            ReadFloatingAppearanceConfig.normalizePercent(readFloatingPrimaryStrength)
+
+        fun curReadFloatingColorStyle(): ReadFloatingColorStyle = readFloatingColorStyle
 
         fun curBgStr(): String {
             val background = when {

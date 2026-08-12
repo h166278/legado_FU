@@ -90,6 +90,7 @@ import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSwipeToDelete
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -911,7 +912,7 @@ private fun CatalogChapterRow(
     onClick: () -> Unit,
 ) {
     val cardColor = catalogCardColor()
-    val currentChapterColor = Color(NgTheme.colors.primary)
+    val currentChapterColor = Color(NgTheme.colors.secondary)
     val wordCount = if (cached && AppConfig.tocCountWords) {
         item.chapter.wordCount?.takeIf { it.isNotBlank() }
     } else {
@@ -1181,7 +1182,7 @@ private fun CatalogBookmarkCard(
                     Spacer(Modifier.width(5.dp))
                     Text(
                         text = stringResource(R.string.bookmark_note),
-                        color = accentColor,
+                        color = Color(NgTheme.colors.secondary),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                     )

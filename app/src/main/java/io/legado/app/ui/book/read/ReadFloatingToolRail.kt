@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSlider
 import io.legado.app.ui.design.components.compose.NgSliderVariant
@@ -147,7 +146,7 @@ private fun ToolRail(
     NgGlassSurface(
         modifier = Modifier.width(44.dp),
         shape = RoundedCornerShape(12.dp),
-        style = NgGlassDefaults.floatingStyle(),
+        style = readFloatingGlassStyle(),
         contentPadding = PaddingValues(vertical = 6.dp)
     ) {
         ToolButton(
@@ -312,7 +311,7 @@ private fun BrightnessPanel(
     NgGlassSurface(
         modifier = Modifier.width(272.dp),
         shape = RoundedCornerShape(12.dp),
-        style = NgGlassDefaults.floatingStyle(),
+        style = readFloatingGlassStyle(),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Row(
@@ -386,7 +385,7 @@ private fun AiPanel(
     NgGlassSurface(
         modifier = modifier.width(144.dp),
         shape = RoundedCornerShape(12.dp),
-        style = NgGlassDefaults.floatingStyle(),
+        style = readFloatingGlassStyle(),
         contentPadding = PaddingValues(vertical = 4.dp)
     ) {
         AiActionRow(

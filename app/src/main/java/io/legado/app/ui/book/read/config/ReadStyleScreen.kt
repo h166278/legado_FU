@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,8 +64,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.ReadHighlightRule
+import io.legado.app.help.config.ReadFloatingAppearanceConfig
+import io.legado.app.help.config.ReadFloatingColorStyle
 import io.legado.app.ui.book.read.ReadDrawerStyle
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.book.read.readFloatingGlassStyle
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSlider
 import io.legado.app.ui.design.components.compose.NgSliderVariant
@@ -76,6 +79,8 @@ import kotlin.math.abs
 private val StandardPageHeight = 336.dp
 private val EditorPageHeight = 500.dp
 private val PresetInitialScrollOffset = 10.dp
+private val PresetVisibleHorizontalInset = 6.dp
+private val BackgroundTileSpacing = 6.dp
 
 internal enum class ReadStylePage {
     PRESET,
@@ -150,6 +155,11 @@ internal data class ReadStyleUiState(
     val editorBackgroundColor: Int,
     val editorTextAccentColor: Int,
     val editorBackgroundAlpha: Int,
+    val editorFloatingColorSeed: Int,
+    val editorFloatingColorFromBackground: Boolean,
+    val editorFloatingTransparency: Int,
+    val editorFloatingPrimaryStrength: Int,
+    val editorFloatingColorStyle: ReadFloatingColorStyle,
     val fullLineUnderline: FullLineUnderlineUiState,
     val highlightDraft: ReadHighlightRule?,
     val editingHighlightIndex: Int?,
@@ -182,6 +192,12 @@ internal data class ReadStyleActions(
     val onBackgroundAlphaChanged: (Int) -> Unit,
     val onSelectBackgroundImage: () -> Unit,
     val onSelectBackground: (Int, String) -> Unit,
+    val onFloatingColorSourceChanged: (Boolean) -> Unit,
+    val onPickFloatingColor: () -> Unit,
+    val onFloatingTransparencyChanged: (Int) -> Unit,
+    val onFloatingPrimaryStrengthChanged: (Int) -> Unit,
+    val onFloatingColorStyleChanged: (ReadFloatingColorStyle) -> Unit,
+    val onFloatingAppearanceChangeFinished: () -> Unit,
     val onFullLineUnderlineEnabledChanged: (Boolean) -> Unit,
     val onFullLineUnderlineDashedChanged: (Boolean) -> Unit,
     val onFullLineUnderlineColorChanged: (Int) -> Unit,
@@ -223,7 +239,8 @@ internal fun ReadStyleScreen(
     accentColor: Color,
     actions: ReadStyleActions,
 ) {
-    val selectedContentColor = if (accentColor.luminance() > 0.5f) Color.Black else Color.White
+    val indicatorColor = Color(NgTheme.colors.primary)
+    val selectedContentColor = Color(NgTheme.colors.onPrimary)
     BackHandler(enabled = page !in setOf(ReadStylePage.PRESET, ReadStylePage.ADJUST)) {
         actions.onBack()
     }
@@ -232,9 +249,7 @@ internal fun ReadStyleScreen(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         shape = RoundedCornerShape(20.dp),
-        style = NgGlassDefaults.style(
-            containerAlpha = NgTheme.effects.dialogAlpha
-        ),
+        style = readFloatingGlassStyle(),
     ) {
         Column(
             modifier = Modifier
@@ -249,7 +264,7 @@ internal fun ReadStyleScreen(
                     ),
                     selectedIndex = if (page == ReadStylePage.PRESET) 0 else 1,
                     contentColor = contentColor,
-                    selectedContainerColor = accentColor,
+                    selectedContainerColor = indicatorColor,
                     selectedContentColor = selectedContentColor,
                     onSelected = { index ->
                         actions.onPageSelected(
@@ -269,7 +284,7 @@ internal fun ReadStyleScreen(
                     PresetPage(
                         state = state,
                         contentColor = contentColor,
-                        accentColor = accentColor,
+                        accentColor = indicatorColor,
                         actions = actions,
                     )
                 }
@@ -283,7 +298,7 @@ internal fun ReadStyleScreen(
                     AdjustPage(
                         state = state,
                         contentColor = contentColor,
-                        accentColor = accentColor,
+                        accentColor = indicatorColor,
                         selectedContentColor = selectedContentColor,
                         actions = actions,
                     )
@@ -485,7 +500,7 @@ private fun PresetManagementDock(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = PresetVisibleHorizontalInset, vertical = 6.dp)
             .height(60.dp)
             .clip(shape)
             .background(Color(NgTheme.colors.surface).copy(alpha = 0.24f))
@@ -681,6 +696,7 @@ private fun EditorPage(
     accentColor: Color,
     actions: ReadStyleActions,
 ) {
+    val indicatorColor = Color(NgTheme.colors.primary)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -788,37 +804,56 @@ private fun EditorPage(
                 )
             }
             item {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(84.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    item(key = "custom") {
-                        EditorBackgroundTile(
-                            label = stringResource(R.string.select_image),
-                            background = null,
-                            selected = false,
-                            accentColor = accentColor,
-                            contentColor = contentColor,
-                            onClick = actions.onSelectBackgroundImage,
-                        )
-                    }
-                    items(
-                        items = state.editorBackgrounds,
-                        key = { item -> "${item.type}:${item.name}" },
-                    ) { item ->
-                        EditorBackgroundTile(
-                            label = item.label,
-                            background = item.background,
-                            selected = state.editorBackgroundType == item.type &&
-                                state.editorBackgroundName == item.name,
-                            accentColor = accentColor,
-                            contentColor = contentColor,
-                            onClick = { actions.onSelectBackground(item.type, item.name) },
-                        )
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val tileWidth = (maxWidth - 25.dp) / 5f
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(84.dp),
+                        horizontalArrangement = Arrangement.spacedBy(BackgroundTileSpacing),
+                    ) {
+                        item(key = "custom") {
+                            EditorBackgroundTile(
+                                label = stringResource(R.string.select_image),
+                                background = null,
+                                selected = false,
+                                accentColor = indicatorColor,
+                                contentColor = contentColor,
+                                tileWidth = tileWidth,
+                                onClick = actions.onSelectBackgroundImage,
+                            )
+                        }
+                        items(
+                            items = state.editorBackgrounds,
+                            key = { item -> "${item.type}:${item.name}" },
+                        ) { item ->
+                            EditorBackgroundTile(
+                                label = item.label,
+                                background = item.background,
+                                selected = state.editorBackgroundType == item.type &&
+                                    state.editorBackgroundName == item.name,
+                                accentColor = indicatorColor,
+                                contentColor = contentColor,
+                                tileWidth = tileWidth,
+                                onClick = { actions.onSelectBackground(item.type, item.name) },
+                            )
+                        }
                     }
                 }
+                Spacer(Modifier.height(14.dp))
+                ReadDivider(contentColor, horizontalPadding = 0.dp)
+                EditorSectionLabel(
+                    stringResource(R.string.read_style_floating_section),
+                    accentColor,
+                )
+                EditorFloatingSection(
+                    state = state,
+                    contentColor = contentColor,
+                    accentColor = accentColor,
+                    indicatorColor = indicatorColor,
+                    actions = actions,
+                )
+                Spacer(Modifier.height(8.dp))
                 ReadDivider(contentColor, horizontalPadding = 0.dp)
                 EditorNavigationRow(
                     title = stringResource(R.string.read_style_restore_current),
@@ -985,6 +1020,225 @@ private fun EditorSectionLabel(label: String, accentColor: Color) {
 }
 
 @Composable
+private fun EditorFloatingSection(
+    state: ReadStyleUiState,
+    contentColor: Color,
+    accentColor: Color,
+    indicatorColor: Color,
+    actions: ReadStyleActions,
+) {
+    val selectedContentColor = Color(NgTheme.colors.onPrimary)
+    val sourceShape = RoundedCornerShape(10.dp)
+    val fromBackground = state.editorFloatingColorFromBackground
+    val hasSample = state.editorFloatingColorSeed != 0
+    val displayedColor = if (hasSample) {
+        state.editorFloatingColorSeed
+    } else {
+        NgTheme.colors.surfaceTint
+    }
+    val displayedColorHex = remember(displayedColor) {
+        "#%06X".format(displayedColor and 0x00FFFFFF)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp)
+            .clip(sourceShape)
+            .background(Color(NgTheme.colors.surface).copy(alpha = 0.20f))
+            .border(0.7.dp, contentColor.copy(alpha = 0.10f), sourceShape)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        FloatingSourceOption(
+            label = stringResource(R.string.read_style_floating_color_follow),
+            selected = !fromBackground,
+            contentColor = contentColor,
+            selectedContainerColor = indicatorColor,
+            selectedContentColor = selectedContentColor,
+            onClick = { actions.onFloatingColorSourceChanged(false) },
+            modifier = Modifier.weight(1f),
+        )
+        FloatingSourceOption(
+            label = stringResource(R.string.read_style_floating_color_background),
+            selected = fromBackground,
+            contentColor = contentColor,
+            selectedContainerColor = indicatorColor,
+            selectedContentColor = selectedContentColor,
+            onClick = { actions.onFloatingColorSourceChanged(true) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    Text(
+        text = stringResource(R.string.read_style_floating_color_style),
+        modifier = Modifier.padding(top = 12.dp, bottom = 7.dp),
+        color = contentColor,
+        fontSize = 15.sp,
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(sourceShape)
+            .background(Color(NgTheme.colors.surface).copy(alpha = 0.20f))
+            .border(0.7.dp, contentColor.copy(alpha = 0.10f), sourceShape)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        listOf(
+            ReadFloatingColorStyle.VIBRANT to R.string.ng_palette_vibrant,
+            ReadFloatingColorStyle.EXPRESSIVE to R.string.ng_palette_expressive,
+            ReadFloatingColorStyle.RAINBOW to R.string.ng_palette_rainbow,
+            ReadFloatingColorStyle.FRUIT_SALAD to R.string.ng_palette_fruit_salad,
+        ).forEach { (style, labelRes) ->
+            FloatingSourceOption(
+                label = stringResource(labelRes),
+                selected = state.editorFloatingColorStyle == style,
+                contentColor = contentColor,
+                selectedContainerColor = indicatorColor,
+                selectedContentColor = selectedContentColor,
+                onClick = { actions.onFloatingColorStyleChanged(style) },
+                modifier = Modifier.weight(1f),
+                fontSize = 13.sp,
+            )
+        }
+    }
+
+    if (fromBackground) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .clickable(role = Role.Button, onClick = actions.onPickFloatingColor),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.read_style_floating_current_color),
+                modifier = Modifier.weight(1f),
+                color = contentColor,
+                fontSize = 15.sp,
+            )
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(Color(displayedColor), CircleShape)
+                    .border(1.dp, contentColor.copy(alpha = 0.28f), CircleShape),
+            )
+            Text(
+                text = displayedColorHex,
+                modifier = Modifier
+                    .padding(start = 10.dp),
+                color = contentColor.copy(alpha = 0.82f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right_20),
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(start = 6.dp)
+                    .size(18.dp),
+                tint = contentColor.copy(alpha = 0.72f),
+            )
+        }
+    }
+
+    EditorFloatingSlider(
+        title = stringResource(R.string.read_floating_window_transparency),
+        value = state.editorFloatingTransparency,
+        contentColor = contentColor,
+        accentColor = accentColor,
+        onValueChanged = actions.onFloatingTransparencyChanged,
+        onValueChangeFinished = actions.onFloatingAppearanceChangeFinished,
+    )
+    EditorFloatingSlider(
+        title = stringResource(R.string.read_floating_window_primary_strength),
+        value = state.editorFloatingPrimaryStrength,
+        contentColor = contentColor,
+        accentColor = accentColor,
+        onValueChanged = actions.onFloatingPrimaryStrengthChanged,
+        onValueChangeFinished = actions.onFloatingAppearanceChangeFinished,
+    )
+}
+
+@Composable
+private fun FloatingSourceOption(
+    label: String,
+    selected: Boolean,
+    contentColor: Color,
+    selectedContainerColor: Color,
+    selectedContentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
+) {
+    Box(
+        modifier = modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .then(
+                if (selected) Modifier.background(selectedContainerColor) else Modifier
+            )
+            .clickable(role = Role.RadioButton, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) selectedContentColor else contentColor,
+            fontSize = fontSize,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        )
+    }
+}
+
+@Composable
+private fun EditorFloatingSlider(
+    title: String,
+    value: Int,
+    contentColor: Color,
+    accentColor: Color,
+    onValueChanged: (Int) -> Unit,
+    onValueChangeFinished: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = contentColor,
+            fontSize = 14.sp,
+        )
+        Text(
+            text = "$value%",
+            color = accentColor,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+    NgSlider(
+        value = value.toFloat(),
+        onValueChange = {
+            onValueChanged(
+                it.toInt().coerceIn(
+                    ReadFloatingAppearanceConfig.MIN_PERCENT,
+                    ReadFloatingAppearanceConfig.MAX_PERCENT,
+                )
+            )
+        },
+        onValueChangeFinished = onValueChangeFinished,
+        valueRange = ReadFloatingAppearanceConfig.MIN_PERCENT.toFloat()..
+            ReadFloatingAppearanceConfig.MAX_PERCENT.toFloat(),
+        steps = 99,
+        variant = NgSliderVariant.COMPACT,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
 private fun EditorColorTile(
     label: String,
     color: Color,
@@ -1033,16 +1287,17 @@ private fun EditorBackgroundTile(
     selected: Boolean,
     accentColor: Color,
     contentColor: Color,
+    tileWidth: Dp,
     onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.width(64.dp),
+        modifier = Modifier.width(tileWidth),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val shape = RoundedCornerShape(10.dp)
         Box(
             modifier = Modifier
-                .size(width = 64.dp, height = 56.dp)
+                .size(width = tileWidth, height = 56.dp)
                 .clip(shape)
                 .background(Color(NgTheme.colors.surface).copy(alpha = 0.20f))
                 .border(

@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.ui.book.searchContent.SearchResult
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgTheme
@@ -192,7 +191,7 @@ private fun SearchResultControls(
                 .padding(start = 36.dp, top = 8.dp, end = 36.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            style = NgGlassDefaults.floatingStyle(),
+            style = readFloatingGlassStyle(),
         ) {
             Row(
                 modifier = Modifier
@@ -268,7 +267,7 @@ private fun SearchResultControls(
                 .padding(horizontal = 28.dp, vertical = 8.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            style = NgGlassDefaults.floatingStyle(),
+            style = readFloatingGlassStyle(),
         ) {
             Row(
                 modifier = Modifier

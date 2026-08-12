@@ -165,6 +165,7 @@ private fun NgThemeSnapshot.toMaterialColorScheme() = colors.run {
         background = Color(background),
         onBackground = Color(onBackground),
         surface = Color(surface),
+        surfaceTint = Color(surfaceTint),
         onSurface = Color(onSurface),
         surfaceVariant = Color(surfaceVariant),
         onSurfaceVariant = Color(onSurfaceVariant),

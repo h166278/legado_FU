@@ -32,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.design.theme.NgThemeSnapshot
+import io.legado.app.help.config.ReadFloatingAppearanceConfig
+import io.legado.app.help.config.ReadFloatingColorStyle
+import io.legado.app.ui.book.read.ReadFloatingPalette
 import kotlin.math.max
 
 /**
@@ -130,10 +133,19 @@ object NgGlassDefaults {
      * backdrop，也不对静态副本做模糊。
      */
     @Composable
-    fun floatingStyle(): NgGlassStyle {
+    fun floatingStyle(
+        transparencyPercent: Int? = null,
+        primaryStrengthPercent: Int? = null,
+        colorStyle: ReadFloatingColorStyle = ReadFloatingColorStyle.VIBRANT,
+    ): NgGlassStyle {
         val snapshot = NgTheme.snapshot
-        return remember(snapshot) {
-            resolveNgFloatingGlassStyle(snapshot)
+        return remember(snapshot, transparencyPercent, primaryStrengthPercent, colorStyle) {
+            resolveNgFloatingGlassStyle(
+                snapshot = snapshot,
+                transparencyPercent = transparencyPercent,
+                primaryStrengthPercent = primaryStrengthPercent,
+                colorStyle = colorStyle,
+            )
         }
     }
 
@@ -158,7 +170,7 @@ internal fun resolveNgGlassStyle(
     )
     val containerBottom = NgColorMath.blend(
         colors.drawerContainer,
-        colors.primary,
+        colors.surfaceTint,
         if (snapshot.isDark) 0.08f else 0.05f
     )
     val highlightBase = if (snapshot.isDark) {
@@ -183,7 +195,7 @@ internal fun resolveNgGlassStyle(
             NgColorMath.withAlpha(containerBottom, containerAlpha)
         ),
         accentGlow = Color(
-            NgColorMath.withAlpha(colors.primary, accentAlpha)
+            NgColorMath.withAlpha(colors.surfaceTint, accentAlpha)
         ),
         borderColor = Color(
             NgColorMath.withAlpha(
@@ -238,7 +250,10 @@ internal fun resolveNgGlassStyle(
 }
 
 internal fun resolveNgFloatingGlassStyle(
-    snapshot: NgThemeSnapshot
+    snapshot: NgThemeSnapshot,
+    transparencyPercent: Int? = null,
+    primaryStrengthPercent: Int? = null,
+    colorStyle: ReadFloatingColorStyle = ReadFloatingColorStyle.VIBRANT,
 ): NgGlassStyle {
     if (snapshot.isEInk) {
         return resolveNgGlassStyle(snapshot, requestedContainerAlpha = 1f)
@@ -248,38 +263,52 @@ internal fun resolveNgFloatingGlassStyle(
         snapshot = snapshot,
         requestedContainerAlpha = if (snapshot.isDark) 0.84f else 0.86f
     )
-    val containerTop = NgColorMath.blend(
-        colors.drawerContainer,
-        colors.surface,
-        if (snapshot.isDark) 0.16f else 0.24f
+    val normalizedPrimaryStrength = primaryStrengthPercent?.let(
+        ReadFloatingAppearanceConfig::normalizePercent
     )
-    val containerBottom = NgColorMath.blend(
-        colors.drawerContainer,
-        colors.primary,
-        if (snapshot.isDark) 0.10f else 0.13f
+    val surfaceColors = ReadFloatingPalette.resolveSurfaceColors(
+        snapshot = snapshot,
+        primaryStrengthPercent = normalizedPrimaryStrength,
     )
+    val semanticColors = ReadFloatingPalette.resolveSemanticColors(
+        snapshot = snapshot,
+        primaryStrengthPercent = normalizedPrimaryStrength,
+        colorStyle = colorStyle,
+    )
+    val containerTop = surfaceColors.top
+    val containerBottom = surfaceColors.bottom
     val highlightBase = if (snapshot.isDark) {
         NgColorMath.blend(colors.surface, colors.onSurface, 0.46f)
     } else {
         0xFFFFFFFF.toInt()
     }
+    val defaultTopAlpha = if (snapshot.isDark) 0.84f else 0.80f
+    val defaultBottomAlpha = if (snapshot.isDark) 0.80f else 0.76f
+    val targetTopAlpha = transparencyPercent?.let {
+        ReadFloatingAppearanceConfig.floatingSurfaceAlpha(it, defaultTopAlpha)
+    } ?: defaultTopAlpha
+    val targetBottomAlpha = transparencyPercent?.let {
+        ReadFloatingAppearanceConfig.floatingSurfaceAlpha(it, defaultBottomAlpha)
+    } ?: defaultBottomAlpha
+    val defaultAccentAlpha = if (snapshot.isDark) 0.12f else 0.10f
+    val accentColor = if (normalizedPrimaryStrength == null) colors.surfaceTint else containerBottom
     return base.copy(
         containerTop = Color(
             NgColorMath.withAlpha(
                 containerTop,
-                if (snapshot.isDark) 0.84f else 0.80f
+                targetTopAlpha
             )
         ),
         containerBottom = Color(
             NgColorMath.withAlpha(
                 containerBottom,
-                if (snapshot.isDark) 0.80f else 0.76f
+                targetBottomAlpha
             )
         ),
         accentGlow = Color(
             NgColorMath.withAlpha(
-                colors.primary,
-                if (snapshot.isDark) 0.12f else 0.10f
+                accentColor,
+                defaultAccentAlpha
             )
         ),
         borderColor = Color(
@@ -302,10 +331,11 @@ internal fun resolveNgFloatingGlassStyle(
         ),
         depthEdge = Color(
             NgColorMath.withAlpha(
-                if (snapshot.isDark) 0xFF000000.toInt() else colors.onSurface,
+                semanticColors.outline,
                 if (snapshot.isDark) 0.20f else 0.10f
             )
         ),
+        contentColor = Color(semanticColors.content),
         blurRadius = 0.dp,
         shadowElevation = 0.dp,
         borderWidth = 0.6.dp,

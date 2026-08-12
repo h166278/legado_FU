@@ -46,7 +46,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.ColorUtils
 import io.legado.app.utils.applyTint
 import io.legado.app.ui.book.read.ReadDrawerStyle
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.book.read.readFloatingGlassStyle
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSwitchControl
 import io.legado.app.ui.design.theme.NgTheme
@@ -61,7 +61,7 @@ internal fun ReadConfigDialogSurface(
     NgGlassSurface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        style = NgGlassDefaults.style(containerAlpha = NgTheme.effects.dialogAlpha),
+        style = readFloatingGlassStyle(),
         contentPadding = contentPadding,
         content = content,
     )

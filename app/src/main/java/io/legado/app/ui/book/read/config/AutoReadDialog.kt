@@ -49,11 +49,12 @@ import io.legado.app.constant.PageAnim
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
-import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.book.read.readFloatingGlassStyle
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgSlider
 import io.legado.app.ui.design.components.compose.NgSliderVariant
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgTheme
 import kotlin.math.roundToInt
 
@@ -189,6 +190,7 @@ private fun AutoReadPanel(
 ) {
     val contentColor = Color(NgTheme.colors.onSurface)
     val accentColor = Color(NgTheme.colors.primary)
+    val actionTextColor = Color(NgTheme.colors.secondary)
     val selectedContentColor = Color(NgTheme.colors.onPrimary)
     val surfaceColor = Color(NgTheme.colors.surface)
     Box(
@@ -199,9 +201,7 @@ private fun AutoReadPanel(
         NgGlassSurface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            style = NgGlassDefaults.style(
-                containerAlpha = NgTheme.effects.dialogAlpha,
-            ).copy(shadowElevation = 0.dp),
+            style = readFloatingGlassStyle().copy(shadowElevation = 0.dp),
         ) {
             Column(
                 modifier = Modifier
@@ -222,7 +222,7 @@ private fun AutoReadPanel(
                     )
                     Spacer(Modifier.weight(1f))
                     AutoReadStopButton(
-                        accentColor = accentColor,
+                        accentColor = actionTextColor,
                         surfaceColor = surfaceColor,
                         onClick = onStop,
                     )
@@ -245,7 +245,7 @@ private fun AutoReadPanel(
                 ) {
                     Text(
                         text = stringResource(R.string.auto_page_slow),
-                        color = accentColor.copy(alpha = 0.78f),
+                        color = actionTextColor,
                         fontSize = 12.sp,
                     )
                     NgSlider(
@@ -265,7 +265,7 @@ private fun AutoReadPanel(
                     )
                     Text(
                         text = stringResource(R.string.auto_page_fast),
-                        color = accentColor.copy(alpha = 0.78f),
+                        color = actionTextColor,
                         fontSize = 12.sp,
                     )
                 }
