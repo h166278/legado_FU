@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
-import android.os.Looper
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.InputDevice
@@ -308,9 +307,8 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         viewModel.initReadBookConfig(intent)
-        Looper.myQueue().addIdleHandler {
+        binding.root.post {
             viewModel.initData(intent)
-            false
         }
         justInitData = true
     }
