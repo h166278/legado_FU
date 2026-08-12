@@ -10,6 +10,7 @@ import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.putPrefString
+import org.json.JSONArray
 import org.json.JSONObject
 import splitties.init.appCtx
 import java.io.File
@@ -62,6 +63,20 @@ object AdvancedTitleConfig {
             appCtx.putPrefInt(PreferKey.advancedTitleHeightFactor, value.coerceIn(30, 120))
         }
 
+    var fontWeight: Int
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleFontWeight, 400)
+            .coerceIn(100, 900)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleFontWeight, value.coerceIn(100, 900))
+        }
+
+    var textColor: Int?
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleTextColor, Int.MIN_VALUE)
+            .takeUnless { it == Int.MIN_VALUE }
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleTextColor, value ?: Int.MIN_VALUE)
+        }
+
     fun bookRule(book: Book?): SplitRule? {
         val value = book?.getVariable(BOOK_RULE_KEY)?.takeIf { it.isNotBlank() } ?: return null
         return GSON.fromJsonObject<SplitRule>(value).getOrNull()
@@ -93,7 +108,9 @@ object AdvancedTitleConfig {
             ?: lottiePath?.takeIf { it.isNotBlank() }?.let { path ->
                 runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
             }
-        return raw?.let { replaceVariables(it, book, title) }
+        return raw?.let {
+            applyCompatibleTextStyle(replaceVariables(it, book, title), textColor, fontWeight)
+        }
     }
 
     fun renderValidLottieJson(book: Book, title: String): String? {
@@ -199,6 +216,51 @@ object AdvancedTitleConfig {
         }
     }
 
+    internal fun applyCompatibleTextStyle(
+        source: String,
+        color: Int?,
+        fontWeight: Int,
+    ): String {
+        if (color == null && fontWeight == 400) return source
+        return runCatching {
+            val root = JSONObject(source)
+            val layers = root.optJSONArray("layers") ?: return source
+            var hasCompatibleLayer = false
+            for (index in 0 until layers.length()) {
+                val layer = layers.optJSONObject(index) ?: continue
+                if (layer.optString("nm") !in COMPATIBLE_TEXT_LAYERS) continue
+                hasCompatibleLayer = true
+                val keyframes = layer.optJSONObject("t")
+                    ?.optJSONObject("d")
+                    ?.optJSONArray("k")
+                    ?: continue
+                for (frameIndex in 0 until keyframes.length()) {
+                    keyframes.optJSONObject(frameIndex)?.optJSONObject("s")?.apply {
+                        if (fontWeight != 400) put("f", WEIGHTED_FONT_FAMILY)
+                        color?.let { put("fc", it.toLottieColor()) }
+                    }
+                }
+            }
+            if (hasCompatibleLayer && fontWeight != 400) {
+                val fonts = root.optJSONObject("fonts") ?: JSONObject().also { root.put("fonts", it) }
+                val list = fonts.optJSONArray("list") ?: JSONArray().also { fonts.put("list", it) }
+                list.put(JSONObject().apply {
+                    put("fName", WEIGHTED_FONT_FAMILY)
+                    put("fFamily", WEIGHTED_FONT_FAMILY)
+                    put("fStyle", "Regular")
+                    put("ascent", 75)
+                })
+            }
+            root.toString()
+        }.getOrDefault(source)
+    }
+
+    private fun Int.toLottieColor() = JSONArray().apply {
+        put(((this@toLottieColor ushr 16) and 0xff) / 255.0)
+        put(((this@toLottieColor ushr 8) and 0xff) / 255.0)
+        put((this@toLottieColor and 0xff) / 255.0)
+    }
+
     private fun variables(book: Book, parts: Parts): Map<String, String> {
         return mapOf(
             "title" to parts.title,
@@ -210,5 +272,7 @@ object AdvancedTitleConfig {
     }
 
     const val DEFAULT_REGEX = "^\\s*(第\\S+[章节回卷部篇集])\\s+(.+?)\\s*$"
+    private val COMPATIBLE_TEXT_LAYERS = setOf("chapter_number", "chapter_title")
+    const val WEIGHTED_FONT_FAMILY = "legado_advanced_title_weighted"
 
 }

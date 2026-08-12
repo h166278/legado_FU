@@ -209,6 +209,8 @@ object AdvancedTitlePackageManager {
         }
     }
 
+    fun createBuiltinCopy(name: String): Entry = addOrUpdate(name, builtinJson())
+
     fun apply(entry: Entry) = synchronized(mutationLock) {
         val json = readTemplate(entry)
         validateJson(json)
