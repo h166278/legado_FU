@@ -7,6 +7,11 @@
     <color name="ng_book_detail_card_stroke">@color/ng_card_stroke</color>
     <color name="ng_surface_soft">@color/background_menu</color>
     <color name="ng_surface_panel">#E6222222</color>
+    <color name="ng_search_surface">@color/ng_surface_card</color>
+    <color name="ng_search_surface_pressed">#F02B2B2B</color>
+    <color name="ng_search_content">@color/ng_on_surface</color>
+    <color name="ng_search_icon">@color/ng_on_surface_variant</color>
+    <color name="ng_search_hint">@color/ng_on_surface_variant</color>
     <color name="ng_explore_result_background">@color/ng_background</color>
     <color name="ng_floating_dock_surface">#991F1F1F</color>
     <color name="ng_bookshelf_action_surface">#991F1F1F</color>

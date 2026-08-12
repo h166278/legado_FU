@@ -116,13 +116,16 @@ internal fun ExploreScreen(
             groups = groups,
             selectedGroup = selectedGroup,
             layoutMode = layoutMode,
-            transparent = transparentTopBar,
             onQueryChange = onQueryChange,
             onGroupSelected = onGroupSelected,
             onLayoutModeChange = onLayoutModeChange
         )
 
-        Box(Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
             if (sources.isEmpty()) {
                 Text(
                     text = stringResource(R.string.explore_empty),

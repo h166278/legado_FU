@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -28,7 +29,6 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
 import com.google.android.material.tabs.TabLayout
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
@@ -39,7 +39,6 @@ import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.about.ReadRecordActivity
 import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.manage.BookshelfManageActivity
@@ -56,7 +55,6 @@ import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.isCreated
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
@@ -123,7 +121,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.titleBar.title = ""
         binding.titleBar.subtitle = ""
         animateTopBarIn()
-        val searchView = binding.titleBar.findViewById<View>(R.id.tv_bookshelf_search)
+        val searchView = binding.titleBar.findViewById<TextView>(R.id.tv_bookshelf_search)
         val moreButton = binding.titleBar.findViewById<ComposeView>(R.id.btn_bookshelf_more)
         applyTopBarBackground(searchView, moreButton)
         searchView.bindSoftPress()
@@ -140,6 +138,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                 )
             }
         }
+        searchView.setTextColor(ContextCompat.getColor(requireContext(), R.color.ng_search_hint))
+        TextViewCompat.setCompoundDrawableTintList(
+            searchView,
+            ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.ng_search_icon))
+        )
         binding.tvBookshelfSort.bindSoftPress()
         binding.tvBookshelfEdit.bindSoftPress()
         binding.tvBookshelfViewHistory.bindSoftPress()
@@ -355,13 +358,8 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     }
 
     private fun applyTopBarBackground(searchView: View, moreButton: View) {
-        if (isTransparentTopBar()) {
-            searchView.setBackgroundResource(R.drawable.bg_bookshelf_top_search_transparent)
-            moreButton.setBackgroundResource(R.drawable.bg_bookshelf_top_action_transparent)
-        } else {
-            searchView.setBackgroundResource(R.drawable.bg_bookshelf_top_search)
-            moreButton.setBackgroundResource(R.drawable.bg_bookshelf_top_action)
-        }
+        searchView.setBackgroundResource(R.drawable.bg_bookshelf_top_search)
+        moreButton.setBackgroundResource(R.drawable.bg_bookshelf_top_action)
     }
 
     private fun applyBookshelfToolbarColors() {
@@ -407,11 +405,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             return
         }
         binding.tvBookshelfViewBooks.setText(R.string.manage)
-    }
-
-    private fun isTransparentTopBar(): Boolean {
-        return requireContext().transparentNavBar ||
-                requireContext().getPrefBoolean(PreferKey.tNavBar, false)
     }
 
     private fun animateTopBarIn() {

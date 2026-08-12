@@ -281,6 +281,8 @@ private fun SearchTopBar(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val contentColor = Color(NgTheme.colors.onTopBar)
+    val searchActionContainer = colorResource(R.color.ng_search_surface)
+    val searchActionContent = colorResource(R.color.ng_search_icon)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -316,14 +318,14 @@ private fun SearchTopBar(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.8f))
+                    .background(searchActionContainer)
                     .clickable { menuExpanded = true },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_grid_menu),
                     contentDescription = stringResource(R.string.menu),
-                    tint = contentColor,
+                    tint = searchActionContent,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -373,7 +375,6 @@ private fun SearchQueryField(
         hint = stringResource(R.string.search_book_key),
         modifier = modifier.focusRequester(focusRequester),
         variant = NgSearchBarVariant.TOOLBAR,
-        containerColor = Color.White.copy(alpha = 0.8f),
         hideHintOnFocus = true,
         onFocusChanged = onFocusChanged,
         onSearch = onSubmit

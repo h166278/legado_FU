@@ -75,7 +75,6 @@ internal fun RssScreen(
             query = query,
             groups = groups,
             selectedGroup = selectedGroup,
-            transparent = transparentTopBar,
             onQueryChange = onQueryChange,
             onGroupSelected = onGroupSelected,
             onOpenFavorites = onOpenFavorites,

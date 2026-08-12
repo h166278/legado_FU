@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -175,6 +176,7 @@ internal fun BookshelfToolbarMenuButton(
     modifier: Modifier = Modifier
 ) {
     val menuDescription = stringResource(R.string.menu)
+    val contentColor = colorResource(R.color.ng_search_icon)
     BookshelfMenuHost(
         includeBrowseHistory = false,
         onMenuItemClick = onMenuItemClick,
@@ -189,7 +191,7 @@ internal fun BookshelfToolbarMenuButton(
             Icon(
                 painter = painterResource(R.drawable.ic_grid_menu),
                 contentDescription = menuDescription,
-                tint = Color(NgTheme.colors.onTopBar),
+                tint = contentColor,
                 modifier = Modifier.size(20.dp)
             )
         }

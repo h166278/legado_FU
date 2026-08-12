@@ -54,16 +54,17 @@ fun NgSearchBar(
     searchIcon: Painter = painterResource(R.drawable.ic_search),
     variant: NgSearchBarVariant = NgSearchBarVariant.STANDARD,
     containerColor: Color? = null,
-    hideHintOnFocus: Boolean = false,
+    hideHintOnFocus: Boolean = true,
     onFocusChanged: (Boolean) -> Unit = {},
     onSearch: (String) -> Unit = {}
 ) {
     val isToolbar = variant == NgSearchBarVariant.TOOLBAR
     val fieldHeight = if (isToolbar) 36.dp else 44.dp
     val shape = RoundedCornerShape(if (isToolbar) 18.dp else 22.dp)
-    val contentColor = colorResource(R.color.ng_on_surface)
-    val secondaryColor = colorResource(R.color.ng_on_surface_variant)
-    val resolvedContainerColor = containerColor ?: colorResource(R.color.ng_surface_card)
+    val contentColor = colorResource(R.color.ng_search_content)
+    val iconColor = colorResource(R.color.ng_search_icon)
+    val secondaryColor = colorResource(R.color.ng_search_hint)
+    val resolvedContainerColor = containerColor ?: colorResource(R.color.ng_search_surface)
     var focused by remember { mutableStateOf(false) }
     BasicTextField(
         value = query,
@@ -108,7 +109,7 @@ fun NgSearchBar(
                     painter = searchIcon,
                     contentDescription = stringResource(R.string.search),
                     modifier = Modifier.size(if (isToolbar) 20.dp else 22.dp),
-                    tint = secondaryColor
+                    tint = iconColor
                 )
                 Spacer(Modifier.width(if (isToolbar) 8.dp else 10.dp))
                 androidx.compose.foundation.layout.Box(Modifier.weight(1f)) {

@@ -27,11 +27,13 @@ class NgSearchBar @JvmOverloads constructor(
 
     val editText = AppCompatEditText(context)
     private val clearButton = AppCompatImageButton(context)
+    private var hintText: CharSequence? = null
 
     var hint: CharSequence?
-        get() = editText.hint
+        get() = hintText
         set(value) {
-            editText.hint = value
+            hintText = value
+            updateHint()
         }
 
     val query: String
@@ -49,7 +51,7 @@ class NgSearchBar @JvmOverloads constructor(
             contentDescription = context.getString(R.string.search)
             ImageViewCompat.setImageTintList(
                 this,
-                ContextCompat.getColorStateList(context, R.color.ng_on_surface_variant)
+                ContextCompat.getColorStateList(context, R.color.ng_search_icon)
             )
         }
         addView(searchIcon, LayoutParams(22.dp, 22.dp))
@@ -64,14 +66,15 @@ class NgSearchBar @JvmOverloads constructor(
         hintAttributes.recycle()
         editText.apply {
             background = null
-            hint = styledHint
             setSingleLine(true)
             imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setTextColor(ContextCompat.getColor(context, R.color.ng_on_surface))
-            setHintTextColor(ContextCompat.getColor(context, R.color.ng_on_surface_variant))
+            setTextColor(ContextCompat.getColor(context, R.color.ng_search_content))
+            setHintTextColor(ContextCompat.getColor(context, R.color.ng_search_hint))
             textSize = 15f
             setPadding(0, 0, 0, 0)
+            setOnFocusChangeListener { _, _ -> updateHint() }
         }
+        hint = styledHint
         addView(
             editText,
             LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
@@ -87,7 +90,7 @@ class NgSearchBar @JvmOverloads constructor(
             isVisible = false
             ImageViewCompat.setImageTintList(
                 this,
-                ContextCompat.getColorStateList(context, R.color.ng_on_surface_variant)
+                ContextCompat.getColorStateList(context, R.color.ng_search_hint)
             )
             setOnClickListener {
                 editText.setText("")
@@ -110,6 +113,10 @@ class NgSearchBar @JvmOverloads constructor(
     fun setQuery(query: CharSequence?) {
         editText.setText(query)
         editText.setSelection(editText.text?.length ?: 0)
+    }
+
+    private fun updateHint() {
+        editText.hint = if (editText.hasFocus()) null else hintText
     }
 
     private val Int.dp: Int
