@@ -31,6 +31,7 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.utils.CreateFileContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.widget.SelectActionBar
@@ -95,7 +96,7 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
                 setResult(RESULT_OK)
             }
         }
-    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val importDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             showDialogFragment(ImportReplaceRuleDialog(uri.toString()))

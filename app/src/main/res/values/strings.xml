@@ -1070,6 +1070,11 @@
     <string name="indent_4">Indent with 4 chars</string>
     <string name="select_folder">Select a folder</string>
     <string name="select_file">Select a file</string>
+    <string name="file_chooser">File chooser</string>
+    <string name="folder_chooser">Folder chooser</string>
+    <string name="default_file_picker">Default file picker</string>
+    <string name="system_file_picker">System file picker</string>
+    <string name="built_in_file_picker">Built-in file picker</string>
     <string name="no_find">No Discovery, you can add it in BookSource</string>
     <string name="restore_default">Restore default</string>
     <string name="set_download_per">Custom cache path requires Storage permission</string>

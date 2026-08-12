@@ -31,7 +31,6 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
@@ -93,6 +92,7 @@ import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.share
@@ -208,7 +208,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
     private var ignoreModelDetailChanges = false
     private val balanceNumberFormat by lazy { DecimalFormat("0.####") }
     private val importSkillFileLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri ->
         uri ?: return@registerForActivityResult
         importSkillFromUri(uri)

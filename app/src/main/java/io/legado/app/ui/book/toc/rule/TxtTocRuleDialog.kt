@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
@@ -33,6 +32,7 @@ import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
@@ -71,7 +71,7 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
         it ?: return@registerForActivityResult
         showDialogFragment(ImportTxtTocRuleDialog(it))
     }
-    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val importDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             showDialogFragment(ImportTxtTocRuleDialog(uri.toString()))

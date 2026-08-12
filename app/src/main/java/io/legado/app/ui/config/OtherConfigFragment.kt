@@ -74,6 +74,7 @@ class OtherConfigFragment : PreferenceFragment(),
         AppConfig.defaultBookTreeUri?.let {
             upPreferenceSummary(PreferKey.defaultBookTreeUri, it)
         }
+        upPreferenceSummary(PreferKey.defaultFilePicker, AppConfig.defaultFilePicker)
         upPreferenceSummary(PreferKey.checkSource, CheckSource.summary)
         upPreferenceSummary(PreferKey.bitmapCacheSize, AppConfig.bitmapCacheSize.toString())
         upPreferenceSummary(PreferKey.imageRetainNum, AppConfig.imageRetainNum.toString())
@@ -192,6 +193,10 @@ class OtherConfigFragment : PreferenceFragment(),
 
             PreferKey.defaultBookTreeUri -> {
                 upPreferenceSummary(key, AppConfig.defaultBookTreeUri)
+            }
+
+            PreferKey.defaultFilePicker -> {
+                upPreferenceSummary(key, AppConfig.defaultFilePicker)
             }
 
             PreferKey.recordLog -> {

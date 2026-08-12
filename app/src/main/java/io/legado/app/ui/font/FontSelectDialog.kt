@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,6 +56,7 @@ import io.legado.app.ui.widget.dialog.applyNgDialogWindow
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.RealPathUtil
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
@@ -84,20 +84,26 @@ class FontSelectDialog : BaseComposeDialogFragment() {
     private var selectedFontPath by mutableStateOf("")
     private var selectedSystemFont by mutableIntStateOf(0)
 
-    private val selectFontDir = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        uri?.let {
-            kotlin.runCatching {
-                requireContext().contentResolver.takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }.onFailure { error ->
-                AppLog.put("保存字体目录读取权限失败\n${error.localizedMessage}", error)
-            }
+    private val selectFontDir = registerForActivityResult(SelectDirectoryContract()) { result ->
+        result.uri?.let {
             putPrefString(PreferKey.fontFolder, it.toString())
-            DocumentFile.fromTreeUri(requireContext(), it)?.let { doc ->
-                loadFontFiles(FileDoc.fromDocumentFile(doc))
-            } ?: loadFontFiles()
+            if (it.isContentScheme()) {
+                kotlin.runCatching {
+                    requireContext().contentResolver.takePersistableUriPermission(
+                        it,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }.onFailure { error ->
+                    AppLog.put("保存字体目录读取权限失败\n${error.localizedMessage}", error)
+                }
+                DocumentFile.fromTreeUri(requireContext(), it)?.let { doc ->
+                    loadFontFiles(FileDoc.fromDocumentFile(doc))
+                } ?: loadFontFiles()
+            } else {
+                it.path?.let(::File)?.takeIf(File::canRead)?.let { directory ->
+                    loadFontFiles(FileDoc.fromFile(directory))
+                } ?: loadFontFiles()
+            }
         }
     }
 
@@ -323,7 +329,7 @@ class FontSelectDialog : BaseComposeDialogFragment() {
         val initialUri = getPrefString(PreferKey.fontFolder)
             ?.takeIf { it.isContentScheme() }
             ?.let(Uri::parse)
-        selectFontDir.launch(initialUri)
+        selectFontDir.launch(SelectDirectoryContract.Request(initialUri = initialUri))
     }
 
     private fun getLocalFonts(): ArrayList<FileDoc> {

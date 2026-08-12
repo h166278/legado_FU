@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
@@ -21,6 +20,7 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.association.ImportDictRuleDialog
 import io.legado.app.utils.CreateFileContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
@@ -55,7 +55,7 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
         it ?: return@registerForActivityResult
         showDialogFragment(ImportDictRuleDialog(it))
     }
-    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val importDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             showDialogFragment(ImportDictRuleDialog(uri.toString()))

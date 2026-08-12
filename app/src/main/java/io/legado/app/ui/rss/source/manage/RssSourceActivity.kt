@@ -1,7 +1,6 @@
 package io.legado.app.ui.rss.source.manage
 
 import android.os.Bundle
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +19,7 @@ import io.legado.app.ui.rss.RssComposeBinding
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.utils.ACache
 import io.legado.app.utils.CreateFileContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
@@ -69,7 +69,7 @@ class RssSourceActivity :
         it ?: return@registerForActivityResult
         showDialogFragment(ImportRssSourceDialog(it))
     }
-    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val importDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             showDialogFragment(ImportRssSourceDialog(uri.toString()))

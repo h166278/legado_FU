@@ -27,6 +27,7 @@ import io.legado.app.ui.source.edit.SourceEditCodeHighlighter
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.utils.GSON
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
@@ -63,7 +64,7 @@ class RssSourceEditActivity :
     private var pendingExit by mutableStateOf(false)
     private var forceFinish = false
 
-    private val selectDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val selectDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             appendToFocusedField(if (it.isContentScheme()) it.toString() else it.path.orEmpty())

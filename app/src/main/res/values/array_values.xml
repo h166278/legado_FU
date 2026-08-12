@@ -62,4 +62,9 @@
         <item>en</item>
     </string-array>
 
+    <string-array name="default_file_picker_value">
+        <item>system</item>
+        <item>built_in</item>
+    </string-array>
+
 </resources>

@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.widget.SeekBar
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +31,8 @@ import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.normalizeFileName
+import io.legado.app.utils.CreateDocumentContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,7 +51,7 @@ class ThemeManagerFragment : BaseFragment(R.layout.fragment_theme_manager) {
     private var md3ImportInstalling by mutableStateOf(false)
 
     private val exportTheme = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip")
+        CreateDocumentContract("application/zip")
     ) { uri ->
         val theme = pendingExportTheme
         pendingExportTheme = null
@@ -63,7 +64,7 @@ class ThemeManagerFragment : BaseFragment(R.layout.fragment_theme_manager) {
     }
 
     private val importTheme = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri ->
         uri ?: return@registerForActivityResult
         viewLifecycleOwner.lifecycleScope.launch {
@@ -83,7 +84,7 @@ class ThemeManagerFragment : BaseFragment(R.layout.fragment_theme_manager) {
     }
 
     private val selectBackground = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri ->
         val dark = pendingDarkBackground
         pendingDarkBackground = null

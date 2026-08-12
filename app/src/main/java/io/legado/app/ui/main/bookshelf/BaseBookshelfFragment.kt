@@ -5,7 +5,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
@@ -33,6 +32,7 @@ import io.legado.app.ui.book.import.remote.RemoteBookActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.config.AiChatActivity
 import io.legado.app.utils.CreateFileContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.design.theme.NgAppTheme
@@ -57,7 +57,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
     override val viewModel by viewModels<BookshelfViewModel>()
 
     private val importBookshelf =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        registerForActivityResult(SelectFileContract()) { uri ->
             kotlin.runCatching {
                 uri?.let {
                     it.takePersistableReadPermission()

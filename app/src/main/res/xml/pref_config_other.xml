@@ -86,6 +86,13 @@
             android:summary="@string/book_tree_uri_s"
             android:title="@string/book_tree_uri_t" />
 
+        <io.legado.app.lib.prefs.NameListPreference
+            android:defaultValue="system"
+            android:key="defaultFilePicker"
+            android:title="@string/default_file_picker"
+            app:entries="@array/default_file_picker"
+            app:entryValues="@array/default_file_picker_value" />
+
         <io.legado.app.lib.prefs.Preference
             android:key="sourceEditMaxLine"
             android:title="@string/source_edit_text_max_line" />

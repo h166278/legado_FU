@@ -195,6 +195,7 @@ object PreferKey {
     const val doublePageHorizontal = "doubleHorizontalPage"
     const val readUrlOpenInBrowser = "readUrlInBrowser"
     const val defaultBookTreeUri = "defaultBookTreeUri"
+    const val defaultFilePicker = "defaultFilePicker"
     const val checkSource = "checkSource"
     const val uploadRule = "uploadRule"
     const val tocUiUseReplace = "tocUiUseReplace"

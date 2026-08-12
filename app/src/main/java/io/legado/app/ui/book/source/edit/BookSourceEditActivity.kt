@@ -44,6 +44,7 @@ import io.legado.app.ui.widget.keyboard.KeyboardToolPop
 import io.legado.app.ui.widget.recycler.NoChildScrollLinearLayoutManager
 import io.legado.app.ui.widget.text.EditEntity
 import io.legado.app.utils.GSON
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
@@ -87,7 +88,7 @@ class BookSourceEditActivity :
             upSourceView(source)
         }
     }
-    private val selectDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val selectDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             if (it.isContentScheme()) {

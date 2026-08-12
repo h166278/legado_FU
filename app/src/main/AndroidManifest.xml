@@ -357,6 +357,12 @@
             android:name=".ui.file.FileManageActivity"
             android:configChanges="orientation|screenSize"
             android:hardwareAccelerated="true" />
+        <!-- 内置文件选择器 -->
+        <activity
+            android:name=".ui.file.BuiltInFilePickerActivity"
+            android:configChanges="orientation|screenSize"
+            android:hardwareAccelerated="true"
+            android:theme="@style/AppTheme.Transparent" />
         <!-- 文字处理 -->
         <activity
             android:name=".receiver.SharedReceiverActivity"

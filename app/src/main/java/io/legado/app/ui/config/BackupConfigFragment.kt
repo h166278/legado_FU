@@ -8,7 +8,6 @@ import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
@@ -37,6 +36,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
 import io.legado.app.utils.SelectDirectoryContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.applyTint
@@ -89,7 +89,7 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
-    private val restoreDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val restoreDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             waitDialog.setText("恢复中…")

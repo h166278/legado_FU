@@ -28,7 +28,6 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.SeekBar
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
@@ -86,6 +85,7 @@ import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.ui.widget.dialog.applyNgWindow
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefString
@@ -140,7 +140,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private val selectedVoiceLanguageFilters = linkedSetOf<String>()
     private val selectedVoiceGenderFilters = linkedSetOf<String>()
     private val importTtsEngineFileLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri ->
         uri ?: return@registerForActivityResult
         importTtsEngineFromUri(uri)

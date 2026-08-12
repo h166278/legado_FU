@@ -8,7 +8,6 @@ import android.view.MenuItem
 import android.view.SubMenu
 import android.view.WindowManager
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
@@ -45,6 +44,7 @@ import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.utils.CreateFileContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
@@ -122,7 +122,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         it ?: return@registerForActivityResult
         showDialogFragment(ImportBookSourceDialog(it))
     }
-    private val importDoc = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val importDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
             showDialogFragment(ImportBookSourceDialog(uri.toString()))

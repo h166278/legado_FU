@@ -57,6 +57,10 @@ internal fun resolveThemeNightModeFromUiMode(themeMode: String, uiMode: Int): Bo
 
 @Suppress("MemberVisibilityCanBePrivate", "ConstPropertyName")
 object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
+
+    const val DEFAULT_FILE_PICKER_SYSTEM = "system"
+    const val DEFAULT_FILE_PICKER_BUILT_IN = "built_in"
+
     val isCronet = appCtx.getPrefBoolean(PreferKey.cronet)
     var useAntiAlias = appCtx.getPrefBoolean(PreferKey.antiAlias)
     var userAgent: String = getPrefUserAgent()
@@ -387,6 +391,15 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             } else {
                 appCtx.putPrefString(PreferKey.defaultBookTreeUri, value)
             }
+        }
+
+    var defaultFilePicker: String
+        get() = appCtx.getPrefString(
+            PreferKey.defaultFilePicker,
+            DEFAULT_FILE_PICKER_SYSTEM,
+        ) ?: DEFAULT_FILE_PICKER_SYSTEM
+        set(value) {
+            appCtx.putPrefString(PreferKey.defaultFilePicker, value)
         }
 
     val showDiscovery: Boolean

@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentDialog
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -37,6 +36,8 @@ import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.utils.ChineseUtils
+import io.legado.app.utils.CreateDocumentContract
+import io.legado.app.utils.SelectFileContract
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
@@ -73,19 +74,19 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     private var highlightColorMode = 0
     private val configFileName = "readConfig.zip"
     private val selectExportDocument = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/zip")
+        CreateDocumentContract("application/zip")
     ) { uri -> uri?.let(::exportConfig) }
     private val selectImportDocument = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri -> uri?.let(::importConfig) }
     private val selectBackgroundImage = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri -> uri?.let(::setBackgroundFromUri) }
     private val selectHighlightBackground = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri -> uri?.let { installHighlightResource(it, "background") } }
     private val selectHighlightFont = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        SelectFileContract()
     ) { uri -> uri?.let { installHighlightResource(it, "font") } }
 
     override fun onStart() {
