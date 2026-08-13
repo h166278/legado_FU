@@ -114,6 +114,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         var titleTop by remember { mutableIntStateOf(ReadBookConfig.titleTopSpacing) }
         var titleBottom by remember { mutableIntStateOf(ReadBookConfig.titleBottomSpacing) }
         var advancedTitleWeight by remember { mutableIntStateOf(AdvancedTitleConfig.fontWeight) }
+        var advancedTitleFontSize by remember { mutableIntStateOf(AdvancedTitleConfig.fontSizeScale) }
         var revision by remember { mutableIntStateOf(0) }
         var activePicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
         val context = LocalContext.current
@@ -223,6 +224,17 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                             onValueChange = {
                                 advancedTitleWeight = it
                                 AdvancedTitleConfig.fontWeight = it
+                                postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                            },
+                        )
+                        ReadConfigSliderRow(
+                            title = getString(R.string.advanced_title_font_size),
+                            value = advancedTitleFontSize,
+                            valueRange = 50..200,
+                            stepSize = 10,
+                            onValueChange = {
+                                advancedTitleFontSize = it
+                                AdvancedTitleConfig.fontSizeScale = it
                                 postEvent(EventBus.UP_CONFIG, arrayListOf(5))
                             },
                         )
