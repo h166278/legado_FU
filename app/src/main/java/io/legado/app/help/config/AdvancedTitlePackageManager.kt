@@ -118,14 +118,19 @@ object AdvancedTitlePackageManager {
         val explicitId = appCtx.getPrefString(PreferKey.advancedTitlePackage)
             ?.takeIf(::isValidId)
         if (explicitId == null) {
-            legacyTemplate()?.let { return it }
+            legacyTemplate()?.takeIf { runCatching { AdvancedTitleConfig.isValidLottieJson(it) }.getOrDefault(false) }
+                ?.let { return it }
         }
         val id = explicitId ?: BUILTIN_ID
         return if (id == BUILTIN_ID) {
             builtinJson()
         } else {
             val file = lottieFile(localDir(id))
-            readCached(id, file) ?: legacyTemplate() ?: builtinJson()
+            readCached(id, file)
+                ?: legacyTemplate()?.takeIf {
+                    runCatching { AdvancedTitleConfig.isValidLottieJson(it) }.getOrDefault(false)
+                }
+                ?: builtinJson()
         }
     }
 

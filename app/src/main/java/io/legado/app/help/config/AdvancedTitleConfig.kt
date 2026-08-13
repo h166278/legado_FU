@@ -102,16 +102,16 @@ object AdvancedTitleConfig {
         }
     }
 
-    fun renderLottieJson(book: Book, title: String): String? {
+    fun renderLottieJson(book: Book, title: String): String? = runCatching {
         val raw = AdvancedTitlePackageManager.currentTemplate()
             ?: lottieJson?.takeIf { it.isNotBlank() }
             ?: lottiePath?.takeIf { it.isNotBlank() }?.let { path ->
                 runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
             }
-        return raw?.let {
+        raw?.let {
             applyCompatibleTextStyle(replaceVariables(it, book, title), textColor, fontWeight)
         }
-    }
+    }.getOrNull()
 
     fun renderValidLottieJson(book: Book, title: String): String? {
         val json = renderLottieJson(book, title)?.takeIf { it.isNotBlank() } ?: return null
