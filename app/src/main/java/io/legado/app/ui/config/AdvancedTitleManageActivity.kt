@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import android.app.Dialog
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -18,7 +19,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
@@ -212,10 +212,11 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
     }
 
     private fun showAddSheet() {
-        val dialog = BottomSheetDialog(this)
+        val dialog = Dialog(this, R.style.dialog_style)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24.dpToPx(), 16.dpToPx(), 24.dpToPx(), 24.dpToPx())
+            setBackgroundResource(R.drawable.ng_bg_dialog)
             addView(TextView(context).apply {
                 text = getString(R.string.advanced_title_add)
                 textSize = 22f
@@ -235,6 +236,11 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
             }
         }
         dialog.setContentView(content)
+        dialog.window?.let { win ->
+            val lp = win.attributes
+            lp.width = (resources.displayMetrics.widthPixels * 0.8f).toInt()
+            win.setAttributes(lp)
+        }
         dialog.show()
     }
 

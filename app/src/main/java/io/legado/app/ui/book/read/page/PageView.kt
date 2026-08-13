@@ -49,7 +49,6 @@ class PageView(context: Context) : FrameLayout(context) {
 
     private val binding = ViewBookPageBinding.inflate(LayoutInflater.from(context), this, true)
     private val readBookActivity get() = activity as? ReadBookActivity
-    private var readerOverlayVisible = false
     private var battery = 100
     private var tvTitle: BatteryView? = null
     private var tvTime: BatteryView? = null
@@ -275,10 +274,10 @@ class PageView(context: Context) : FrameLayout(context) {
         }
     }
 
-    fun upTipVisibility(readerOverlayVisible: Boolean = this.readerOverlayVisible) {
-        this.readerOverlayVisible = readerOverlayVisible
+    fun upTipVisibility() {
+        // 页眉显隐只取决于页眉模式与状态栏隐藏设置，不随唤醒菜单隐藏
         binding.llHeader.isGone = ReadTipConfig.headerMode != 1 ||
-                !ReadBookConfig.hideStatusBar || readerOverlayVisible
+                !ReadBookConfig.hideStatusBar
     }
 
     /**
