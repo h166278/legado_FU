@@ -25,6 +25,9 @@ import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AdvancedTitleNetworkImportPolicy
 import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.lib.theme.Selector
+import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
@@ -84,6 +87,20 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
         addView(Button(this@AdvancedTitleManageActivity).apply {
             text = getString(R.string.advanced_title_add)
             setOnClickListener { showAddSheet() }
+            // 背景跟随当前主题主色（用户自定义主题色 / 深浅主题切换时自动更新）
+            val primary = ThemeStore.primaryColor(this@AdvancedTitleManageActivity)
+            background = Selector.shapeBuild()
+                .setCornerRadius(12.dpToPx())
+                .setDefaultBgColor(primary)
+                .setPressedBgColor(ColorUtils.darkenColor(primary))
+                .create()
+            setTextColor(
+                if (ColorUtils.isColorLight(primary)) {
+                    android.graphics.Color.BLACK
+                } else {
+                    android.graphics.Color.WHITE
+                }
+            )
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 52.dpToPx()).apply {
             topMargin = 12.dpToPx()
         })
