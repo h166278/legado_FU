@@ -120,9 +120,12 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
         setBackgroundResource(R.drawable.advanced_title_card_background)
         addView(LottieAnimationView(context).apply {
             layoutParams = LinearLayout.LayoutParams(92.dpToPx(), 72.dpToPx())
-            template?.let { setAnimationFromJson(it, entry.id) }
-            repeatCount = LottieDrawable.INFINITE
-            if (template != null) playAnimation()
+            // 预览解析失败不应导致管理页崩溃，降级为空白预览
+            runCatching {
+                template?.let { setAnimationFromJson(it, entry.id) }
+                repeatCount = LottieDrawable.INFINITE
+                if (template != null) playAnimation()
+            }
         })
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -224,10 +227,18 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
         })
     }
 
-    private fun requestBuiltinCopyName() = requestNameAndSave(
-        json = AdvancedTitlePackageManager.readTemplate(AdvancedTitlePackageManager.builtinEntry()),
-        defaultName = getString(R.string.advanced_title_builtin_copy),
-    )
+    private fun requestBuiltinCopyName() {
+        val json = runCatching {
+            AdvancedTitlePackageManager.readTemplate(AdvancedTitlePackageManager.builtinEntry())
+        }.getOrElse {
+            toastOnUi(it.localizedMessage ?: getString(R.string.error))
+            return
+        }
+        requestNameAndSave(
+            json = json,
+            defaultName = getString(R.string.advanced_title_builtin_copy),
+        )
+    }
 
     private fun requestNetworkImport() {
         val url = EditText(this).apply { hint = getString(R.string.advanced_title_network_url) }

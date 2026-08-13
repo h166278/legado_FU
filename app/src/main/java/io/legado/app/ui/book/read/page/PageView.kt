@@ -384,7 +384,7 @@ class PageView(context: Context) : FrameLayout(context) {
         }
         val width = block.width.toInt().coerceAtLeast(1)
         val height = block.height.toInt().coerceAtLeast(1)
-        if (isScroll) {
+        fun showFallback() {
             lottie.cancelAnimation()
             lottie.visibility = View.GONE
             val params = fallback.layoutParams as ViewGroup.LayoutParams
@@ -397,6 +397,9 @@ class PageView(context: Context) : FrameLayout(context) {
             fallback.typeface = advancedTitleTypeface()
             fallback.setTextColor(AdvancedTitleConfig.textColor ?: ReadBookConfig.resolvedTitleColor)
             fallback.visibility = View.VISIBLE
+        }
+        if (isScroll) {
+            showFallback()
             return
         }
         fallback.visibility = View.GONE
@@ -409,7 +412,11 @@ class PageView(context: Context) : FrameLayout(context) {
         lottie.setFontAssetDelegate(advancedTitleFontDelegate)
         if (advancedTitleKey != block.json) {
             lottie.cancelAnimation()
-            lottie.setAnimationFromJson(block.json, null)
+            // 解析失败时降级为静态文本标题，避免阅读界面崩溃
+            if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
+                showFallback()
+                return
+            }
             advancedTitleKey = block.json
         }
         lottie.repeatCount = LottieDrawable.INFINITE
