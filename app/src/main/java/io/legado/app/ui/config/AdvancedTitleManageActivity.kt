@@ -22,7 +22,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
-import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AdvancedTitleNetworkImportPolicy
 import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.help.http.okHttpClient
