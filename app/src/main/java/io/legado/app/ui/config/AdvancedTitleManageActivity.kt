@@ -21,6 +21,8 @@ import com.airbnb.lottie.LottieDrawable
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import io.legado.app.R
 import io.legado.app.constant.EventBus
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AdvancedTitleNetworkImportPolicy
 import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.help.http.okHttpClient
@@ -120,6 +122,10 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
         setBackgroundResource(R.drawable.advanced_title_card_background)
         addView(LottieAnimationView(context).apply {
             layoutParams = LinearLayout.LayoutParams(92.dpToPx(), 72.dpToPx())
+            // 必须设置字体委托：Lottie 文本层绘制时按 fFamily 从 assets 加载
+            // fonts/<family>.ttf，APK 无此文件会抛 "Font asset not found" 导致
+            // 绘制阶段（onDraw）崩溃——这是模版预览闪退的根因
+            setFontAssetDelegate(AdvancedTitleFontAssetDelegate())
             // 预览解析失败不应导致管理页崩溃，降级为空白预览
             runCatching {
                 template?.let { setAnimationFromJson(it, entry.id) }
