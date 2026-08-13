@@ -70,6 +70,14 @@ object AdvancedTitleConfig {
             appCtx.putPrefInt(PreferKey.advancedTitleFontWeight, value.coerceIn(100, 900))
         }
 
+    /** 高级标题文本字号缩放（百分比，50-200，100 表示模板原字号） */
+    var fontSizeScale: Int
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleFontSize, 100)
+            .coerceIn(50, 200)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleFontSize, value.coerceIn(50, 200))
+        }
+
     var textColor: Int?
         get() = appCtx.getPrefInt(PreferKey.advancedTitleTextColor, Int.MIN_VALUE)
             .takeUnless { it == Int.MIN_VALUE }
@@ -109,7 +117,12 @@ object AdvancedTitleConfig {
                 runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
             }
         raw?.let {
-            applyCompatibleTextStyle(replaceVariables(it, book, title), textColor, fontWeight)
+            applyCompatibleTextStyle(
+                replaceVariables(it, book, title),
+                textColor,
+                fontWeight,
+                fontSizeScale
+            )
         }
     }.getOrNull()
 
@@ -220,11 +233,13 @@ object AdvancedTitleConfig {
         source: String,
         color: Int?,
         fontWeight: Int,
+        fontSizeScale: Int = 100,
     ): String {
-        if (color == null && fontWeight == 400) return source
+        if (color == null && fontWeight == 400 && fontSizeScale == 100) return source
         return runCatching {
             val root = JSONObject(source)
             val layers = root.optJSONArray("layers") ?: return source
+            val weightedFont = if (fontWeight == 400) null else weightedFontFamily(fontWeight)
             var hasCompatibleLayer = false
             for (index in 0 until layers.length()) {
                 val layer = layers.optJSONObject(index) ?: continue
@@ -236,17 +251,24 @@ object AdvancedTitleConfig {
                     ?: continue
                 for (frameIndex in 0 until keyframes.length()) {
                     keyframes.optJSONObject(frameIndex)?.optJSONObject("s")?.apply {
-                        if (fontWeight != 400) put("f", WEIGHTED_FONT_FAMILY)
+                        // 字号：按缩放百分比改写模板字号，随 JSON 变化触发动画重载
+                        if (fontSizeScale != 100) {
+                            val size = optDouble("s", 0.0)
+                            if (size > 0) put("s", (size * fontSizeScale / 100.0).toInt())
+                        }
+                        // 字重：把权重数值编码进字体名，保证 JSON 随字重变化触发动画重载，
+                        // 避免 Lottie FontAssetManager 缓存旧 Typeface 导致调整不生效
+                        weightedFont?.let { put("f", it) }
                         color?.let { put("fc", it.toLottieColor()) }
                     }
                 }
             }
-            if (hasCompatibleLayer && fontWeight != 400) {
+            if (hasCompatibleLayer && weightedFont != null) {
                 val fonts = root.optJSONObject("fonts") ?: JSONObject().also { root.put("fonts", it) }
                 val list = fonts.optJSONArray("list") ?: JSONArray().also { fonts.put("list", it) }
                 list.put(JSONObject().apply {
-                    put("fName", WEIGHTED_FONT_FAMILY)
-                    put("fFamily", WEIGHTED_FONT_FAMILY)
+                    put("fName", weightedFont)
+                    put("fFamily", weightedFont)
                     put("fStyle", "Regular")
                     put("ascent", 75)
                 })
@@ -254,6 +276,9 @@ object AdvancedTitleConfig {
             root.toString()
         }.getOrDefault(source)
     }
+
+    /** 把字重数值编码进字体名，使 JSON 内容随字重变化（用于触发动画重载与字体缓存刷新） */
+    fun weightedFontFamily(weight: Int): String = "${WEIGHTED_FONT_FAMILY}_$weight"
 
     private fun Int.toLottieColor() = JSONArray().apply {
         put(((this@toLottieColor ushr 16) and 0xff) / 255.0)

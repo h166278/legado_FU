@@ -23,20 +23,28 @@ internal class AdvancedTitleFontAssetDelegate(
     ): Typeface = resolve(fontFamily)
 
     private fun resolve(fontFamily: String): Typeface {
-        val isWeightedTitle = fontFamily == AdvancedTitleConfig.WEIGHTED_FONT_FAMILY
-        val weight = if (isWeightedTitle) {
-            runCatching { preferredWeight() }.getOrDefault(400).coerceIn(100, 900)
-        } else {
-            400
-        }
+        val weight = resolveWeight(fontFamily)
         runCatching { preferredTypeface() }.getOrNull()?.let {
-            return if (isWeightedTitle) weighted(it, weight) else it
+            return if (weight > 0) weighted(it, weight) else it
         }
         val systemFamily = fontFamily.trim().ifEmpty { "sans-serif" }
         return runCatching {
             val base = Typeface.create(systemFamily, Typeface.NORMAL)
-            if (isWeightedTitle) weighted(base, weight) else base
+            if (weight > 0) weighted(base, weight) else base
         }.getOrNull() ?: Typeface.DEFAULT
+    }
+
+    /**
+     * 从字体名解析字重：
+     * - 新格式 `legado_advanced_title_weighted_700`：取数字后缀（数值已编码，动画重载后与设置一致）
+     * - 旧格式 `legado_advanced_title_weighted`（无后缀）：回退到当前设置值
+     * - 其它字体：400
+     */
+    private fun resolveWeight(fontFamily: String): Int {
+        if (!fontFamily.startsWith(AdvancedTitleConfig.WEIGHTED_FONT_FAMILY)) return 400
+        val suffix = fontFamily.removePrefix(AdvancedTitleConfig.WEIGHTED_FONT_FAMILY)
+            .removePrefix("_")
+        return suffix.toIntOrNull()?.coerceIn(100, 900) ?: preferredWeight()
     }
 
     private fun weighted(typeface: Typeface, weight: Int): Typeface =
