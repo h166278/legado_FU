@@ -590,6 +590,12 @@ object ReadBookConfig {
         configList.add(config)
         val index = configList.lastIndex
         readStyleSelect = index
+        // 跟随共享排版时，阅读设置的读写全部走 shareConfig（见 config getter），
+        // 导入的预设必须同步为共享配置，否则切到新预设后页眉/页脚/字体等
+        // 仍取 shareConfig 旧值，表现为「导入的排版设置不生效」
+        if (shareLayout) {
+            shareConfig = config.detachedCopy()
+        }
         save()
         return index
     }
