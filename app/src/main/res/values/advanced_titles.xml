@@ -17,6 +17,7 @@
     <string name="advanced_title_name">Title name</string>
     <string name="advanced_title_mode_label">Advanced</string>
     <string name="advanced_title_font_weight">Weight</string>
+    <string name="advanced_title_font_size">Font size</string>
     <string name="advanced_title_text_color">Text color</string>
     <string name="advanced_title_add">Add</string>
     <string name="advanced_title_applied">Applied</string>

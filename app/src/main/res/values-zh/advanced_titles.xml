@@ -17,6 +17,7 @@
     <string name="advanced_title_name">标题名称</string>
     <string name="advanced_title_mode_label">高级</string>
     <string name="advanced_title_font_weight">字重</string>
+    <string name="advanced_title_font_size">字号</string>
     <string name="advanced_title_text_color">文字颜色</string>
     <string name="advanced_title_add">添加</string>
     <string name="advanced_title_applied">已应用</string>
