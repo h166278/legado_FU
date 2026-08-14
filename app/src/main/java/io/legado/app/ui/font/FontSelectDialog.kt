@@ -68,6 +68,7 @@ import io.legado.app.utils.putPrefString
 import io.legado.app.utils.toastOnUi
 import java.io.File
 import java.net.URLDecoder
+import splitties.init.appCtx
 
 /** 字体选择对话框。内容使用 Compose，目录读取与字体应用行为保持不变。 */
 class FontSelectDialog : BaseComposeDialogFragment() {
@@ -327,8 +328,20 @@ class FontSelectDialog : BaseComposeDialogFragment() {
     }
 
     private fun getLocalFonts(): ArrayList<FileDoc> {
+        val result = arrayListOf<FileDoc>()
         val path = FileUtils.getPath(requireContext().externalFiles, "font")
-        return File(path).listFileDocs { it.name.matches(fontRegex) }
+        result += File(path).listFileDocs { it.name.matches(fontRegex) }
+        // 排版包内嵌字体：导入排版时随包安装到内部 filesDir/read_style_packages/<包>/ 下，
+        // 也列入字体列表，保证导入的排版能在设置中看到并选中其自带字体
+        File(appCtx.filesDir, io.legado.app.help.config.ReadStylePackageManager.PACKAGE_DIR)
+            .takeIf(File::isDirectory)
+            ?.listFiles()
+            ?.forEach { pkgDir ->
+                pkgDir.listFiles()
+                    ?.filter { it.isFile && it.name.matches(fontRegex) }
+                    ?.mapTo(result) { FileDoc.fromFile(it) }
+            }
+        return result
     }
 
     private fun loadFontFiles(fileDoc: FileDoc? = null) {

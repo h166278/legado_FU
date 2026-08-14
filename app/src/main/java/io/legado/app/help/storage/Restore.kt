@@ -31,6 +31,7 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.upType
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReadStylePackageManager
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
@@ -255,6 +256,18 @@ object Restore {
                 ReadBookConfig.initShareConfig()
             }?.onFailure {
                 AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
+            }
+        }
+        // 还原排版包内嵌资源（导入排版时随包安装的字体/背景图）：
+        // 备份 zip 内 read_style_packages/ 目录解压在 path 下，复制回内部安装目录，
+        // 保证恢复后排版配置中的字体/背景引用仍然有效
+        File(path, ReadStylePackageManager.PACKAGE_DIR).takeIf(File::isDirectory)?.let { staged ->
+            runCatching {
+                val target = File(appCtx.filesDir, ReadStylePackageManager.PACKAGE_DIR)
+                target.deleteRecursively()
+                staged.copyRecursively(target, overwrite = true)
+            }.onFailure {
+                AppLog.put("恢复排版包资源出错\n${it.localizedMessage}", it)
             }
         }
         //AppWebDav.downBgs()

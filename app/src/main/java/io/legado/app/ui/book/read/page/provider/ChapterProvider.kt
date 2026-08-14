@@ -243,8 +243,10 @@ object ChapterProvider {
                 }
             }
         }.getOrElse {
-            ReadBookConfig.textFont = ""
-            ReadBookConfig.save()
+            // 加载失败仅本次回退系统字体，不清空持久化配置：
+            // 排版包内嵌字体安装在内部 read_style_packages/，备份恢复/数据迁移后可能暂时缺失，
+            // 若在这里清空 textFont 会把排版自带的字体设置永久破坏成系统默认。
+            // 文件缺失时用户重新导入排版（或恢复备份还原资源）后字体即可自动恢复。
             Typeface.SANS_SERIF
         } ?: Typeface.DEFAULT
     }
