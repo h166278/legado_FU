@@ -7,6 +7,14 @@ import org.junit.Test
 class NgDrawerAppearanceConfigTest {
 
     @Test
+    fun `default preset matches accepted drawer appearance`() {
+        assertEquals(5, NgDrawerAppearanceConfig.DEFAULT_TRANSPARENCY_PERCENT)
+        assertEquals(30, NgDrawerAppearanceConfig.DEFAULT_PRIMARY_STRENGTH_PERCENT)
+        assertEquals(0, NgDrawerAppearanceConfig.DEFAULT_HORIZONTAL_MARGIN_DP)
+        assertEquals(24, NgDrawerAppearanceConfig.DEFAULT_CORNER_RADIUS_DP)
+    }
+
+    @Test
     fun `percent values stay inside valid range`() {
         assertEquals(0, NgDrawerAppearanceConfig.normalizePercent(-1))
         assertEquals(42, NgDrawerAppearanceConfig.normalizePercent(42))

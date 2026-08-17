@@ -214,6 +214,7 @@ internal object NgThemeLibraryStore {
 
     private const val THEMES_KEY = "ngManagedThemes.v1"
     private const val ACTIVE_THEME_KEY = "ngActiveManagedThemeId.v1"
+    private const val RETIRED_CLASSIC_THEME_ID = "builtin.ng.classic"
     private val lock = Any()
     private var initialized = false
     private var installedBuiltInThemes: List<NgManagedTheme> = emptyList()
@@ -244,6 +245,17 @@ internal object NgThemeLibraryStore {
 
     /** 只在尚未选择过 NG 主题时应用发布默认主题，已有选择保持不变。 */
     fun applyDefaultThemeIfNeeded(context: Context) {
+        val selectedThemeId = context.defaultSharedPreferences.getString(
+            ACTIVE_THEME_KEY,
+            null,
+        )
+        if (selectedThemeId == RETIRED_CLASSIC_THEME_ID) {
+            val defaultTheme = builtInThemes(context)
+                .firstOrNull { it.id == NgBuiltInThemes.defaultTheme.id }
+                ?: return
+            apply(context, defaultTheme)
+            return
+        }
         if (context.defaultSharedPreferences.contains(ACTIVE_THEME_KEY)) {
             activeTheme(context)
                 ?.takeIf { it.isBuiltIn }
@@ -299,7 +311,7 @@ internal object NgThemeLibraryStore {
         allThemes(context).firstOrNull { it.id == state.activeThemeId }?.let { return it.name }
         val dayName = context.getPrefString(PreferKey.dThemeName)
         return when (dayName) {
-            null, "", "默认" -> "经典主题"
+            null, "", "默认", "经典主题" -> NgBuiltInThemes.defaultTheme.name
             else -> dayName
         }
     }
@@ -465,18 +477,17 @@ internal object NgBuiltInThemes {
     private const val BACKGROUND_PREFIX = "asset://defaultData/theme/"
     private const val READING_BACKGROUND_PREFIX = "asset://bg/"
 
-    val classic = theme(
-        id = "builtin.ng.classic",
-        name = "经典主题",
-        lightPrimary = 0xFFE53935.toInt(),
-        lightSecondary = 0xFF795548.toInt(),
-        darkPrimary = 0xFFD84315.toInt(),
-        darkSecondary = 0xFF546E7A.toInt(),
-        darkPrimaryText = 0xFFFFFFFF.toInt(),
-        darkSecondaryText = 0xB3FFFFFF.toInt(),
-        darkBackgroundColor = 0xFF212121.toInt(),
-        darkLabelContainer = 0xFF303030.toInt(),
+    private val standardFloatingBarProfile = NgThemeBarProfile(
+        useFloatingBottomBar = true,
+        floatingBottomBarBottomDistancePx = 40,
+        floatingBottomBarTransparency = 40,
+        bookshelfTopBarStyle = BookshelfTopBarStyle.GROUP_NAVIGATION.value,
+        bookshelfFloatingDockTopDistancePx = 50,
+        bookshelfFloatingDockTransparency = 40,
+        bookshelfFloatingDockSearchPosition =
+            BookshelfFloatingDockSearchPosition.LEFT.value,
     )
+
     val warm = theme(
         id = "builtin.ng.warm",
         name = "暖色渐变",
@@ -537,7 +548,7 @@ internal object NgBuiltInThemes {
             useFloatingBottomBar = true,
             floatingBottomBarBottomDistancePx = 40,
             floatingBottomBarTransparency = 40,
-            bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
+            bookshelfTopBarStyle = BookshelfTopBarStyle.GROUP_NAVIGATION.value,
             bookshelfFloatingDockTopDistancePx = 360,
             bookshelfFloatingDockTransparency = 40,
             bookshelfFloatingDockSearchPosition =
@@ -547,7 +558,7 @@ internal object NgBuiltInThemes {
 
     val defaultTheme = autumn
 
-    val all = listOf(classic, warm, bamboo, mist, autumn)
+    val all = listOf(warm, bamboo, mist, autumn)
 
     private fun theme(
         id: String,
@@ -607,10 +618,7 @@ internal object NgBuiltInThemes {
             lightBackground = NgThemeBackground(lightBackgroundPath),
             darkBackground = NgThemeBackground(darkBackgroundPath),
             transparentAppBars = transparentAppBars,
-            barProfile = NgThemeBarProfile(
-                useFloatingBottomBar = false,
-                bookshelfTopBarStyle = BookshelfTopBarStyle.TRADITIONAL.value,
-            ),
+            barProfile = standardFloatingBarProfile,
         )
     }
 

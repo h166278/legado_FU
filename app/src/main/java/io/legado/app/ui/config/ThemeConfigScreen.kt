@@ -62,7 +62,7 @@ internal data class ThemeConfigScreenState(
         NgDrawerAppearanceConfig.DEFAULT_HORIZONTAL_MARGIN_DP,
     val drawerCornerRadiusDp: Int =
         NgDrawerAppearanceConfig.DEFAULT_CORNER_RADIUS_DP,
-    val bookshelfTopBarStyle: BookshelfTopBarStyle = BookshelfTopBarStyle.TRADITIONAL,
+    val bookshelfTopBarStyle: BookshelfTopBarStyle = BookshelfTopBarStyle.COMPACT_TOOLBAR,
     val bookshelfFloatingDockMinTopDistancePx: Int = 0,
     val bookshelfFloatingDockTopDistancePx: Int = 0,
     val bookshelfFloatingDockTransparency: Int =
@@ -342,11 +342,11 @@ internal fun ThemeConfigScreen(
                 title = stringResource(R.string.bookshelf_top_bar_style),
                 summary = stringResource(
                     when (state.bookshelfTopBarStyle) {
-                        BookshelfTopBarStyle.TRADITIONAL ->
-                            R.string.bookshelf_top_bar_traditional
+                        BookshelfTopBarStyle.COMPACT_TOOLBAR ->
+                            R.string.bookshelf_top_bar_compact_toolbar
 
-                        BookshelfTopBarStyle.FLOATING_DOCK ->
-                            R.string.bookshelf_top_bar_floating_dock
+                        BookshelfTopBarStyle.GROUP_NAVIGATION ->
+                            R.string.bookshelf_top_bar_group_navigation
                     }
                 ),
                 expanded = bookshelfTopBarExpanded,
@@ -355,11 +355,11 @@ internal fun ThemeConfigScreen(
                 NgFloatingTabBar(
                     items = listOf(
                         NgFloatingTabSpec(
-                            text = stringResource(R.string.bookshelf_top_bar_traditional),
+                            text = stringResource(R.string.bookshelf_top_bar_compact_toolbar),
                             iconRes = R.drawable.ic_bookshelf_top_bar_traditional
                         ),
                         NgFloatingTabSpec(
-                            text = stringResource(R.string.bookshelf_top_bar_floating_dock),
+                            text = stringResource(R.string.bookshelf_top_bar_group_navigation),
                             iconRes = R.drawable.ic_bookshelf_top_bar_floating
                         )
                     ),
@@ -371,13 +371,10 @@ internal fun ThemeConfigScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                AnimatedVisibility(
-                    visible = state.bookshelfTopBarStyle == BookshelfTopBarStyle.FLOATING_DOCK
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
                         NgSettingsItem(
                             title = stringResource(
                                 R.string.bookshelf_floating_dock_search_position
@@ -453,7 +450,6 @@ internal fun ThemeConfigScreen(
                             onValueChangeFinished =
                                 onBookshelfFloatingDockTransparencyChangeFinished
                         )
-                    }
                 }
             }
             NgSettingsItem(

@@ -27,11 +27,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
+import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.ui.main.bookshelf.BookshelfContentToolbarActionButton
 import io.legado.app.ui.main.bookshelf.BookshelfContentToolbarMenuButton
+import io.legado.app.ui.main.bookshelf.BookshelfCompactToolbar
 import io.legado.app.ui.main.bookshelf.BookshelfDockGroup
 import io.legado.app.ui.main.bookshelf.BookshelfFloatingDock
-import io.legado.app.ui.main.bookshelf.BookshelfGroupGridDock
 import kotlin.math.roundToInt
 
 @Composable
@@ -39,6 +40,7 @@ internal fun BookshelfScreen(
     dockGroups: List<BookshelfDockGroup>,
     selectedGroupIndex: Int,
     groupGridMode: Boolean,
+    configuredTopBarStyle: BookshelfTopBarStyle,
     dockTopDistancePx: Int,
     dockContentTopInsetPx: Int,
     dockTransparency: Int,
@@ -56,6 +58,10 @@ internal fun BookshelfScreen(
     val dockProgress = remember { Animatable(0f) }
     val topInset = with(density) { dockContentTopInsetPx.toDp() }
     val dockTranslation = with(density) { (-4).dp.toPx() }
+    val resolvedTopBarStyle = BookshelfTopBarStyle.resolveForLayout(
+        configuredStyle = configuredTopBarStyle,
+        groupGridMode = groupGridMode,
+    )
 
     LaunchedEffect(Unit) {
         dockProgress.animateTo(
@@ -88,9 +94,14 @@ internal fun BookshelfScreen(
             .fillMaxWidth()
             .padding(top = topInset),
     ) {
-        if (groupGridMode) {
-            BookshelfGroupGridDock(
+        if (resolvedTopBarStyle == BookshelfTopBarStyle.COMPACT_TOOLBAR) {
+            BookshelfCompactToolbar(
+                groups = dockGroups,
+                selectedIndex = selectedGroupIndex,
+                groupGridMode = groupGridMode,
                 onSearchClick = onSearchClick,
+                onGroupClick = onGroupClick,
+                onGroupLongClick = onGroupLongClick,
                 onManageClick = onManageClick,
                 onSortClick = onSortClick,
                 onMenuItemClick = onMenuItemClick,

@@ -13,11 +13,42 @@ class BookshelfTopBarStyleTest {
     }
 
     @Test
-    fun defaultsUnknownStylesToTraditional() {
+    fun defaultsUnknownStylesToCompactToolbar() {
         assertEquals(
-            BookshelfTopBarStyle.TRADITIONAL,
+            BookshelfTopBarStyle.COMPACT_TOOLBAR,
             BookshelfTopBarStyle.fromValue(Int.MIN_VALUE)
         )
+    }
+
+    @Test
+    fun groupGridAlwaysUsesCompactToolbar() {
+        assertEquals(
+            BookshelfTopBarStyle.COMPACT_TOOLBAR,
+            BookshelfTopBarStyle.resolveForLayout(
+                configuredStyle = BookshelfTopBarStyle.GROUP_NAVIGATION,
+                groupGridMode = true,
+            )
+        )
+        assertEquals(
+            BookshelfTopBarStyle.COMPACT_TOOLBAR,
+            BookshelfTopBarStyle.resolveForLayout(
+                configuredStyle = BookshelfTopBarStyle.COMPACT_TOOLBAR,
+                groupGridMode = true,
+            )
+        )
+    }
+
+    @Test
+    fun regularBookshelfKeepsConfiguredStyle() {
+        BookshelfTopBarStyle.entries.forEach { style ->
+            assertEquals(
+                style,
+                BookshelfTopBarStyle.resolveForLayout(
+                    configuredStyle = style,
+                    groupGridMode = false,
+                )
+            )
+        }
     }
 
     @Test

@@ -11,18 +11,6 @@ import java.io.File
 class NgBuiltInThemePresetTest {
 
     @Test
-    fun `classic dark preset matches legacy native night palette`() {
-        val colors = NgBuiltInThemes.classic.colors.manualDark
-
-        assertEquals(0xFFD84315.toInt(), colors.primary)
-        assertEquals(0xFF546E7A.toInt(), colors.secondary)
-        assertEquals(0xFFFFFFFF.toInt(), colors.primaryText)
-        assertEquals(0xB3FFFFFF.toInt(), colors.secondaryText)
-        assertEquals(0xFF212121.toInt(), colors.background)
-        assertEquals(0xFF303030.toInt(), colors.labelContainer)
-    }
-
-    @Test
     fun `warm and bamboo presets only provide light backgrounds`() {
         assertEquals(
             "asset://bg/暖色渐变.webp",
@@ -137,14 +125,29 @@ class NgBuiltInThemePresetTest {
     }
 
     @Test
-    fun `built in themes except autumn use traditional bars`() {
+    fun `built in themes exclude classic and non autumn presets use shared floating bars`() {
         val expected = NgThemeBarProfile(
-            useFloatingBottomBar = false,
-            bookshelfTopBarStyle = BookshelfTopBarStyle.TRADITIONAL.value,
+            useFloatingBottomBar = true,
+            floatingBottomBarBottomDistancePx = 40,
+            floatingBottomBarTransparency = 40,
+            bookshelfTopBarStyle = BookshelfTopBarStyle.GROUP_NAVIGATION.value,
+            bookshelfFloatingDockTopDistancePx = 50,
+            bookshelfFloatingDockTransparency = 40,
+            bookshelfFloatingDockSearchPosition =
+                BookshelfFloatingDockSearchPosition.LEFT.value,
         )
 
         assertEquals(
-            listOf(expected, expected, expected, expected),
+            listOf(
+                "builtin.ng.warm",
+                "builtin.ng.bamboo",
+                "builtin.ng.mist",
+                "builtin.ng.autumn_mountains",
+            ),
+            NgBuiltInThemes.all.map { it.id },
+        )
+        assertEquals(
+            listOf(expected, expected, expected),
             NgBuiltInThemes.all.dropLast(1).map { it.barProfile },
         )
     }
@@ -182,7 +185,7 @@ class NgBuiltInThemePresetTest {
                 useFloatingBottomBar = true,
                 floatingBottomBarBottomDistancePx = 40,
                 floatingBottomBarTransparency = 40,
-                bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
+                bookshelfTopBarStyle = BookshelfTopBarStyle.GROUP_NAVIGATION.value,
                 bookshelfFloatingDockTopDistancePx = 360,
                 bookshelfFloatingDockTransparency = 40,
                 bookshelfFloatingDockSearchPosition =
@@ -200,7 +203,7 @@ class NgBuiltInThemePresetTest {
             useFloatingBottomBar = true,
             floatingBottomBarBottomDistancePx = 40,
             floatingBottomBarTransparency = 40,
-            bookshelfTopBarStyle = BookshelfTopBarStyle.FLOATING_DOCK.value,
+            bookshelfTopBarStyle = BookshelfTopBarStyle.GROUP_NAVIGATION.value,
             bookshelfFloatingDockTopDistancePx = 360,
             bookshelfFloatingDockTransparency = 40,
             bookshelfFloatingDockSearchPosition =

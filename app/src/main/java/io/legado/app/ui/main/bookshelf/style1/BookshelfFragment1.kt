@@ -83,6 +83,9 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private var dockSearchPosition by mutableStateOf(
         BookshelfFloatingDockSearchPosition.LEFT
     )
+    private var configuredTopBarStyle by mutableStateOf(
+        AppConfig.bookshelfTopBarStyle
+    )
     override val groupId: Long get() = selectedGroup?.groupId ?: 0
 
     override val books: List<Book>
@@ -112,6 +115,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                     dockGroups = dockGroups,
                     selectedGroupIndex = selectedGroupIndex,
                     groupGridMode = showGroupGrid,
+                    configuredTopBarStyle = configuredTopBarStyle,
                     dockTopDistancePx = dockTopDistancePx,
                     dockContentTopInsetPx = dockContentTopInsetPx,
                     dockTransparency = dockTransparency,
@@ -233,6 +237,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         )
         dockTransparency = AppConfig.bookshelfFloatingDockTransparency
         dockSearchPosition = AppConfig.bookshelfFloatingDockSearchPosition
+        configuredTopBarStyle = AppConfig.bookshelfTopBarStyle
     }
 
     override fun onResume() {
@@ -331,15 +336,11 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             if (visibleGroups != bookGroups) {
                 bookGroups.clear()
                 bookGroups.addAll(visibleGroups)
-                dockGroups = if (AppConfig.bookshelfHomeMode == BookshelfHomeMode.GROUP_GRID) {
-                    emptyList()
-                } else {
-                    visibleGroups.map { group ->
-                        BookshelfDockGroup(
-                            groupId = group.groupId,
-                            name = group.groupName,
-                        )
-                    }
+                dockGroups = visibleGroups.map { group ->
+                    BookshelfDockGroup(
+                        groupId = group.groupId,
+                        name = group.groupName,
+                    )
                 }
                 updateGroupGridFolders()
                 selectSavedGroup()

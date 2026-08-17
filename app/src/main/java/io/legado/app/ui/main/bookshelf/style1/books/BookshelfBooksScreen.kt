@@ -66,6 +66,9 @@ import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.main.bookshelf.bookshelfAuthorText
 import io.legado.app.utils.toTimeAgo
 
+private val BookshelfGridOuterEdge = 16.dp
+private val BookshelfGridItemInternalInset = 8.dp
+
 @Composable
 internal fun BookshelfBooksScreen(
     books: List<Book>,
@@ -488,6 +491,9 @@ private fun BookshelfBookGrid(
     val density = LocalDensity.current
     val itemSpacing = with(density) { spacing.toDp() }
     val edgeExtra = with(density) { 24.toDp() }
+    val horizontalContentPadding = (
+        BookshelfGridOuterEdge - itemSpacing - BookshelfGridItemInternalInset
+    ).coerceAtLeast(0.dp)
     val spanCount = columns.coerceIn(2, 6)
     val lastRowIndex = books.lastIndex / spanCount
     LaunchedEffect(scrollToTopToken) {
@@ -499,6 +505,8 @@ private fun BookshelfBookGrid(
         columns = GridCells.Fixed(spanCount),
         state = state,
         contentPadding = PaddingValues(
+            start = horizontalContentPadding,
+            end = horizontalContentPadding,
             bottom = bottomInset,
         ),
         modifier = Modifier.fillMaxSize(),

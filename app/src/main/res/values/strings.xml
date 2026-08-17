@@ -781,8 +781,8 @@
     <string name="floating_bottom_bar_bottom_distance">Distance from screen bottom</string>
     <string name="floating_bottom_bar_transparency">Dock transparency</string>
     <string name="bookshelf_top_bar_style">Bookshelf top bar style</string>
-    <string name="bookshelf_top_bar_traditional">Traditional</string>
-    <string name="bookshelf_top_bar_floating_dock">Floating top bar</string>
+    <string name="bookshelf_top_bar_compact_toolbar">Compact toolbar</string>
+    <string name="bookshelf_top_bar_group_navigation">Group navigation bar</string>
     <string name="bookshelf_floating_dock_top_distance">Distance below status bar</string>
     <string name="bookshelf_floating_dock_top_distance_value">%1$d px</string>
     <string name="bookshelf_floating_dock_transparency">Dock transparency</string>

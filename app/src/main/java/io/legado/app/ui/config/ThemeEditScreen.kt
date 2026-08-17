@@ -126,7 +126,7 @@ private fun ThemeBarProfileEditor(
     val bottomTransparency = profile.floatingBottomBarTransparency
         ?: FloatingBottomBarConfig.DEFAULT_TRANSPARENCY_PERCENT
     val topBarStyle = BookshelfTopBarStyle.fromValue(
-        profile.bookshelfTopBarStyle ?: BookshelfTopBarStyle.TRADITIONAL.value
+        profile.bookshelfTopBarStyle ?: BookshelfTopBarStyle.COMPACT_TOOLBAR.value
     )
     val topDistancePx = profile.bookshelfFloatingDockTopDistancePx
         ?: NgThemeBarProfile.EDITOR_DEFAULT_TOP_DISTANCE_PX
@@ -240,8 +240,10 @@ private fun ThemeBarProfileEditor(
         title = stringResource(R.string.bookshelf_top_bar_style),
         summary = stringResource(
             when (topBarStyle) {
-                BookshelfTopBarStyle.TRADITIONAL -> R.string.bookshelf_top_bar_traditional
-                BookshelfTopBarStyle.FLOATING_DOCK -> R.string.bookshelf_top_bar_floating_dock
+                BookshelfTopBarStyle.COMPACT_TOOLBAR ->
+                    R.string.bookshelf_top_bar_compact_toolbar
+                BookshelfTopBarStyle.GROUP_NAVIGATION ->
+                    R.string.bookshelf_top_bar_group_navigation
             }
         ),
         expanded = topBarExpanded,
@@ -250,11 +252,11 @@ private fun ThemeBarProfileEditor(
         NgFloatingTabBar(
             items = listOf(
                 NgFloatingTabSpec(
-                    text = stringResource(R.string.bookshelf_top_bar_traditional),
+                    text = stringResource(R.string.bookshelf_top_bar_compact_toolbar),
                     iconRes = R.drawable.ic_bookshelf_top_bar_traditional
                 ),
                 NgFloatingTabSpec(
-                    text = stringResource(R.string.bookshelf_top_bar_floating_dock),
+                    text = stringResource(R.string.bookshelf_top_bar_group_navigation),
                     iconRes = R.drawable.ic_bookshelf_top_bar_floating
                 )
             ),
@@ -277,11 +279,10 @@ private fun ThemeBarProfileEditor(
             },
             modifier = Modifier.fillMaxWidth()
         )
-        AnimatedVisibility(visible = topBarStyle == BookshelfTopBarStyle.FLOATING_DOCK) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
                 NgSettingsItem(
                     title = stringResource(R.string.bookshelf_floating_dock_search_position),
                     trailing = NgSettingsTrailing.CUSTOM,
@@ -360,7 +361,6 @@ private fun ThemeBarProfileEditor(
                     },
                     onValueChangeFinished = {}
                 )
-            }
         }
     }
 }

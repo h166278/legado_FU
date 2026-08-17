@@ -27,11 +27,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -47,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -57,6 +60,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -67,6 +71,8 @@ import io.legado.app.R
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.config.BookshelfFloatingDockConfig
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
 import io.legado.app.ui.design.theme.NgTheme
 import kotlin.math.roundToInt
 
@@ -75,7 +81,7 @@ internal data class BookshelfDockGroup(
     val name: String,
 )
 
-private val GroupGridDockTopOffset = 50.dp
+private const val COMPACT_GROUP_ITEM_ID_BASE = 0x55000000
 
 @Composable
 internal fun BookshelfFloatingDock(
@@ -332,8 +338,13 @@ private fun GroupIcon(group: BookshelfDockGroup, selected: Boolean) {
 }
 
 @Composable
-internal fun BookshelfGroupGridDock(
+internal fun BookshelfCompactToolbar(
+    groups: List<BookshelfDockGroup>,
+    selectedIndex: Int,
+    groupGridMode: Boolean,
     onSearchClick: () -> Unit,
+    onGroupClick: (Int) -> Unit,
+    onGroupLongClick: (Int) -> Unit,
     onManageClick: () -> Unit,
     onSortClick: (View, Rect) -> Unit,
     onMenuItemClick: (Int) -> Unit,
@@ -364,7 +375,7 @@ internal fun BookshelfGroupGridDock(
     }
     val dockTopSpacerHeight = with(LocalDensity.current) {
         (topDistancePx - contentTopInsetPx).coerceAtLeast(0).toDp()
-    } + GroupGridDockTopOffset
+    }
     var sortAnchorBounds by remember { mutableStateOf(Rect()) }
     val searchLabel = stringResource(R.string.search)
     val manageLabel = stringResource(R.string.manage)
@@ -372,17 +383,17 @@ internal fun BookshelfGroupGridDock(
     val moreLabel = stringResource(R.string.more)
 
     val actions: @Composable () -> Unit = {
-        GroupGridToolbarAction(
+        CompactToolbarAction(
             iconRes = R.drawable.ic_settings,
             label = manageLabel,
             contentColor = contentColor,
             onClick = onManageClick,
             modifier = Modifier
-                .width(48.dp)
+                .width(44.dp)
                 .fillMaxHeight(),
         )
-        GroupGridToolbarDivider(color = dividerColor)
-        GroupGridToolbarAction(
+        CompactToolbarDivider(color = dividerColor)
+        CompactToolbarAction(
             iconRes = R.drawable.ic_swap_vert,
             label = sortLabel,
             contentColor = contentColor,
@@ -392,7 +403,7 @@ internal fun BookshelfGroupGridDock(
                 }
             },
             modifier = Modifier
-                .width(48.dp)
+                .width(44.dp)
                 .fillMaxHeight()
                 .onGloballyPositioned { coordinates ->
                     val bounds = coordinates.boundsInRoot()
@@ -404,16 +415,16 @@ internal fun BookshelfGroupGridDock(
                     )
                 },
         )
-        GroupGridToolbarDivider(color = dividerColor)
+        CompactToolbarDivider(color = dividerColor)
         BookshelfMenuHost(
             includeBrowseHistory = true,
             onMenuItemClick = onMenuItemClick,
             modifier = Modifier
-                .width(48.dp)
+                .width(44.dp)
                 .fillMaxHeight(),
             menuOffset = DpOffset(0.dp, (-6).dp),
         ) { openMenu ->
-            GroupGridToolbarAction(
+            CompactToolbarAction(
                 iconRes = R.drawable.ic_bookshelf_dock_more,
                 label = moreLabel,
                 contentColor = contentColor,
@@ -440,33 +451,168 @@ internal fun BookshelfGroupGridDock(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (searchPosition == BookshelfFloatingDockSearchPosition.LEFT) {
-                GroupGridSearchAction(
+                CompactToolbarSearchAction(
                     label = searchLabel,
                     contentColor = contentColor,
                     onClick = onSearchClick,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .widthIn(min = 96.dp),
                 )
-                GroupGridToolbarDivider(color = dividerColor)
+                CompactToolbarDivider(color = dividerColor)
+                if (!groupGridMode && groups.isNotEmpty()) {
+                    CompactToolbarGroupAction(
+                        groups = groups,
+                        selectedIndex = selectedIndex,
+                        contentColor = contentColor,
+                        onGroupClick = onGroupClick,
+                        onGroupLongClick = onGroupLongClick,
+                    )
+                    CompactToolbarDivider(color = dividerColor)
+                }
                 actions()
             } else {
                 actions()
-                GroupGridToolbarDivider(color = dividerColor)
-                GroupGridSearchAction(
+                CompactToolbarDivider(color = dividerColor)
+                if (!groupGridMode && groups.isNotEmpty()) {
+                    CompactToolbarGroupAction(
+                        groups = groups,
+                        selectedIndex = selectedIndex,
+                        contentColor = contentColor,
+                        onGroupClick = onGroupClick,
+                        onGroupLongClick = onGroupLongClick,
+                    )
+                    CompactToolbarDivider(color = dividerColor)
+                }
+                CompactToolbarSearchAction(
                     label = searchLabel,
                     contentColor = contentColor,
                     onClick = onSearchClick,
-                    modifier = Modifier.weight(1f),
+                    alignEnd = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .widthIn(min = 96.dp),
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupGridSearchAction(
+private fun CompactToolbarGroupAction(
+    groups: List<BookshelfDockGroup>,
+    selectedIndex: Int,
+    contentColor: Color,
+    onGroupClick: (Int) -> Unit,
+    onGroupLongClick: (Int) -> Unit,
+) {
+    val selectedGroup = groups.getOrNull(selectedIndex) ?: return
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    var expanded by remember { mutableStateOf(false) }
+    val groupLabel = stringResource(R.string.group)
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val menuTextStyle = MaterialTheme.typography.bodyMedium
+    val menuWidth = remember(
+        groups,
+        configuration.screenWidthDp,
+        density.density,
+        density.fontScale,
+        menuTextStyle,
+    ) {
+        val longestTextWidth = groups.maxOfOrNull { group ->
+            textMeasurer.measure(
+                text = group.name,
+                style = menuTextStyle,
+                maxLines = 1,
+            ).size.width
+        } ?: 0
+        val measuredWidth = with(density) { longestTextWidth.toDp() } + 84.dp
+        val maxWidth = (configuration.screenWidthDp.dp - 32.dp)
+            .coerceAtMost(196.dp)
+            .coerceAtLeast(120.dp)
+        measuredWidth.coerceIn(120.dp, maxWidth)
+    }
+    val menuItems = remember(groups, selectedIndex) {
+        groups.mapIndexed { index, group ->
+            NgExpandableActionMenuItem(
+                itemId = COMPACT_GROUP_ITEM_ID_BASE + index,
+                titleRes = 0,
+                iconRes = group.builtInIconRes() ?: R.drawable.ic_groups,
+                title = group.name,
+                checked = index == selectedIndex,
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .width(72.dp)
+            .fillMaxHeight(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(4.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    if (isPressed) colorResource(R.color.ng_bookshelf_action_pressed)
+                    else Color.Transparent,
+                )
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = { expanded = true },
+                    onLongClick = { onGroupLongClick(selectedIndex) },
+                )
+                .padding(horizontal = 6.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "$groupLabel: ${selectedGroup.name}"
+                    role = Role.Button
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = selectedGroup.name,
+                color = contentColor,
+                fontSize = NgTheme.typography.compactItemTitleSp.sp,
+                lineHeight = (NgTheme.typography.compactItemTitleSp + 3).sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_down),
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        NgExpandableActionMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            items = menuItems,
+            width = menuWidth,
+            offset = DpOffset(0.dp, (-4).dp),
+            onItemClick = { item ->
+                expanded = false
+                val index = item.itemId - COMPACT_GROUP_ITEM_ID_BASE
+                if (index in groups.indices) onGroupClick(index)
+            },
+        )
+    }
+}
+
+@Composable
+private fun CompactToolbarSearchAction(
     label: String,
     contentColor: Color,
     onClick: () -> Unit,
+    alignEnd: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -485,11 +631,12 @@ private fun GroupGridSearchAction(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = 10.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = label
                 role = Role.Button
             },
+        horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -498,7 +645,7 @@ private fun GroupGridSearchAction(
             tint = contentColor,
             modifier = Modifier.size(22.dp),
         )
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = label,
             color = contentColor,
@@ -511,7 +658,7 @@ private fun GroupGridSearchAction(
 }
 
 @Composable
-private fun GroupGridToolbarAction(
+private fun CompactToolbarAction(
     @DrawableRes iconRes: Int,
     label: String,
     contentColor: Color,
@@ -549,7 +696,7 @@ private fun GroupGridToolbarAction(
 }
 
 @Composable
-private fun GroupGridToolbarDivider(color: Color) {
+private fun CompactToolbarDivider(color: Color) {
     Box(
         modifier = Modifier
             .width(1.dp)

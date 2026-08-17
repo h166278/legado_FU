@@ -778,8 +778,8 @@
     <string name="floating_bottom_bar_bottom_distance">距屏幕底部</string>
     <string name="floating_bottom_bar_transparency">Dock 透明度</string>
     <string name="bookshelf_top_bar_style">书架顶栏样式</string>
-    <string name="bookshelf_top_bar_traditional">传统样式</string>
-    <string name="bookshelf_top_bar_floating_dock">悬浮顶栏</string>
+    <string name="bookshelf_top_bar_compact_toolbar">紧凑工具栏</string>
+    <string name="bookshelf_top_bar_group_navigation">分组导航栏</string>
     <string name="bookshelf_floating_dock_top_distance">距状态栏</string>
     <string name="bookshelf_floating_dock_top_distance_value">%1$d px</string>
     <string name="bookshelf_floating_dock_transparency">Dock 透明度</string>

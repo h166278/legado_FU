@@ -53,6 +53,7 @@ internal object NgThemePackageManager {
         val stamp = File(root, BUILT_IN_STAMP)
         if (stamp.takeIf(File::isFile)?.readText() != updateToken) {
             definitions.forEach { installBuiltInTheme(context, root, it) }
+            removeRetiredBuiltInThemes(root, definitions)
             stamp.writeText(updateToken)
         }
         return definitions.map { definition ->
@@ -63,6 +64,26 @@ internal object NgThemePackageManager {
                 }
         }
     }
+
+    private fun removeRetiredBuiltInThemes(
+        builtInRoot: File,
+        definitions: List<NgManagedTheme>,
+    ) {
+        val activeDirectoryNames = definitions.mapTo(hashSetOf()) { definition ->
+            builtInDirectoryName(definition.id)
+        }
+        builtInRoot.listFiles()
+            .orEmpty()
+            .filter { it.isDirectory && it.name !in activeDirectoryNames }
+            .forEach { retiredRoot ->
+                check(retiredRoot.deleteRecursively()) {
+                    "无法清理退役内置主题包: ${retiredRoot.name}"
+                }
+            }
+    }
+
+    private fun builtInDirectoryName(themeId: String): String =
+        themeId.replace(Regex("[^A-Za-z0-9._-]"), "_")
 
     suspend fun exportTheme(
         context: Context,
@@ -162,7 +183,7 @@ internal object NgThemePackageManager {
         definition: NgManagedTheme,
     ) {
         require(definition.isBuiltIn) { "内置主题 ID 非法" }
-        val directoryName = definition.id.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val directoryName = builtInDirectoryName(definition.id)
         val installedRoot = File(builtInRoot, directoryName)
         val stagingRoot = File(builtInRoot, ".$directoryName-${UUID.randomUUID()}")
         try {
@@ -216,7 +237,7 @@ internal object NgThemePackageManager {
     }
 
     private fun readInstalledBuiltInTheme(root: File, themeId: String): NgManagedTheme {
-        val directoryName = themeId.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val directoryName = builtInDirectoryName(themeId)
         val installedRoot = File(root, directoryName)
         val manifestFile = File(installedRoot, MANIFEST_NAME)
         require(manifestFile.isFile) { "内置主题包缺少 manifest.json" }

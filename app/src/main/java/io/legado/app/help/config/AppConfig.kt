@@ -469,7 +469,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     var bookshelfTopBarStyle: BookshelfTopBarStyle
         get() = BookshelfTopBarStyle.fromValue(
-            appCtx.getPrefInt(PreferKey.bookshelfTopBarStyle, BookshelfTopBarStyle.TRADITIONAL.value)
+            appCtx.getPrefInt(
+                PreferKey.bookshelfTopBarStyle,
+                BookshelfTopBarStyle.COMPACT_TOOLBAR.value
+            )
         )
         set(value) {
             appCtx.putPrefInt(PreferKey.bookshelfTopBarStyle, value.value)
