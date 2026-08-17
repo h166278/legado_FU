@@ -45,6 +45,9 @@ import io.legado.app.utils.toastOnUi
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+private const val LEGADO_PROCESS_TEXT_ACTIVITY =
+    "io.legado.app.receiver.SharedReceiverActivity"
+
 @SuppressLint("RestrictedApi")
 class TextActionMenu(private val context: ComponentActivity, private val callBack: CallBack) :
     PopupWindow(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {
@@ -585,6 +588,7 @@ class TextActionMenu(private val context: ComponentActivity, private val callBac
     private fun getSupportedActivities(): List<ResolveInfo> {
         return context.packageManager
             .queryIntentActivities(createProcessTextIntent(), 0)
+            .filterNot { it.activityInfo.name == LEGADO_PROCESS_TEXT_ACTIVITY }
     }
 
     @RequiresApi(Build.VERSION_CODES.M)
