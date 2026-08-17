@@ -7,9 +7,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -60,11 +63,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -88,7 +91,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
-import io.legado.app.ui.design.components.compose.NgSwipeToDelete
+import io.legado.app.ui.design.components.compose.NgLazyListFastScroller
+import io.legado.app.ui.design.components.compose.NgLazyListFastScrollerVariant
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgTheme
@@ -180,7 +184,6 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
                         dismissAllowingStateLoss()
                     },
                     onBookmarkDelete = ::deleteBookmark,
-                    onDismissRequest = { dismissAllowingStateLoss() },
                 )
             }
         }
@@ -203,9 +206,10 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
             height = (resources.displayMetrics.heightPixels * 0.82f).toInt()
         }
         BottomSheetBehavior.from(sheet).apply {
-            isDraggable = false
-            isHideable = false
             skipCollapsed = true
+            isDraggable = true
+            isDraggableOnNestedScroll = true
+            isHideable = true
             state = BottomSheetBehavior.STATE_EXPANDED
         }
     }
@@ -337,9 +341,7 @@ private fun ReadCatalogPanel(
     onChapterClick: (BookChapter) -> Unit,
     onBookmarkClick: (Bookmark) -> Unit,
     onBookmarkDelete: (Bookmark) -> Unit,
-    onDismissRequest: () -> Unit,
 ) {
-    var selectedTab by remember { mutableStateOf(CatalogTab.Chapters) }
     var searchVisible by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var descending by remember { mutableStateOf(false) }
@@ -366,12 +368,21 @@ private fun ReadCatalogPanel(
     }
     val chapterListState = rememberLazyListState()
     val bookmarkListState = rememberLazyListState()
+    val pagerState = rememberPagerState(pageCount = { CatalogTab.entries.size })
+    val pagerScope = rememberCoroutineScope()
+    val selectedTab = CatalogTab.entries[pagerState.currentPage]
+    val nestedScrollInteropConnection = rememberNestedScrollInteropConnection()
     LaunchedEffect(query, chapterCount) {
         visibleChapterCount = if (query.isBlank()) chapterCount else 0
     }
+    LaunchedEffect(pagerState.currentPage) {
+        query = ""
+    }
 
     NgGlassSurface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(nestedScrollInteropConnection),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         style = NgGlassDefaults.style(
             containerAlpha = 1f,
@@ -390,10 +401,7 @@ private fun ReadCatalogPanel(
                 .navigationBarsPadding()
                 .padding(top = 8.dp),
         ) {
-            CatalogDragHandle(
-                mutedColor = mutedColor,
-                onDismissRequest = onDismissRequest,
-            )
+            CatalogDragHandle(mutedColor = mutedColor)
             if (searchVisible) {
                 CatalogSearchField(
                     query = query,
@@ -427,67 +435,75 @@ private fun ReadCatalogPanel(
                 selectedContentColor = selectedContentColor,
                 dockColor = dockColor,
                 onTabSelected = {
-                    selectedTab = it
                     query = ""
+                    pagerScope.launch {
+                        pagerState.animateScrollToPage(it.ordinal)
+                    }
                 },
             )
             Spacer(Modifier.height(4.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(listBackgroundColor),
-            ) {
-                CatalogSummaryRow(
-                    selectedTab = selectedTab,
-                    currentChapterIndex = currentChapterIndex,
-                    chapterCount = chapterCount,
-                    itemCount = if (selectedTab == CatalogTab.Chapters) {
-                        visibleChapterCount
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                val pageTab = CatalogTab.entries[page]
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(listBackgroundColor),
+                ) {
+                    CatalogSummaryRow(
+                        selectedTab = pageTab,
+                        currentChapterIndex = currentChapterIndex,
+                        chapterCount = chapterCount,
+                        itemCount = if (pageTab == CatalogTab.Chapters) {
+                            visibleChapterCount
+                        } else {
+                            filteredBookmarks.size
+                        },
+                        descending = descending,
+                        contentColor = contentColor,
+                        mutedColor = mutedColor,
+                        onSort = { descending = !descending },
+                    )
+                    if (loading) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                color = accentColor,
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    } else if (pageTab == CatalogTab.Chapters) {
+                        CatalogChapterList(
+                            chapterCount = chapterCount,
+                            query = query,
+                            descending = descending,
+                            cachedChapterFiles = cachedChapterFiles,
+                            isLocalBook = isLocalBook,
+                            currentChapterIndex = currentChapterIndex,
+                            listState = chapterListState,
+                            contentColor = contentColor,
+                            mutedColor = mutedColor,
+                            accentColor = accentColor,
+                            loadChapterCount = loadChapterCount,
+                            loadChapterPosition = loadChapterPosition,
+                            loadChapterPage = loadChapterPage,
+                            onChapterCountChanged = { visibleChapterCount = it },
+                            onChapterClick = onChapterClick,
+                        )
                     } else {
-                        filteredBookmarks.size
-                    },
-                    descending = descending,
-                    contentColor = contentColor,
-                    mutedColor = mutedColor,
-                    onSort = { descending = !descending },
-                )
-                if (loading) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
-                            color = accentColor,
-                            strokeWidth = 2.dp,
+                        CatalogBookmarkList(
+                            bookmarks = filteredBookmarks,
+                            currentChapterIndex = currentChapterIndex,
+                            listState = bookmarkListState,
+                            contentColor = contentColor,
+                            mutedColor = mutedColor,
+                            accentColor = accentColor,
+                            onBookmarkClick = onBookmarkClick,
+                            onBookmarkDelete = onBookmarkDelete,
                         )
                     }
-                } else if (selectedTab == CatalogTab.Chapters) {
-                    CatalogChapterList(
-                        chapterCount = chapterCount,
-                        query = query,
-                        descending = descending,
-                        cachedChapterFiles = cachedChapterFiles,
-                        isLocalBook = isLocalBook,
-                        currentChapterIndex = currentChapterIndex,
-                        listState = chapterListState,
-                        contentColor = contentColor,
-                        mutedColor = mutedColor,
-                        accentColor = accentColor,
-                        loadChapterCount = loadChapterCount,
-                        loadChapterPosition = loadChapterPosition,
-                        loadChapterPage = loadChapterPage,
-                        onChapterCountChanged = { visibleChapterCount = it },
-                        onChapterClick = onChapterClick,
-                    )
-                } else {
-                    CatalogBookmarkList(
-                        bookmarks = filteredBookmarks,
-                        currentChapterIndex = currentChapterIndex,
-                        listState = bookmarkListState,
-                        contentColor = contentColor,
-                        mutedColor = mutedColor,
-                        accentColor = accentColor,
-                        onBookmarkClick = onBookmarkClick,
-                        onBookmarkDelete = onBookmarkDelete,
-                    )
                 }
             }
         }
@@ -497,29 +513,11 @@ private fun ReadCatalogPanel(
 @Composable
 private fun CatalogDragHandle(
     mutedColor: Color,
-    onDismissRequest: () -> Unit,
 ) {
-    var draggedDownPx by remember { mutableStateOf(0f) }
-    val dismissThresholdPx = with(LocalDensity.current) { 48.dp.toPx() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(14.dp)
-            .pointerInput(dismissThresholdPx) {
-                detectVerticalDragGestures(
-                    onDragStart = { draggedDownPx = 0f },
-                    onVerticalDrag = { _, dragAmount ->
-                        draggedDownPx = (draggedDownPx + dragAmount).coerceAtLeast(0f)
-                    },
-                    onDragCancel = { draggedDownPx = 0f },
-                    onDragEnd = {
-                        if (draggedDownPx >= dismissThresholdPx) {
-                            onDismissRequest()
-                        }
-                        draggedDownPx = 0f
-                    },
-                )
-            },
+            .height(14.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         Box(
@@ -865,7 +863,6 @@ private fun CatalogChapterList(
     CatalogScrollableList(
         itemCount = itemCount,
         listState = listState,
-        accentColor = accentColor,
     ) {
         LazyColumn(
             state = listState,
@@ -1045,7 +1042,6 @@ private fun CatalogBookmarkList(
     CatalogScrollableList(
         itemCount = bookmarks.size,
         listState = listState,
-        accentColor = accentColor,
     ) {
         LazyColumn(
             state = listState,
@@ -1062,37 +1058,32 @@ private fun CatalogBookmarkList(
         ) {
             items(bookmarks, key = { it.time }) { bookmark ->
                 val deleteConfirmationVisible = pendingDeleteTime == bookmark.time
-                NgSwipeToDelete(
-                    deletable = !deleteConfirmationVisible,
-                    reordering = false,
-                    onDeleteRequested = { pendingDeleteTime = bookmark.time },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    CatalogBookmarkCard(
-                        bookmark = bookmark,
-                        deleteConfirmationVisible = deleteConfirmationVisible,
-                        noteExpanded = expandedNoteTimes[bookmark.time] == true,
-                        contentColor = contentColor,
-                        mutedColor = mutedColor,
-                        accentColor = accentColor,
-                        onClick = { onBookmarkClick(bookmark) },
-                        onNoteToggle = {
-                            expandedNoteTimes[bookmark.time] =
-                                expandedNoteTimes[bookmark.time] != true
-                        },
-                        onDeleteCancel = { pendingDeleteTime = null },
-                        onDeleteConfirm = {
-                            pendingDeleteTime = null
-                            onBookmarkDelete(bookmark)
-                        },
-                    )
-                }
+                CatalogBookmarkCard(
+                    bookmark = bookmark,
+                    deleteConfirmationVisible = deleteConfirmationVisible,
+                    noteExpanded = expandedNoteTimes[bookmark.time] == true,
+                    contentColor = contentColor,
+                    mutedColor = mutedColor,
+                    accentColor = accentColor,
+                    onClick = { onBookmarkClick(bookmark) },
+                    onLongClick = { pendingDeleteTime = bookmark.time },
+                    onNoteToggle = {
+                        expandedNoteTimes[bookmark.time] =
+                            expandedNoteTimes[bookmark.time] != true
+                    },
+                    onDeleteCancel = { pendingDeleteTime = null },
+                    onDeleteConfirm = {
+                        pendingDeleteTime = null
+                        onBookmarkDelete(bookmark)
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun CatalogBookmarkCard(
     bookmark: Bookmark,
     deleteConfirmationVisible: Boolean,
@@ -1101,6 +1092,7 @@ private fun CatalogBookmarkCard(
     mutedColor: Color,
     accentColor: Color,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onNoteToggle: () -> Unit,
     onDeleteCancel: () -> Unit,
     onDeleteConfirm: () -> Unit,
@@ -1112,7 +1104,11 @@ private fun CatalogBookmarkCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(cardColor)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = stringResource(R.string.delete),
+                onLongClick = onLongClick,
+            )
             .padding(start = 12.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
     ) {
         Text(
@@ -1259,49 +1255,18 @@ private fun catalogCardColor(): Color = if (NgTheme.snapshot.isDark) {
 private fun CatalogScrollableList(
     itemCount: Int,
     listState: LazyListState,
-    accentColor: Color,
     content: @Composable () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     Box(modifier = Modifier.fillMaxSize()) {
         content()
-        if (listState.canScrollBackward || listState.canScrollForward) {
-            val firstVisible = listState.firstVisibleItemIndex
-            val jumpToTop = firstVisible > itemCount / 2
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 10.dp)
-                    .size(40.dp)
-                    .clickable {
-                        scope.launch {
-                            listState.scrollToItem(
-                                if (jumpToTop) 0 else (itemCount - 1).coerceAtLeast(0)
-                            )
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = 0.08f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (jumpToTop) {
-                            Icons.Rounded.KeyboardArrowUp
-                        } else {
-                            Icons.Rounded.KeyboardArrowDown
-                        },
-                        contentDescription = null,
-                        modifier = Modifier.size(21.dp),
-                        tint = accentColor,
-                    )
-                }
-            }
-        }
+        NgLazyListFastScroller(
+            state = listState,
+            itemCount = itemCount,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 4.dp),
+            variant = NgLazyListFastScrollerVariant.FLOATING_HANDLE,
+        )
     }
 }
 
