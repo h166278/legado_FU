@@ -49,6 +49,11 @@
     <string name="character_count_format">%1$d个</string>
     <string name="book_character_empty">还没有角色卡，点击右上角 + 添加。</string>
     <string name="book_other_works">其它作品</string>
+    <string name="book_info_play">播放</string>
+    <string name="auto_load_book_other_works">加载相关</string>
+    <string name="book_info_menu_book_management">书籍管理</string>
+    <string name="book_info_menu_source_and_links">书源与链接</string>
+    <string name="book_info_menu_data_and_diagnostics">数据与诊断</string>
     <string name="book_other_works_idle">点击右侧刷新，查找该作者的其它作品。</string>
     <string name="book_other_works_loading">正在加载其它作品...</string>
     <string name="book_other_works_empty">没有找到其它作品。</string>
@@ -902,6 +907,15 @@
     <string name="auto_next_page_speed">自动翻页间隔</string>
     <string name="book_info">书籍信息</string>
     <string name="book_info_edit">书籍信息编辑</string>
+    <string name="book_edit_title">编辑书籍</string>
+    <string name="book_info_basic">基本信息</string>
+    <string name="book_info_type">类型</string>
+    <string name="book_info_cover_section">封面</string>
+    <string name="book_type_text">文本</string>
+    <string name="book_type_audio">音频</string>
+    <string name="book_type_image">图片</string>
+    <string name="book_type_video">视频</string>
+    <string name="book_cover_local_image">本地图片</string>
     <string name="ps_default_read">默认打开书架</string>
     <string name="pt_default_read">自动跳转最近阅读</string>
     <string name="replace_scope">替换范围，选填书名或者书源 URL</string>
@@ -1726,6 +1740,7 @@
     <string name="error_decode_bitmap">图片解码失败</string>
     <string name="error_image_url_empty">图片链接为空，检查替换净化规则</string>
     <string name="variable_comment">变量说明(variableComment)</string>
+    <string name="variable_value">变量</string>
     <string name="remote_book">远程书籍</string>
     <string name="reading_time_sort">阅读时长排序</string>
     <string name="last_read_time_sort">阅读时间排序</string>

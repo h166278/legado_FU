@@ -76,6 +76,10 @@ val Book.isOnLineTxt: Boolean
 val Book.isWebFile: Boolean
     get() = isType(BookType.webFile)
 
+/** 只有能够提供文本／HTML正文的书籍才支持 TTS 听书。 */
+val Book.supportsReadAloud: Boolean
+    get() = !isAudio && !isVideo && !isImage && !isWebFile && !isPdf
+
 val Book.isUpError: Boolean
     get() = isType(BookType.updateError)
 

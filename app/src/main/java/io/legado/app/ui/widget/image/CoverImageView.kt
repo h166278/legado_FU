@@ -72,6 +72,7 @@ class CoverImageView @JvmOverloads constructor(
     private val drawBookName = BookCover.drawBookName
     private val drawBookAuthor by lazy { BookCover.drawBookAuthor }
     private var coverRadius: Float
+    private var coverAspectRatio = 0.75f
     private val clipRect = RectF()
     private val clipPath = Path()
 
@@ -85,7 +86,7 @@ class CoverImageView @JvmOverloads constructor(
         if (params != null) {
             val width = params.width
             if (width >= 0) {
-                params.height = width * 4 / 3
+                params.height = (width / coverAspectRatio).toInt()
             } else {
                 params.height = ViewGroup.LayoutParams.WRAP_CONTENT
             }
@@ -95,7 +96,7 @@ class CoverImageView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val measuredWidth = MeasureSpec.getSize(widthMeasureSpec)
-        val measuredHeight = measuredWidth * 4 / 3
+        val measuredHeight = (measuredWidth / coverAspectRatio).toInt()
         super.onMeasure(
             widthMeasureSpec,
             MeasureSpec.makeMeasureSpec(measuredHeight, MeasureSpec.EXACTLY)
@@ -252,6 +253,13 @@ class CoverImageView @JvmOverloads constructor(
     fun setHeight(height: Int) {
         val width = height * 3 / 4
         minimumWidth = width
+    }
+
+    fun setCoverAspectRatio(aspectRatio: Float) {
+        val normalized = aspectRatio.coerceIn(0.4f, 1f)
+        if (coverAspectRatio == normalized) return
+        coverAspectRatio = normalized
+        requestLayout()
     }
 
     fun setCoverRadiusDp(radiusDp: Int) {

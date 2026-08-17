@@ -43,13 +43,19 @@ data class NgFloatingTabSpec(
     val contentDescription: String? = text
 )
 
+enum class NgFloatingTabBarVariant {
+    STANDARD,
+    SOLID_LIGHT_CONTENT,
+}
+
 /** 与 View 版 NgFloatingTabBar 对齐的 48dp 等宽悬浮 Dock。 */
 @Composable
 fun NgFloatingTabBar(
     items: List<NgFloatingTabSpec>,
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    variant: NgFloatingTabBarVariant = NgFloatingTabBarVariant.STANDARD,
 ) {
     items.forEach { item ->
         require(item.text != null || !item.contentDescription.isNullOrBlank()) {
@@ -57,12 +63,17 @@ fun NgFloatingTabBar(
         }
     }
     val outerShape = RoundedCornerShape(12.dp)
+    val surfaceColor = when (variant) {
+        NgFloatingTabBarVariant.STANDARD -> colorResource(R.color.ng_settings_item)
+        NgFloatingTabBarVariant.SOLID_LIGHT_CONTENT ->
+            colorResource(R.color.ng_neutral_container)
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
             .clip(outerShape)
-            .background(colorResource(R.color.ng_settings_item))
+            .background(surfaceColor)
             .border(0.6.dp, colorResource(R.color.ng_settings_item_stroke), outerShape)
             .padding(3.dp)
             .selectableGroup(),
@@ -70,9 +81,15 @@ fun NgFloatingTabBar(
     ) {
         items.forEachIndexed { index, item ->
             val selected = index == selectedIndex.coerceIn(items.indices)
-            val contentColor = Color(
-                if (selected) NgTheme.colors.primary else NgTheme.colors.onSurface
-            )
+            val contentColor = when {
+                !selected -> Color(NgTheme.colors.onSurface)
+                variant == NgFloatingTabBarVariant.SOLID_LIGHT_CONTENT -> Color.White
+                else -> Color(NgTheme.colors.primary)
+            }
+            val selectedContainerColor = when (variant) {
+                NgFloatingTabBarVariant.STANDARD -> Color(NgTheme.colors.selectedContainer)
+                NgFloatingTabBarVariant.SOLID_LIGHT_CONTENT -> Color(NgTheme.colors.primary)
+            }
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -80,7 +97,7 @@ fun NgFloatingTabBar(
                     .clip(RoundedCornerShape(10.dp))
                     .then(
                         if (selected) {
-                            Modifier.background(Color(NgTheme.colors.selectedContainer))
+                            Modifier.background(selectedContainerColor)
                         } else {
                             Modifier
                         }

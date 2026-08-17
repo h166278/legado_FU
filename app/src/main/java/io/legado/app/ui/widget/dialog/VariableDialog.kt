@@ -1,96 +1,165 @@
 package io.legado.app.ui.widget.dialog
 
-import android.app.Application
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
-import androidx.fragment.app.viewModels
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.BaseViewModel
-import io.legado.app.databinding.DialogVariableBinding
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.base.BaseComposeDialogFragment
+import io.legado.app.ui.design.components.compose.NgCompactEditorDialog
+import io.legado.app.ui.design.components.compose.NgFormDensity
+import io.legado.app.ui.design.components.compose.NgFormField
+import io.legado.app.ui.design.components.compose.NgFormFieldVariant
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.design.theme.NgTheme
 
-class VariableDialog() : BaseDialogFragment(R.layout.dialog_variable, true),
-    Toolbar.OnMenuItemClickListener {
-
-    private val binding by viewBinding(DialogVariableBinding::bind)
-    private val viewModel by viewModels<ViewModel>()
+/** 源变量／书籍变量等共享输入弹窗。 */
+class VariableDialog() : BaseComposeDialogFragment() {
 
     constructor(title: String, key: String, variable: String?, comment: String) : this() {
         arguments = Bundle().apply {
-            putString("title", title)
-            putString("key", key)
-            putString("variable", variable)
-            putString("comment", comment)
+            putString(ARG_TITLE, title)
+            putString(ARG_KEY, key)
+            putString(ARG_VARIABLE, variable)
+            putString(ARG_COMMENT, comment)
         }
     }
+
+    private var key = ""
+    private var title = ""
+    private var variable by mutableStateOf("")
+    private var comment = ""
 
     override fun onStart() {
         super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        applyNgDialogWindow(marginDp = 16)
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        arguments?.let {
-            binding.toolBar.title = it.getString("title")
-            viewModel.init(it) {
-                binding.tvComment.text = viewModel.comment
-                binding.tvVariable.setText(viewModel.variable)
-            }
-        } ?: let {
-            dismiss()
+        val args = arguments ?: run {
+            dismissAllowingStateLoss()
             return
         }
-        binding.toolBar.inflateMenu(R.menu.save)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_save -> {
-                callback?.setVariable(
-                    viewModel.key ?: "",
-                    binding.tvVariable.text?.toString()
-                )
-                dismissAllowingStateLoss()
+        title = args.getString(ARG_TITLE).orEmpty()
+        key = args.getString(ARG_KEY).orEmpty()
+        variable = args.getString(ARG_VARIABLE).orEmpty()
+        comment = args.getString(ARG_COMMENT).orEmpty()
+        (view as ComposeView).apply {
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                NgAppTheme(updateSystemBars = false) {
+                    VariableDialogContent(
+                        title = title,
+                        variable = variable,
+                        comment = comment,
+                        onVariableChange = { variable = it },
+                        onSave = ::save,
+                    )
+                }
             }
         }
-        return true
     }
 
-    val callback get() = (parentFragment as? Callback) ?: (activity as? Callback)
-
-    class ViewModel(application: Application) : BaseViewModel(application) {
-
-        var key: String? = null
-        var comment: String? = null
-        var variable: String? = null
-
-        fun init(arguments: Bundle, onFinally: () -> Unit) {
-            if (key != null) return
-            execute {
-                key = arguments.getString("key")
-                comment = arguments.getString("comment")
-                variable = arguments.getString("variable")
-            }.onFinally {
-                onFinally.invoke()
-            }
-        }
-
+    private fun save() {
+        callback?.setVariable(key, variable)
+        dismissAllowingStateLoss()
     }
+
+    private val callback: Callback?
+        get() = (parentFragment as? Callback) ?: (activity as? Callback)
 
     interface Callback {
-
         fun setVariable(key: String, variable: String?)
-
     }
 
+    private companion object {
+        const val ARG_TITLE = "title"
+        const val ARG_KEY = "key"
+        const val ARG_VARIABLE = "variable"
+        const val ARG_COMMENT = "comment"
+    }
+}
+
+@Composable
+private fun VariableDialogContent(
+    title: String,
+    variable: String,
+    comment: String,
+    onVariableChange: (String) -> Unit,
+    onSave: () -> Unit,
+) {
+    NgCompactEditorDialog(
+        title = title,
+        titleAction = {
+            IconButton(
+                onClick = onSave,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_save),
+                    contentDescription = stringResource(R.string.action_save),
+                    modifier = Modifier.size(22.dp),
+                    tint = Color(NgTheme.colors.primary),
+                )
+            }
+        },
+    ) {
+        Text(
+            text = stringResource(R.string.variable_value),
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(NgTheme.colors.primary),
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+        )
+        NgFormField(
+            label = "",
+            value = variable,
+            onValueChange = onVariableChange,
+            density = NgFormDensity.COMPACT,
+            variant = NgFormFieldVariant.PLAIN_UNDERLINE,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.variable_comment),
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(NgTheme.colors.primary),
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        SelectionContainer {
+            Text(
+                text = comment,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 56.dp)
+                    .verticalScroll(rememberScrollState()),
+                color = Color(NgTheme.colors.onSurfaceVariant),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+            )
+        }
+    }
 }

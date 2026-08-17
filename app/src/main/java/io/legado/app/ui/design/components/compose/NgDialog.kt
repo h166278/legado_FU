@@ -80,6 +80,52 @@ fun NgDialog(
     }
 }
 
+/**
+ * 顶栏承载保存操作的紧凑输入弹窗。
+ *
+ * 用于变量等少字段编辑，不套用宽松表单和底部操作栏。
+ */
+@Composable
+fun NgCompactEditorDialog(
+    title: String,
+    modifier: Modifier = Modifier,
+    titleAction: @Composable RowScope.() -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = colorResource(R.color.ng_surface_card),
+        shape = RoundedCornerShape(NgTheme.shapes.extraLargeDp.dp),
+        shadowElevation = NgTheme.effects.overlayElevationDp.dp,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .padding(start = 16.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    color = Color(NgTheme.colors.onSurface),
+                    fontSize = 18.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                titleAction()
+            }
+            Column(
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                content = content,
+            )
+        }
+    }
+}
+
 /** 弹窗分区内的紧凑标题／当前值操作行。 */
 @Composable
 fun NgDialogValueRow(

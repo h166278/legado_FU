@@ -21,6 +21,7 @@ fun NgBookCover(
     book: Book,
     modifier: Modifier = Modifier,
     coverRadius: Int? = null,
+    coverAspectRatio: Float? = null,
     contentDescription: String? = null,
     revision: Int = 0,
     loadOnlyWifi: Boolean = false,
@@ -47,6 +48,7 @@ fun NgBookCover(
         update = { cover ->
             cover.contentDescription = contentDescription
             coverRadius?.let(cover::setCoverRadiusDp)
+            coverAspectRatio?.let(cover::setCoverAspectRatio)
             if (cover.getTag(R.id.bookshelf_cover_load_key) != loadKey) {
                 cover.setTag(R.id.bookshelf_cover_load_key, loadKey)
                 cover.load(

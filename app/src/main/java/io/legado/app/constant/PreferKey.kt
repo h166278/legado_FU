@@ -39,6 +39,8 @@ object PreferKey {
     const val hideNavigationBar = "hideNavigationBar"
     const val precisionSearch = "precisionSearch"
     const val searchBlockSourceDialogs = "searchBlockSourceDialogs"
+    const val autoLoadBookOtherWorks = "autoLoadBookOtherWorks"
+    const val bookOtherWorksLastCheckPrefix = "bookOtherWorksLastCheck:"
     const val readAloudByPage = "readAloudByPage"
     const val skipReadAloudChapterTitle = "skipReadAloudChapterTitle"
     const val ttsEngine = "appTtsEngine"

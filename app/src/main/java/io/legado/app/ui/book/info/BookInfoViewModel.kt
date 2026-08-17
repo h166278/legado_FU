@@ -3,6 +3,7 @@ package io.legado.app.ui.book.info
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
+import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -31,6 +33,8 @@ import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.updateTo
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.source.SourceInteractionBlockedException
+import io.legado.app.help.source.SourceInteractionPolicy
 import io.legado.app.lib.webdav.ObjectNotFoundException
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.BookCover
@@ -42,12 +46,18 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.utils.ArchiveUtils
+import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.UrlUtil
+import io.legado.app.utils.getPrefLong
 import io.legado.app.utils.isContentScheme
+import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
+import io.legado.app.utils.putPrefLong
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.catch
 import java.util.concurrent.ConcurrentHashMap
 
@@ -55,6 +65,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
     val bookData = MutableLiveData<Book>()
     val chapterListData = MutableLiveData<List<BookChapter>>()
     val otherWorksData = MutableLiveData<OtherWorksState>(OtherWorksState.Idle)
+    val otherWorksLoadingData = MutableLiveData(false)
     val bookshelfChanged = MutableLiveData<Unit>()
     val webFiles = mutableListOf<WebFile>()
     var inBookshelf = false
@@ -62,6 +73,11 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
     var bookSource: BookSource? = null
     private var changeSourceCoroutine: Coroutine<*>? = null
     private var otherWorksBookKey: String? = null
+    private var otherWorksSearchCoroutine: Coroutine<*>? = null
+    private var otherWorksSearchKey: String? = null
+    private var otherWorksSearchInBackground = false
+    private var lastManualOtherWorksSearchAt = 0L
+    private var autoLoadOtherWorksEnabled = false
     private val bookshelf: MutableSet<String> = ConcurrentHashMap.newKeySet()
     val waitDialogData = MutableLiveData<Boolean>()
     val actionLive = MutableLiveData<String>()
@@ -170,34 +186,97 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun prepareOtherWorks(book: Book) {
+    fun prepareOtherWorks(book: Book, autoLoad: Boolean) {
+        autoLoadOtherWorksEnabled = autoLoad
         val key = "${book.name}\n${book.author}\n${book.origin}"
         if (otherWorksBookKey != key) {
+            otherWorksSearchCoroutine?.cancel()
+            otherWorksSearchCoroutine = null
+            otherWorksSearchKey = null
             otherWorksBookKey = key
             otherWorksData.value = OtherWorksState.Idle
-            loadCachedOtherWorks(book)
+            otherWorksLoadingData.value = false
+            loadCachedOtherWorks(book, autoLoad)
         }
     }
 
-    private fun loadCachedOtherWorks(book: Book) {
+    fun setAutoLoadOtherWorks(enabled: Boolean) {
+        autoLoadOtherWorksEnabled = enabled
+        if (!enabled) {
+            if (otherWorksSearchInBackground) {
+                otherWorksSearchCoroutine?.cancel()
+                otherWorksSearchCoroutine = null
+                otherWorksSearchKey = null
+                otherWorksLoadingData.value = false
+            }
+            return
+        }
+        bookData.value?.let { loadCachedOtherWorks(it, autoLoad = true) }
+    }
+
+    private fun loadCachedOtherWorks(book: Book, autoLoad: Boolean) {
         val source = bookSource ?: return
         val author = normalizeAuthor(book.author)
         if (author.isBlank()) return
+        val bookKey = "${book.name}\n${book.author}\n${book.origin}"
+        val requestKey = otherWorksRequestKey(source, author)
         execute {
-            filterOtherWorks(
+            val cached = filterOtherWorks(
                 book,
-                appDb.searchBookDao.getByOriginAuthor(source.bookSourceUrl, author)
+                appDb.searchBookDao.getByOriginAuthor(source.bookSourceUrl, author),
+            )
+            CachedOtherWorks(
+                items = cached,
+                isFresh = maxOf(
+                    cached.maxOfOrNull(SearchBook::time) ?: 0L,
+                    context.getPrefLong(otherWorksLastCheckKey(requestKey)),
+                ).let { newest ->
+                    newest > 0L &&
+                        System.currentTimeMillis() - newest <= OTHER_WORKS_CACHE_TTL
+                },
             )
         }.onSuccess {
-            if (it.isNotEmpty()) {
-                otherWorksData.postValue(OtherWorksState.Success(it))
+            if (otherWorksBookKey != bookKey) {
+                return@onSuccess
+            }
+            if (it.items.isNotEmpty()) {
+                otherWorksData.postValue(OtherWorksState.Success(it.items))
+            }
+            if (autoLoadOtherWorksEnabled && autoLoad && !it.isFresh) {
+                searchOtherWorks(
+                    book = book,
+                    source = source,
+                    author = author,
+                    requestKey = requestKey,
+                    background = true,
+                )
             }
         }.onError {
             AppLog.put("加载作者其它作品缓存失败\n${it.localizedMessage}", it)
+            if (otherWorksBookKey != bookKey) {
+                return@onError
+            }
+            if (autoLoadOtherWorksEnabled && autoLoad) {
+                searchOtherWorks(
+                    book = book,
+                    source = source,
+                    author = author,
+                    requestKey = requestKey,
+                    background = true,
+                )
+            }
         }
     }
 
     fun searchOtherWorks() {
+        if (otherWorksSearchCoroutine?.isActive == true && !otherWorksSearchInBackground) {
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastManualOtherWorksSearchAt < OTHER_WORKS_REFRESH_DEBOUNCE) {
+            return
+        }
+        lastManualOtherWorksSearchAt = now
         val book = bookData.value ?: return
         val source = bookSource ?: let {
             otherWorksData.value = OtherWorksState.Error(context.getString(R.string.error_no_source))
@@ -208,32 +287,98 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             otherWorksData.value = OtherWorksState.Empty
             return
         }
-        otherWorksData.value = OtherWorksState.Loading
-        execute {
-            val items = WebBook.searchBookAwait(
-                bookSource = source,
-                key = author,
-                page = 1,
-                filter = { _, itemAuthor, _ ->
-                    normalizeAuthor(itemAuthor) == author
-                }
-            ).onEach {
+        searchOtherWorks(
+            book = book,
+            source = source,
+            author = author,
+            requestKey = otherWorksRequestKey(source, author),
+            background = false,
+        )
+    }
+
+    private fun searchOtherWorks(
+        book: Book,
+        source: BookSource,
+        author: String,
+        requestKey: String,
+        background: Boolean,
+    ) {
+        if (background && otherWorksSearchCoroutine?.isActive == true) {
+            if (!otherWorksSearchInBackground || otherWorksSearchKey == requestKey) {
+                return
+            }
+        }
+        otherWorksSearchCoroutine?.cancel()
+        otherWorksSearchKey = requestKey
+        otherWorksSearchInBackground = background
+        if (!background) {
+            otherWorksData.value = OtherWorksState.Loading
+        }
+        otherWorksLoadingData.value = true
+        val blockDialogs = background ||
+            context.getPrefBoolean(PreferKey.searchBlockSourceDialogs)
+        var coroutine: Coroutine<List<SearchBook>>? = null
+        coroutine = execute(context = IO + SourceInteractionPolicy(blockDialogs)) {
+            context.putPrefLong(otherWorksLastCheckKey(requestKey), System.currentTimeMillis())
+            val items = try {
+                WebBook.searchBookAwait(
+                    bookSource = source,
+                    key = author,
+                    page = 1,
+                    filter = { _, itemAuthor, _ ->
+                        normalizeAuthor(itemAuthor) == author
+                    },
+                )
+            } catch (error: SourceInteractionBlockedException) {
+                currentCoroutineContext().ensureActive()
+                AppLog.putDebug("${source.bookSourceName}\n${error.localizedMessage}")
+                emptyList()
+            } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                if (!background) throw error
+                AppLog.putDebug(
+                    "后台加载作者其它作品失败\n${source.bookSourceName}\n${error.localizedMessage}",
+                )
+                emptyList()
+            }.onEach {
                 it.releaseHtmlData()
             }.let { filterOtherWorks(book, it) }
             if (items.isNotEmpty()) {
                 appDb.searchBookDao.insert(*items.toTypedArray())
             }
             items
-        }.onSuccess {
-            otherWorksData.postValue(
-                if (it.isEmpty()) OtherWorksState.Empty else OtherWorksState.Success(it)
-            )
-        }.onError {
-            AppLog.put("搜索作者其它作品失败\n${it.localizedMessage}", it)
-            otherWorksData.postValue(
-                OtherWorksState.Error(it.localizedMessage ?: it.javaClass.simpleName)
-            )
+        }.onSuccess { items ->
+            if (otherWorksBookKey != "${book.name}\n${book.author}\n${book.origin}") {
+                return@onSuccess
+            }
+            if (background) {
+                if (items.isNotEmpty()) {
+                    otherWorksData.postValue(OtherWorksState.Success(items))
+                }
+            } else {
+                otherWorksData.postValue(
+                    if (items.isEmpty()) {
+                        OtherWorksState.Empty
+                    } else {
+                        OtherWorksState.Success(items)
+                    },
+                )
+            }
+        }.onError { error ->
+            AppLog.put("搜索作者其它作品失败\n${error.localizedMessage}", error)
+            if (!background) {
+                otherWorksData.postValue(
+                    OtherWorksState.Error(error.localizedMessage ?: error.javaClass.simpleName),
+                )
+            }
+        }.onFinally {
+            if (otherWorksSearchCoroutine === coroutine) {
+                otherWorksSearchCoroutine = null
+                otherWorksSearchKey = null
+                otherWorksLoadingData.postValue(false)
+            }
         }
+        otherWorksSearchCoroutine = coroutine
     }
 
     fun isInBookShelf(book: SearchBook): Boolean {
@@ -256,6 +401,14 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
 
     private fun normalizeAuthor(author: String): String {
         return author.replace(AppPattern.authorRegex, "").trim()
+    }
+
+    private fun otherWorksRequestKey(source: BookSource, author: String): String {
+        return "${source.bookSourceUrl}\n$author"
+    }
+
+    private fun otherWorksLastCheckKey(requestKey: String): String {
+        return PreferKey.bookOtherWorksLastCheckPrefix + MD5Utils.md5Encode16(requestKey)
     }
 
     fun refreshBook(book: Book) {
@@ -665,6 +818,11 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
+    private data class CachedOtherWorks(
+        val items: List<SearchBook>,
+        val isFresh: Boolean,
+    )
+
     data class WebFile(
         val url: String,
         val name: String,
@@ -691,6 +849,11 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         object Empty : OtherWorksState()
         data class Success(val books: List<SearchBook>) : OtherWorksState()
         data class Error(val message: String) : OtherWorksState()
+    }
+
+    private companion object {
+        const val OTHER_WORKS_CACHE_TTL = 24 * 60 * 60 * 1000L
+        const val OTHER_WORKS_REFRESH_DEBOUNCE = 700L
     }
 
 }

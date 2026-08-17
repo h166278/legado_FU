@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="switch_selection_read_mode">Switch selected-text read mode</string>
-    <string name="book_scan">AI 扫书</string>
-    <string name="book_scan_summary">分析书籍是否存在重大雷点</string>
     <!--App-->
     <string name="app_name">阅读</string>
     <string name="receiving_shared_label">Legado·search</string>
@@ -52,6 +50,11 @@
     <string name="character_count_format">%1$d characters</string>
     <string name="book_character_empty">No characters yet. Tap + to add one.</string>
     <string name="book_other_works">Other works</string>
+    <string name="book_info_play">Play</string>
+    <string name="auto_load_book_other_works">Load related</string>
+    <string name="book_info_menu_book_management">Book management</string>
+    <string name="book_info_menu_source_and_links">Source and links</string>
+    <string name="book_info_menu_data_and_diagnostics">Data and diagnostics</string>
     <string name="book_other_works_idle">Tap refresh to search this author\'s other books.</string>
     <string name="book_other_works_loading">Loading other works...</string>
     <string name="book_other_works_empty">No other works found.</string>
@@ -905,6 +908,15 @@
     <string name="auto_next_page_speed">Auto scroll speed</string>
     <string name="book_info">Book information</string>
     <string name="book_info_edit">Edit book information</string>
+    <string name="book_edit_title">Edit book</string>
+    <string name="book_info_basic">Basic information</string>
+    <string name="book_info_type">Type</string>
+    <string name="book_info_cover_section">Cover</string>
+    <string name="book_type_text">Text</string>
+    <string name="book_type_audio">Audio</string>
+    <string name="book_type_image">Image</string>
+    <string name="book_type_video">Video</string>
+    <string name="book_cover_local_image">Local image</string>
     <string name="ps_default_read">Use Bookshelf as start page</string>
     <string name="pt_default_read">Auto jump to Recent list</string>
     <string name="replace_scope">Replacement object. Book name or source url is available</string>
@@ -1731,6 +1743,7 @@
     <string name="error_decode_bitmap">Fail to decode bitmap</string>
     <string name="error_image_url_empty">Image url is empty, check replacement rules</string>
     <string name="variable_comment">变量说明(variableComment)</string>
+    <string name="variable_value">Variable</string>
     <string name="remote_book">Remote book</string>
     <string name="reading_time_sort">Sort by reading duration</string>
     <string name="last_read_time_sort">Sort by read time</string>

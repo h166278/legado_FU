@@ -84,6 +84,11 @@ enum class NgExpandableActionMenuVariant {
     DRILL_IN
 }
 
+enum class NgExpandableActionMenuWidthVariant(val width: Dp) {
+    STANDARD(152.dp),
+    GROUPED_LABELS(160.dp),
+}
+
 /**
  * Reading NG 可原位展开的轻量操作菜单。
  *
@@ -97,7 +102,7 @@ fun NgExpandableActionMenu(
     onItemClick: (NgExpandableActionMenuItem) -> Unit,
     modifier: Modifier = Modifier,
     offset: DpOffset = DpOffset.Zero,
-    width: Dp = 152.dp,
+    width: Dp? = null,
     rowMinHeight: Dp = 44.dp,
     bottomPointerHeight: Dp = 0.dp,
     bottomPointerWidth: Dp = 18.dp,
@@ -105,8 +110,11 @@ fun NgExpandableActionMenu(
     menuContainerColor: Color? = null,
     defaultExpandedItemIds: Set<Int> = emptySet(),
     variant: NgExpandableActionMenuVariant = NgExpandableActionMenuVariant.DROPDOWN,
-    properties: PopupProperties = PopupProperties()
+    properties: PopupProperties = PopupProperties(),
+    widthVariant: NgExpandableActionMenuWidthVariant =
+        NgExpandableActionMenuWidthVariant.STANDARD,
 ) {
+    val resolvedWidth = width ?: widthVariant.width
     var expandedItemIds by remember(items, defaultExpandedItemIds) {
         mutableStateOf(defaultExpandedItemIds)
     }
@@ -125,7 +133,7 @@ fun NgExpandableActionMenu(
                 }
             },
             onItemClick = onItemClick,
-            width = width,
+            width = resolvedWidth,
             rowMinHeight = rowMinHeight,
             menuContainerColor = menuContainerColor,
             properties = properties,
@@ -142,7 +150,7 @@ fun NgExpandableActionMenu(
             onItemClick = onItemClick,
             modifier = modifier,
             offset = offset,
-            width = width,
+            width = resolvedWidth,
             rowMinHeight = rowMinHeight,
             menuContainerColor = menuContainerColor,
             properties = properties
@@ -171,7 +179,7 @@ fun NgExpandableActionMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         offset = offset,
-        modifier = modifier.width(width),
+        modifier = modifier.width(resolvedWidth),
         shape = shape,
         containerColor = containerColor,
         tonalElevation = 0.dp,

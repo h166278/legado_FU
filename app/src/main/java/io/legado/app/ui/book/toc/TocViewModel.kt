@@ -9,22 +9,25 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.Bookmark
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.GSON
 import io.legado.app.utils.createFileIfNotExist
 import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeText
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 
 class TocViewModel(application: Application) : BaseViewModel(application) {
     var bookUrl: String = ""
     var bookData = MutableLiveData<Book>()
-    var chapterListCallBack: ChapterListCallBack? = null
-    var bookMarkCallBack: BookmarkCallBack? = null
-    var searchKey: String? = null
 
     fun initBook(bookUrl: String) {
         this.bookUrl = bookUrl
@@ -68,16 +71,22 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun startChapterListSearch(newText: String?) {
-        chapterListCallBack?.upChapterList(newText)
+    suspend fun loadChapters(query: String?): List<BookChapter> = withContext(IO) {
+        val end = (bookData.value?.simulatedTotalChapterNum() ?: Int.MAX_VALUE) - 1
+        if (query.isNullOrBlank()) {
+            appDb.bookChapterDao.getChapterList(bookUrl, 0, end)
+        } else {
+            appDb.bookChapterDao.search(bookUrl, query, 0, end)
+        }
     }
 
-    fun startBookmarkSearch(newText: String?) {
-        bookMarkCallBack?.upBookmark(newText)
-    }
-
-    fun upChapterListAdapter() {
-        chapterListCallBack?.upAdapter()
+    fun bookmarkFlow(query: String?): Flow<List<Bookmark>> {
+        val book = bookData.value ?: return kotlinx.coroutines.flow.flowOf(emptyList())
+        return if (query.isNullOrBlank()) {
+            appDb.bookmarkDao.flowByBook(book.name, book.author)
+        } else {
+            appDb.bookmarkDao.flowSearch(book.name, book.author, query)
+        }
     }
 
     fun saveBookmark(treeUri: Uri) {
@@ -122,15 +131,4 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    interface ChapterListCallBack {
-        fun upChapterList(searchKey: String?)
-
-        fun clearDisplayTitle()
-
-        fun upAdapter()
-    }
-
-    interface BookmarkCallBack {
-        fun upBookmark(searchKey: String?)
-    }
 }

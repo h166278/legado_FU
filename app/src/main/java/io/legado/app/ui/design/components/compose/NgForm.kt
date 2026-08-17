@@ -415,6 +415,7 @@ enum class NgFormFieldVariant {
     OUTLINED,
     PLAIN_UNDERLINE,
     INLINE_UNDERLINE,
+    LABELED_UNDERLINE,
 }
 
 /**
@@ -465,7 +466,8 @@ fun NgFormField(
     val compact = density == NgFormDensity.COMPACT
     val inlineUnderlined = variant == NgFormFieldVariant.INLINE_UNDERLINE
     val plainUnderlined = variant == NgFormFieldVariant.PLAIN_UNDERLINE
-    val underlined = inlineUnderlined || plainUnderlined
+    val labeledUnderlined = variant == NgFormFieldVariant.LABELED_UNDERLINE
+    val underlined = inlineUnderlined || plainUnderlined || labeledUnderlined
     val fieldHeight = if (underlined || compact) 32.dp else 34.dp
     val labelFontSize = if (inlineUnderlined) 13.sp else if (compact) 12.sp else 13.sp
     val valueFontSize = if (underlined) 15.sp else 13.sp
@@ -592,7 +594,7 @@ fun NgFormField(
         } else {
             Text(
                 text = label,
-                modifier = Modifier.padding(start = 12.dp),
+                modifier = Modifier.padding(start = if (labeledUnderlined) 0.dp else 12.dp),
                 color = Color(colors.onSurfaceVariant).copy(alpha = contentAlpha),
                 fontSize = labelFontSize,
                 lineHeight = 16.sp,
@@ -616,6 +618,89 @@ fun NgFormField(
                 lineHeight = 15.sp
             )
         }
+    }
+}
+
+/** NG 多行编辑字段，供简介、说明等正文型表单复用。 */
+@Composable
+fun NgFormMultilineField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    placeholder: String? = null,
+    enabled: Boolean = true,
+    minHeight: androidx.compose.ui.unit.Dp = 160.dp,
+    maxHeight: androidx.compose.ui.unit.Dp = 320.dp,
+    minLines: Int = 4,
+    maxLines: Int = 12,
+    containerColor: Color? = null,
+) {
+    val colors = NgTheme.colors
+    val shape = RoundedCornerShape(NgTheme.shapes.smallDp.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val borderColor = Color(if (focused) colors.primary else colors.outline)
+    val contentAlpha = if (enabled) 1f else 0.45f
+    Column(modifier = modifier.fillMaxWidth()) {
+        label?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = it,
+                modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+                color = Color(colors.onSurfaceVariant).copy(alpha = contentAlpha),
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight, max = maxHeight),
+            enabled = enabled,
+            textStyle = TextStyle(
+                color = Color(colors.onSurface).copy(alpha = contentAlpha),
+                fontSize = 15.sp,
+                lineHeight = 22.sp,
+            ),
+            cursorBrush = SolidColor(Color(colors.primary)),
+            interactionSource = interactionSource,
+            minLines = minLines,
+            maxLines = maxLines,
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = minHeight, max = maxHeight)
+                        .clip(shape)
+                        .background(
+                            containerColor ?: Color(
+                                if (enabled) colors.inputContainer
+                                else colors.surfaceContainerLow
+                            )
+                        )
+                        .border(
+                            width = if (focused) 1.5.dp else 1.dp,
+                            color = borderColor.copy(alpha = contentAlpha),
+                            shape = shape,
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    if (value.isEmpty() && !placeholder.isNullOrBlank()) {
+                        Text(
+                            text = placeholder,
+                            color = Color(colors.onSurfaceVariant).copy(alpha = 0.75f),
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                        )
+                    }
+                    innerTextField()
+                }
+            },
+        )
     }
 }
 
