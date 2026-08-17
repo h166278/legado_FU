@@ -15,6 +15,8 @@ import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
 import io.legado.app.R
+import io.legado.app.ui.design.components.compose.NgGlassStyle
+import io.legado.app.ui.design.components.compose.resolveNgFloatingGlassStyle
 import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.utils.dpToPx
@@ -63,6 +65,7 @@ object NgMenuPopup {
         toolbar: Toolbar?,
         menu: Menu,
         themeSnapshotProvider: () -> NgThemeSnapshot,
+        glassStyleProvider: (() -> NgGlassStyle)? = null,
         prepareMenu: () -> Unit = {},
         onItemClick: (MenuItem) -> Unit
     ) {
@@ -77,10 +80,13 @@ object NgMenuPopup {
                 val items = popupMenu.toPopupItems(itemIds = itemIds)
                     .map { item -> item.withReadingMenuIcon() }
                 if (items.isNotEmpty()) {
+                    val themeSnapshot = themeSnapshotProvider()
                     NgReadingActionPopup(
                         context = anchor.context,
                         items = items,
-                        themeSnapshot = themeSnapshotProvider()
+                        themeSnapshot = themeSnapshot,
+                        glassStyle = glassStyleProvider?.invoke()
+                            ?: resolveNgFloatingGlassStyle(themeSnapshot),
                     ) { item ->
                         (item.payload as? MenuItem)?.let(click)
                     }.show(anchor)

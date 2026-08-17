@@ -44,6 +44,8 @@ import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.book.read.config.showReadConfirmDialog
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.components.compose.NgGlassStyle
+import io.legado.app.ui.design.components.compose.resolveNgFloatingGlassStyle
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.ui.widget.NgActionPopup
@@ -111,6 +113,13 @@ class ReadMenu @JvmOverloads constructor(
         ReadDrawerStyle.themeSnapshot(context)
 
     internal fun currentThemeSnapshot(): NgThemeSnapshot = readMenuThemeSnapshot
+
+    internal fun currentFloatingGlassStyle(): NgGlassStyle = resolveNgFloatingGlassStyle(
+        snapshot = readMenuThemeSnapshot,
+        transparencyPercent = ReadFloatingAppearanceState.transparencyPercent,
+        primaryStrengthPercent = ReadFloatingAppearanceState.primaryStrengthPercent,
+        colorStyle = ReadFloatingAppearanceState.colorStyle,
+    )
 
     private var bgColor: Int = if (useGradientThemeMenu) {
         readMenuThemeSnapshot.colors.surface

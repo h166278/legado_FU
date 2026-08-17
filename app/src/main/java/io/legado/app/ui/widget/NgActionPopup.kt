@@ -24,6 +24,7 @@ import androidx.appcompat.widget.TooltipCompat
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
 import io.legado.app.R
+import io.legado.app.ui.design.components.compose.NgGlassStyle
 import io.legado.app.ui.design.components.compose.resolveNgFloatingGlassStyle
 import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.utils.ColorUtils
@@ -479,6 +480,7 @@ class NgReadingActionPopup(
     context: Context,
     items: List<NgActionPopupItem>,
     themeSnapshot: NgThemeSnapshot,
+    glassStyle: NgGlassStyle = resolveNgFloatingGlassStyle(themeSnapshot),
     onItemClick: (NgActionPopupItem) -> Unit
 ) : PopupWindow(
     WIDTH_DP.dpToPx(),
@@ -486,7 +488,6 @@ class NgReadingActionPopup(
 ) {
 
     init {
-        val glassStyle = resolveNgFloatingGlassStyle(themeSnapshot)
         val panel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, PANEL_VERTICAL_PADDING_DP.dpToPx(), 0, PANEL_VERTICAL_PADDING_DP.dpToPx())

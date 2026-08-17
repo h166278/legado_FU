@@ -401,6 +401,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             toolbar = findViewById<TitleBar>(R.id.title_bar)?.toolbar,
             menu = menu,
             themeSnapshotProvider = binding.readMenu::currentThemeSnapshot,
+            glassStyleProvider = binding.readMenu::currentFloatingGlassStyle,
             prepareMenu = {
                 onPrepareOptionsMenu(menu)
                 onMenuOpened(Window.FEATURE_OPTIONS_PANEL, menu)
