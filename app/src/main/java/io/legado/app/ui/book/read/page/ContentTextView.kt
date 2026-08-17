@@ -29,6 +29,7 @@ import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.TextPageFactory
 import io.legado.app.ui.widget.dialog.PhotoDialog
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.activity
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
@@ -46,7 +47,11 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     var selectAble = AppConfig.textSelectAble
     val selectedPaint by lazy {
         Paint().apply {
-            color = context.getCompatColor(R.color.btn_bg_press_2)
+            // 选区仍需可辨，但不能遮住正在预览的正文划线颜色。
+            color = ColorUtils.withAlpha(
+                context.getCompatColor(R.color.btn_bg_press_2),
+                SELECTION_OVERLAY_ALPHA,
+            )
             style = Paint.Style.FILL
         }
     }
@@ -973,6 +978,7 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
                 Thread(it, "TextPageRender")
             }
         }
+        private const val SELECTION_OVERLAY_ALPHA = 0.12f
         private val cursorWidth = 24.dpToPx()
     }
 
