@@ -89,7 +89,6 @@ fun RssPageScaffold(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .navigationBarsPadding()
     ) {
         RssPageTopBar(
@@ -113,71 +112,81 @@ private fun RssPageTopBar(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val contentColor = Color(NgTheme.colors.onTopBar)
-    val containerColor = Color(NgTheme.colors.topBarContainer).copy(
-        alpha = if (NgTheme.snapshot.isEInk) 1f else 0.94f
-    )
-    Row(
+    val containerColor = Color(NgTheme.colors.topBarContainer)
+    val endActionSlotCount = when (actions.size) {
+        0, 1 -> 1
+        else -> 2
+    }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-            .height(40.dp)
-            .clip(RoundedCornerShape(NgTheme.shapes.mediumDp.dp))
             .background(containerColor)
-            .padding(horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .statusBarsPadding()
     ) {
-        RssToolbarIconButton(
-            iconRes = R.drawable.ic_arrow_back,
-            description = stringResource(R.string.back),
-            onClick = onBack
-        )
-        Text(
-            text = title,
+        Box(
             modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 6.dp),
-            color = contentColor,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        when (actions.size) {
-            0 -> Unit
-            1 -> RssToolbarIconButton(
-                iconRes = actions.first().iconRes,
-                description = stringResource(actions.first().titleRes),
-                onClick = { onAction(actions.first().id) }
+                .fillMaxWidth()
+                .height(44.dp)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            RssToolbarIconButton(
+                iconRes = R.drawable.ic_arrow_back,
+                description = stringResource(R.string.back),
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterStart),
             )
-            else -> {
-                RssToolbarIconButton(
-                    iconRes = actions.first().iconRes,
-                    description = stringResource(actions.first().titleRes),
-                    onClick = { onAction(actions.first().id) }
-                )
-                Box {
-                    RssToolbarIconButton(
-                        iconRes = R.drawable.ic_grid_menu,
-                        description = stringResource(R.string.menu),
-                        onClick = { menuExpanded = true }
+            Text(
+                text = title,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .padding(horizontal = (endActionSlotCount * 40 + 4).dp),
+                color = contentColor,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+            Row(modifier = Modifier.align(Alignment.CenterEnd)) {
+                when (actions.size) {
+                    0 -> Unit
+                    1 -> RssToolbarIconButton(
+                        iconRes = actions.first().iconRes,
+                        description = stringResource(actions.first().titleRes),
+                        onClick = { onAction(actions.first().id) },
                     )
-                    NgExpandableActionMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        items = actions.drop(1).map {
-                            NgExpandableActionMenuItem(
-                                itemId = it.id,
-                                titleRes = it.titleRes,
-                                iconRes = it.iconRes,
-                                dividerBefore = it.dividerBefore
+                    else -> {
+                        RssToolbarIconButton(
+                            iconRes = actions.first().iconRes,
+                            description = stringResource(actions.first().titleRes),
+                            onClick = { onAction(actions.first().id) },
+                        )
+                        Box {
+                            RssToolbarIconButton(
+                                iconRes = R.drawable.ic_grid_menu,
+                                description = stringResource(R.string.menu),
+                                onClick = { menuExpanded = true },
                             )
-                        },
-                        onItemClick = {
-                            menuExpanded = false
-                            onAction(it.itemId)
-                        },
-                        width = 152.dp
-                    )
+                            NgExpandableActionMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                                items = actions.drop(1).map {
+                                    NgExpandableActionMenuItem(
+                                        itemId = it.id,
+                                        titleRes = it.titleRes,
+                                        iconRes = it.iconRes,
+                                        dividerBefore = it.dividerBefore
+                                    )
+                                },
+                                onItemClick = {
+                                    menuExpanded = false
+                                    onAction(it.itemId)
+                                },
+                                width = 152.dp
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -194,7 +203,7 @@ fun RssToolbarIconButton(
     Box(
         modifier = modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -202,7 +211,7 @@ fun RssToolbarIconButton(
             painter = painterResource(iconRes),
             contentDescription = description,
             tint = Color(NgTheme.colors.onTopBar),
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(18.dp)
         )
     }
 }
