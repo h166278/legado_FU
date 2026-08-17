@@ -1,7 +1,9 @@
 package io.legado.app.ui.design.components.compose
 
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -31,12 +33,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import io.legado.app.ui.design.theme.NgTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * NG 管理列表共用的长按拖拽状态。
@@ -54,11 +59,11 @@ class NgLazyReorderState internal constructor(
     var draggedKey: Any? by mutableStateOf(null)
         private set
 
-    var draggedOffset by mutableFloatStateOf(0f)
-        private set
-
     val isDragging: Boolean
         get() = draggedKey != null
+
+    var draggedOffset by mutableFloatStateOf(0f)
+        private set
 
     private var lastTargetIndex = -1
     private var scrollJob: Job? = null
@@ -156,15 +161,22 @@ fun Modifier.ngReorderHandle(
         )
         .pointerInput(state, key, enabled) {
             if (!enabled) return@pointerInput
-            detectDragGestures(
-                onDragStart = { state.start(key) },
-                onDragEnd = state::finish,
-                onDragCancel = state::finish,
-                onDrag = { change, amount ->
-                    change.consume()
-                    state.dragBy(amount.y)
-                }
-            )
+            try {
+                detectDragGestures(
+                    onDragStart = { state.start(key) },
+                    onDragEnd = state::finish,
+                    onDragCancel = state::finish,
+                    onDrag = { change, amount ->
+                        change.consume()
+                        state.dragBy(amount.y)
+                    }
+                )
+            } finally {
+                // LazyColumn 重排或回收拖动项时会直接取消当前 pointerInput。
+                // 此时 detectDragGestures 不保证调用 onDragCancel，必须在协程退出时
+                // 再做一次幂等收尾，避免页面作用域中的边缘滚动任务继续存活。
+                state.finish()
+            }
         }
 }
 
@@ -255,3 +267,161 @@ fun NgPullRefreshBox(
         content = content
     )
 }
+
+/**
+ * NG 管理列表共用的左侧滑动多选状态。
+ *
+ * 首项决定本次手势是选中还是取消；手指折返时恢复离开区间的状态，行为与旧管理列表的
+ * ToggleAndReverse 模式一致。
+ */
+@Stable
+class NgLazySlideSelectState internal constructor(
+    val listState: LazyListState,
+    private val scope: CoroutineScope,
+    private val isSelected: (index: Int) -> Boolean,
+    private val onSelectionChange: (index: Int, selected: Boolean) -> Unit,
+) {
+    private var startIndex = -1
+    private var endIndex = -1
+    private var firstWasSelected = false
+    private var scrollJob: Job? = null
+
+    internal fun itemIndexAt(y: Float): Int? {
+        return listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+            y >= item.offset && y <= item.offset + item.size
+        }?.index
+    }
+
+    internal fun start(index: Int) {
+        firstWasSelected = isSelected(index)
+        startIndex = index
+        endIndex = index
+        onSelectionChange(index, !firstWasSelected)
+    }
+
+    internal fun update(y: Float) {
+        itemIndexAt(y)?.let(::selectTo)
+
+        val layoutInfo = listState.layoutInfo
+        val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+        if (viewportHeight <= 0) return
+        val hotspot = (viewportHeight * 0.2f).coerceAtMost(160f)
+        val scrollDelta = when {
+            y < layoutInfo.viewportStartOffset + hotspot -> {
+                -24f * (1f - (y - layoutInfo.viewportStartOffset) / hotspot)
+            }
+
+            y > layoutInfo.viewportEndOffset - hotspot -> {
+                24f * (1f - (layoutInfo.viewportEndOffset - y) / hotspot)
+            }
+
+            else -> 0f
+        }.coerceIn(-24f, 24f)
+
+        scrollJob?.cancel()
+        if (scrollDelta != 0f) {
+            scrollJob = scope.launch {
+                listState.scrollBy(scrollDelta)
+                itemIndexAt(y)?.let(::selectTo)
+            }
+        }
+    }
+
+    private fun selectTo(index: Int) {
+        if (startIndex < 0 || index == endIndex) return
+        val oldStart = min(startIndex, endIndex)
+        val oldEnd = max(startIndex, endIndex)
+        val newStart = min(startIndex, index)
+        val newEnd = max(startIndex, index)
+
+        when {
+            newStart > oldStart -> {
+                for (position in oldStart until newStart) {
+                    onSelectionChange(position, firstWasSelected)
+                }
+            }
+
+            newStart < oldStart -> {
+                for (position in newStart until oldStart) {
+                    onSelectionChange(position, !firstWasSelected)
+                }
+            }
+        }
+        when {
+            newEnd > oldEnd -> {
+                for (position in (oldEnd + 1)..newEnd) {
+                    onSelectionChange(position, !firstWasSelected)
+                }
+            }
+
+            newEnd < oldEnd -> {
+                for (position in (newEnd + 1)..oldEnd) {
+                    onSelectionChange(position, firstWasSelected)
+                }
+            }
+        }
+        endIndex = index
+    }
+
+    internal fun finish() {
+        scrollJob?.cancel()
+        scrollJob = null
+        startIndex = -1
+        endIndex = -1
+    }
+}
+
+@Composable
+fun rememberNgLazySlideSelectState(
+    listState: LazyListState,
+    isSelected: (index: Int) -> Boolean,
+    onSelectionChange: (index: Int, selected: Boolean) -> Unit,
+): NgLazySlideSelectState {
+    val scope = rememberCoroutineScope()
+    val currentIsSelected by rememberUpdatedState(isSelected)
+    val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
+    return remember(listState, scope) {
+        NgLazySlideSelectState(
+            listState = listState,
+            scope = scope,
+            isSelected = { index -> currentIsSelected(index) },
+            onSelectionChange = { index, selected ->
+                currentOnSelectionChange(index, selected)
+            },
+        )
+    }
+}
+
+/** 仅在列表左侧选择区接管手势，列表其余区域继续用于正常滚动。 */
+fun Modifier.ngSlideSelect(
+    state: NgLazySlideSelectState,
+    enabled: Boolean = true,
+    slideAreaStart: Dp = 16.dp,
+    slideAreaEnd: Dp = 50.dp,
+): Modifier = this
+    .testTag("management_slide_select")
+    .pointerInput(state, enabled, slideAreaStart, slideAreaEnd) {
+        val slideAreaStartPx = slideAreaStart.toPx()
+        val slideAreaEndPx = slideAreaEnd.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (!enabled || down.position.x !in slideAreaStartPx..slideAreaEndPx) {
+                return@awaitEachGesture
+            }
+            val startIndex = state.itemIndexAt(down.position.y)
+                ?: return@awaitEachGesture
+            down.consume()
+            state.start(startIndex)
+            try {
+                do {
+                    val event = awaitPointerEvent()
+                    event.changes.firstOrNull()?.let { change ->
+                        if (change.pressed) state.update(change.position.y)
+                        change.consume()
+                    }
+                } while (event.changes.any { it.pressed })
+            } finally {
+                state.finish()
+            }
+        }
+    }

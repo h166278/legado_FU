@@ -28,6 +28,7 @@ fun NgDockSlider(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int = 0,
+    variant: NgSliderVariant = NgSliderVariant.CONTINUOUS,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit
 ) {
@@ -63,7 +64,7 @@ fun NgDockSlider(
             onValueChange = onValueChange,
             valueRange = valueRange,
             steps = steps,
-            variant = NgSliderVariant.CONTINUOUS,
+            variant = variant,
             onValueChangeFinished = onValueChangeFinished
         )
         if (showBoundLabels) {

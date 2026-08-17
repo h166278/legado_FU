@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.import.local
 
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
 
 data class ImportBook(
@@ -11,4 +12,6 @@ data class ImportBook(
     val isDir get() = file.isDir
     val size get() = file.size
     val lastModified get() = file.lastModified
+    val isArchive get() = !isDir && ArchiveUtils.isArchive(name)
+    val isSelectableForImport get() = !isDir && !isArchive && !isOnBookShelf
 }

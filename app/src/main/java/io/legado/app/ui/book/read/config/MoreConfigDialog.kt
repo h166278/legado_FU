@@ -212,11 +212,6 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
 
     private fun handleAction(key: String) {
         when (key) {
-            ReadMoreConfigKeys.SIMULATED_READING -> {
-                dismissAllowingStateLoss()
-                readActivity?.showSimulatedReading()
-            }
-
             ReadMoreConfigKeys.CUSTOM_PAGE_KEY -> PageKeyDialog(requireContext()).show()
 
             ReadMoreConfigKeys.CLICK_REGIONAL_CONFIG -> {
@@ -437,13 +432,6 @@ class MoreConfigDialog : BaseComposeDialogFragment() {
             R.string.read_settings_pixels,
             AppConfig.pageTouchClick,
         )
-        ReadBook.book?.let { book ->
-            values[ReadMoreConfigKeys.SIMULATED_READING] = if (book.config.readSimulating) {
-                getString(R.string.simulated_reading_enabled_summary, book.config.dailyChapters)
-            } else {
-                getString(R.string.disabled)
-            }
-        }
         return values
     }
 }

@@ -1,0 +1,201 @@
+package io.legado.app.ui.design.components.compose
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.legado.app.R
+import io.legado.app.ui.design.components.NgDialogVariant
+import io.legado.app.ui.design.theme.NgTheme
+
+/** Compose NG 居中弹窗内容外壳；窗口尺寸与遮罩仍由 applyNgDialogWindow 统一处理。 */
+@Composable
+fun NgDialog(
+    title: String,
+    modifier: Modifier = Modifier,
+    variant: NgDialogVariant = NgDialogVariant.STANDARD,
+    actions: @Composable RowScope.() -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val metrics = dialogMetrics(variant)
+    val cornerRadius = when (variant) {
+        NgDialogVariant.COMPACT_CONFIRMATION -> NgTheme.shapes.largeDp
+        else -> NgTheme.shapes.extraLargeDp
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = colorResource(R.color.ng_surface_card),
+        shape = RoundedCornerShape(cornerRadius.dp),
+        shadowElevation = NgTheme.effects.overlayElevationDp.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                start = metrics.horizontalPadding,
+                top = metrics.topPadding,
+                end = metrics.horizontalPadding,
+                bottom = metrics.bottomPadding,
+            ),
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = metrics.titleSize,
+                lineHeight = metrics.titleLineHeight,
+                fontWeight = FontWeight.Bold,
+                textAlign = metrics.titleAlignment,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(metrics.titleSpacing))
+            content()
+            Spacer(Modifier.height(metrics.actionSpacing))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+                content = actions,
+            )
+        }
+    }
+}
+
+/** 弹窗分区内的紧凑标题／当前值操作行。 */
+@Composable
+fun NgDialogValueRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.TextButton(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 17.sp,
+                lineHeight = 21.sp,
+                textAlign = TextAlign.Start,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = value,
+                modifier = Modifier.padding(start = 12.dp),
+                color = Color(NgTheme.colors.onSurfaceVariant),
+                fontSize = 15.sp,
+                lineHeight = 19.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+fun NgDialogDivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(
+        modifier = modifier.padding(horizontal = 2.dp),
+        thickness = 0.6.dp,
+        color = Color(NgTheme.colors.outlineVariant).copy(alpha = 0.26f),
+    )
+}
+
+private data class NgDialogMetrics(
+    val horizontalPadding: androidx.compose.ui.unit.Dp,
+    val topPadding: androidx.compose.ui.unit.Dp,
+    val bottomPadding: androidx.compose.ui.unit.Dp,
+    val titleSize: androidx.compose.ui.unit.TextUnit,
+    val titleLineHeight: androidx.compose.ui.unit.TextUnit,
+    val titleSpacing: androidx.compose.ui.unit.Dp,
+    val actionSpacing: androidx.compose.ui.unit.Dp,
+    val titleAlignment: TextAlign,
+)
+
+private fun dialogMetrics(variant: NgDialogVariant): NgDialogMetrics = when (variant) {
+    NgDialogVariant.STANDARD -> NgDialogMetrics(
+        horizontalPadding = 18.dp,
+        topPadding = 16.dp,
+        bottomPadding = 14.dp,
+        titleSize = 20.sp,
+        titleLineHeight = 24.sp,
+        titleSpacing = 14.dp,
+        actionSpacing = 14.dp,
+        titleAlignment = TextAlign.Start,
+    )
+
+    NgDialogVariant.CONFIRMATION -> NgDialogMetrics(
+        horizontalPadding = 18.dp,
+        topPadding = 18.dp,
+        bottomPadding = 16.dp,
+        titleSize = 20.sp,
+        titleLineHeight = 24.sp,
+        titleSpacing = 14.dp,
+        actionSpacing = 16.dp,
+        titleAlignment = TextAlign.Center,
+    )
+
+    NgDialogVariant.COMPACT_CONFIRMATION -> NgDialogMetrics(
+        horizontalPadding = 18.dp,
+        topPadding = 16.dp,
+        bottomPadding = 14.dp,
+        titleSize = 18.sp,
+        titleLineHeight = 22.sp,
+        titleSpacing = 12.dp,
+        actionSpacing = 14.dp,
+        titleAlignment = TextAlign.Center,
+    )
+
+    NgDialogVariant.EDITOR -> NgDialogMetrics(
+        horizontalPadding = 16.dp,
+        topPadding = 18.dp,
+        bottomPadding = 14.dp,
+        titleSize = 20.sp,
+        titleLineHeight = 26.sp,
+        titleSpacing = 24.dp,
+        actionSpacing = 18.dp,
+        titleAlignment = TextAlign.Start,
+    )
+
+    NgDialogVariant.LONG_CONTENT -> NgDialogMetrics(
+        horizontalPadding = 20.dp,
+        topPadding = 18.dp,
+        bottomPadding = 16.dp,
+        titleSize = 20.sp,
+        titleLineHeight = 24.sp,
+        titleSpacing = 14.dp,
+        actionSpacing = 16.dp,
+        titleAlignment = TextAlign.Start,
+    )
+}

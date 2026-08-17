@@ -2,6 +2,7 @@ package io.legado.app.help.storage
 
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
+import io.legado.app.help.config.BookshelfLayoutProfilePreferences
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -101,7 +102,7 @@ object BackupConfig {
             ignoreThemeConfig && themePrefKeys.contains(key) -> false
             ignoreCoverConfig && coverPrefKeys.contains(key) -> false
             PreferKey.themeMode == key && ignoreThemeMode -> false
-            PreferKey.bookshelfLayout == key && ignoreBookshelfLayout -> false
+            key in bookshelfLayoutPreferenceKeys && ignoreBookshelfLayout -> false
             PreferKey.showRss == key && ignoreShowRss -> false
             PreferKey.threadCount == key && ignoreThreadCount -> false
             else -> true
@@ -124,6 +125,17 @@ object BackupConfig {
         get() = ignoreConfig[PreferKey.threadCount] == true
     val ignoreLocalBook: Boolean
         get() = ignoreConfig[localBookKey] == true
+
+    private val bookshelfLayoutPreferenceKeys = setOf(
+        PreferKey.bookshelfLayout,
+        PreferKey.bookshelfHomeMode,
+        PreferKey.showBooknameLayout,
+        PreferKey.bookshelfMargin,
+        PreferKey.showUnread,
+        PreferKey.showLastUpdateTime,
+        PreferKey.showWaitUpCount,
+        PreferKey.bookshelfSort,
+    ) + BookshelfLayoutProfilePreferences.keys
 
     fun saveIgnoreConfig() {
         val json = GSON.toJson(ignoreConfig)

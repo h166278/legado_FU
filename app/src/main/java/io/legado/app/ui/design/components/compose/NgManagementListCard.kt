@@ -35,11 +35,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
+import io.legado.app.ui.design.components.NgManagementListCardVariant
 import io.legado.app.ui.design.components.NgManagementTrailing
 import io.legado.app.ui.design.components.NgStatusTagSpec
 import io.legado.app.ui.design.components.NgStatusTagStyle
@@ -57,6 +62,7 @@ fun NgManagementListCard(
     summary: String? = null,
     headerTags: List<NgStatusTagSpec> = emptyList(),
     detailTags: List<NgStatusTagSpec> = emptyList(),
+    variant: NgManagementListCardVariant = NgManagementListCardVariant.DEFAULT,
     trailing: NgManagementTrailing = NgManagementTrailing.NONE,
     trailingContentDescription: String? = null,
     selected: Boolean = false,
@@ -69,12 +75,15 @@ fun NgManagementListCard(
 ) {
     require(headerTags.size <= 2) { "Management card supports at most 2 header tags" }
     require(detailTags.size <= 3) { "Management card supports at most 3 detail tags" }
-    val shape = RoundedCornerShape(18.dp)
+    val isCompactGrid = variant == NgManagementListCardVariant.COMPACT_GRID
+    val shape = RoundedCornerShape(
+        if (isCompactGrid) NgTheme.shapes.smallDp.dp else NgTheme.shapes.largeDp.dp
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .heightIn(min = 70.dp)
+            .heightIn(min = if (isCompactGrid) 54.dp else 70.dp)
             .clip(shape)
             .background(colorResource(R.color.ng_surface_card))
             .then(
@@ -96,14 +105,14 @@ fun NgManagementListCard(
         if (selected) {
             Box(
                 modifier = Modifier
-                    .width(6.dp)
+                    .width(if (isCompactGrid) 4.dp else 6.dp)
                     .fillMaxHeight()
                     .background(Color(NgTheme.colors.primary))
             )
         }
         Box(
             modifier = Modifier
-                .width(58.dp)
+                .width(if (isCompactGrid) 44.dp else 58.dp)
                 .fillMaxHeight()
                 .then(
                     if (onLeadingClick != null) {
@@ -119,7 +128,11 @@ fun NgManagementListCard(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 4.dp, top = 10.dp, bottom = 10.dp),
+                .padding(
+                    start = if (isCompactGrid) 0.dp else 4.dp,
+                    top = if (isCompactGrid) 6.dp else 10.dp,
+                    bottom = if (isCompactGrid) 6.dp else 10.dp,
+                ),
             verticalArrangement = Arrangement.Center
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -127,9 +140,13 @@ fun NgManagementListCard(
                     text = title,
                     modifier = Modifier.weight(1f),
                     color = colorResource(R.color.ng_on_surface),
-                    fontSize = 16.sp,
-                    lineHeight = 19.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = if (isCompactGrid) {
+                        NgTheme.typography.denseItemTitleSp.sp
+                    } else {
+                        NgTheme.typography.itemTitleSp.sp
+                    },
+                    lineHeight = if (isCompactGrid) 14.sp else 19.sp,
+                    fontWeight = if (isCompactGrid) FontWeight.Medium else FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -139,16 +156,20 @@ fun NgManagementListCard(
                 }
             }
             if (detailTags.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(if (isCompactGrid) 3.dp else 6.dp))
                 NgStatusTagRow(tags = detailTags, header = false)
             }
             if (!summary.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(if (isCompactGrid) 1.dp else 4.dp))
                 Text(
                     text = summary,
                     color = colorResource(R.color.ng_on_surface_variant),
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
+                    fontSize = if (isCompactGrid) {
+                        NgTheme.typography.denseItemSummarySp.sp
+                    } else {
+                        NgTheme.typography.summarySp.sp
+                    },
+                    lineHeight = if (isCompactGrid) 12.sp else 16.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -157,7 +178,7 @@ fun NgManagementListCard(
         if (trailingContent != null) {
             Box(
                 modifier = Modifier
-                    .width(36.dp)
+                    .width(if (isCompactGrid) 30.dp else 36.dp)
                     .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
@@ -171,7 +192,7 @@ fun NgManagementListCard(
                 onClick = onTrailingClick
             )
         } else {
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(if (isCompactGrid) 6.dp else 14.dp))
         }
     }
 }
@@ -265,11 +286,14 @@ fun NgManagementLeadingIcon(
 fun NgManagementLeadingText(
     text: String,
     modifier: Modifier = Modifier,
-    contentDescription: String? = null
+    contentDescription: String? = null,
+    textColor: Color = Color(NgTheme.colors.primary),
+    variant: NgManagementListCardVariant = NgManagementListCardVariant.DEFAULT,
 ) {
+    val isCompactGrid = variant == NgManagementListCardVariant.COMPACT_GRID
     Box(
         modifier = modifier
-            .size(38.dp)
+            .size(if (isCompactGrid) 30.dp else 38.dp)
             .clip(CircleShape)
             .background(colorResource(R.color.ng_icon_container))
             .then(
@@ -283,12 +307,20 @@ fun NgManagementLeadingText(
     ) {
         Text(
             text = text,
-            color = Color(NgTheme.colors.primary),
-            fontSize = 15.sp,
-            lineHeight = 18.sp,
+            color = textColor,
+            fontSize = if (isCompactGrid) NgTheme.typography.denseBadgeSp.sp else 15.sp,
+            lineHeight = if (isCompactGrid) 14.sp else 18.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            style = TextStyle(
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Center,
+                    trim = LineHeightStyle.Trim.Both,
+                ),
+            ),
             modifier = Modifier.defaultMinSize(minWidth = 24.dp)
         )
     }
@@ -317,14 +349,22 @@ private fun NgStatusTagRow(tags: List<NgStatusTagSpec>, header: Boolean) {
             if (index > 0) {
                 Spacer(
                     Modifier.width(
-                        if (tag.style == NgStatusTagStyle.COMPACT) 6.dp else 8.dp
+                        when (tag.style) {
+                            NgStatusTagStyle.INLINE -> 4.dp
+                            NgStatusTagStyle.COMPACT -> 6.dp
+                            NgStatusTagStyle.REGULAR -> 8.dp
+                        }
                     )
                 )
             }
             NgStatusTag(
                 spec = tag,
                 modifier = Modifier.widthIn(
-                    max = if (tag.style == NgStatusTagStyle.COMPACT) 96.dp else 120.dp
+                    max = when (tag.style) {
+                        NgStatusTagStyle.INLINE -> 72.dp
+                        NgStatusTagStyle.COMPACT -> 96.dp
+                        NgStatusTagStyle.REGULAR -> 120.dp
+                    }
                 )
             )
         }

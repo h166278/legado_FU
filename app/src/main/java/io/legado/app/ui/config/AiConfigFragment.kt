@@ -3026,7 +3026,7 @@ class AiConfigFragment : BaseFragment(R.layout.fragment_ai_config), ConfigBackHa
             setPadding(24.dpToPx(), 26.dpToPx(), 24.dpToPx(), 24.dpToPx())
             background = GradientDrawable().apply {
                 cornerRadius = 24.dpToPx().toFloat()
-                setColor(ContextCompat.getColor(requireContext(), R.color.ng_surface_soft))
+                setColor(ContextCompat.getColor(requireContext(), R.color.ng_surface_card))
             }
         }
         root.addView(TextView(requireContext()).apply {

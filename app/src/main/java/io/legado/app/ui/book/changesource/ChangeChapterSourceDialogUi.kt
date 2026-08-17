@@ -162,7 +162,6 @@ internal fun ChangeChapterSourceDialogContent(
                 ) {
                     itemsIndexed(
                         items = searchBooks,
-                        key = { _, item -> item.bookUrl },
                     ) { _, item ->
                         ChangeChapterSourceRow(
                             item = item,

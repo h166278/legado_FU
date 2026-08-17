@@ -215,26 +215,27 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.resources.configuration.isNightMode
 
     var showBookname: Int
-        get() = appCtx.getPrefInt(PreferKey.showBooknameLayout, 0)
+        get() = getBookshelfLayoutProfile(activeBookshelfLayoutMode).showBookName
         set(value) {
-            appCtx.putPrefInt(PreferKey.showBooknameLayout, value)
+            updateActiveBookshelfLayoutProfile { it.copy(showBookName = value) }
         }
     var bookshelfMargin: Int
-        get() = appCtx.getPrefInt(PreferKey.bookshelfMargin, 12)
+        get() = getBookshelfLayoutProfile(activeBookshelfLayoutMode).spacing
         set(value) {
-            appCtx.putPrefInt(PreferKey.bookshelfMargin, value)
+            updateActiveBookshelfLayoutProfile { it.copy(spacing = value) }
         }
 
     var showUnread: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showUnread, true)
+        get() = getBookshelfLayoutProfile(activeBookshelfLayoutMode).showUnread
         set(value) {
-            appCtx.putPrefBoolean(PreferKey.showUnread, value)
+            updateActiveBookshelfLayoutProfile { it.copy(showUnread = value) }
         }
 
     var showLastUpdateTime: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showLastUpdateTime, false)
+        get() = activeBookshelfLayoutMode == BookshelfLayoutMode.LIST &&
+            getBookshelfLayoutProfile(BookshelfLayoutMode.LIST).showLastUpdateTime
         set(value) {
-            appCtx.putPrefBoolean(PreferKey.showLastUpdateTime, value)
+            updateActiveBookshelfLayoutProfile { it.copy(showLastUpdateTime = value) }
         }
 
     var showWaitUpCount: Boolean
@@ -290,14 +291,181 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             )
         }
 
+    var ngDrawerTransparency: Int
+        get() = NgDrawerAppearanceConfig.normalizePercent(
+            appCtx.getPrefInt(
+                PreferKey.ngDrawerTransparency,
+                NgDrawerAppearanceConfig.DEFAULT_TRANSPARENCY_PERCENT
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(
+                PreferKey.ngDrawerTransparency,
+                NgDrawerAppearanceConfig.normalizePercent(value)
+            )
+        }
+
+    var ngDrawerPrimaryStrength: Int
+        get() = NgDrawerAppearanceConfig.normalizePercent(
+            appCtx.getPrefInt(
+                PreferKey.ngDrawerPrimaryStrength,
+                NgDrawerAppearanceConfig.DEFAULT_PRIMARY_STRENGTH_PERCENT
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(
+                PreferKey.ngDrawerPrimaryStrength,
+                NgDrawerAppearanceConfig.normalizePercent(value)
+            )
+        }
+
+    var ngDrawerHorizontalMarginDp: Int
+        get() = NgDrawerAppearanceConfig.normalizeHorizontalMarginDp(
+            appCtx.getPrefInt(
+                PreferKey.ngDrawerHorizontalMarginDp,
+                NgDrawerAppearanceConfig.DEFAULT_HORIZONTAL_MARGIN_DP
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(
+                PreferKey.ngDrawerHorizontalMarginDp,
+                NgDrawerAppearanceConfig.normalizeHorizontalMarginDp(value)
+            )
+        }
+
+    var ngDrawerCornerRadiusDp: Int
+        get() = NgDrawerAppearanceConfig.normalizeCornerRadiusDp(
+            appCtx.getPrefInt(
+                PreferKey.ngDrawerCornerRadiusDp,
+                NgDrawerAppearanceConfig.DEFAULT_CORNER_RADIUS_DP
+            )
+        )
+        set(value) {
+            appCtx.putPrefInt(
+                PreferKey.ngDrawerCornerRadiusDp,
+                NgDrawerAppearanceConfig.normalizeCornerRadiusDp(value)
+            )
+        }
+
     val screenOrientation: String?
         get() = appCtx.getPrefString(PreferKey.screenOrientation)
 
-    var bookGroupStyle: Int
-        get() = appCtx.getPrefInt(PreferKey.bookGroupStyle, 0)
+    var bookshelfHomeMode: BookshelfHomeMode
+        get() = BookshelfHomeMode.fromValue(
+            appCtx.getPrefInt(PreferKey.bookshelfHomeMode, BookshelfHomeMode.BOOKS.value)
+        )
         set(value) {
-            appCtx.putPrefInt(PreferKey.bookGroupStyle, value)
+            appCtx.putPrefInt(PreferKey.bookshelfHomeMode, value.value)
         }
+
+    private var bookshelfBooksLayoutMode: BookshelfLayoutMode
+        get() = BookshelfLayoutMode.fromBooksLayoutValue(
+            appCtx.getPrefInt(PreferKey.bookshelfLayout, BookshelfLayoutMode.LIST.value)
+        )
+        set(value) {
+            require(value != BookshelfLayoutMode.GROUP_GRID)
+            appCtx.putPrefInt(PreferKey.bookshelfLayout, value.value)
+        }
+
+    val activeBookshelfLayoutMode: BookshelfLayoutMode
+        get() = if (bookshelfHomeMode == BookshelfHomeMode.GROUP_GRID) {
+            BookshelfLayoutMode.GROUP_GRID
+        } else {
+            bookshelfBooksLayoutMode
+        }
+
+    fun selectBookshelfLayoutMode(mode: BookshelfLayoutMode) {
+        if (mode == BookshelfLayoutMode.GROUP_GRID) {
+            bookshelfHomeMode = BookshelfHomeMode.GROUP_GRID
+        } else {
+            bookshelfBooksLayoutMode = mode
+            bookshelfHomeMode = BookshelfHomeMode.BOOKS
+        }
+    }
+
+    fun getBookshelfLayoutProfile(mode: BookshelfLayoutMode): BookshelfLayoutProfile {
+        val defaults = BookshelfLayoutProfile.default(mode)
+        return BookshelfLayoutProfile(
+            columns = appCtx.getPrefInt(
+                BookshelfLayoutProfilePreferences.columns(mode),
+                defaults.columns,
+            ),
+            innerColumns = appCtx.getPrefInt(
+                BookshelfLayoutProfilePreferences.innerColumns(mode),
+                defaults.innerColumns,
+            ),
+            showBookName = appCtx.getPrefInt(
+                BookshelfLayoutProfilePreferences.showBookName(mode),
+                defaults.showBookName,
+            ),
+            coverRadius = appCtx.getPrefInt(
+                BookshelfLayoutProfilePreferences.coverRadius(mode),
+                defaults.coverRadius,
+            ),
+            spacing = appCtx.getPrefInt(
+                BookshelfLayoutProfilePreferences.spacing(mode),
+                defaults.spacing,
+            ),
+            showUnread = appCtx.getPrefBoolean(
+                BookshelfLayoutProfilePreferences.showUnread(mode),
+                defaults.showUnread,
+            ),
+            showLastUpdateTime = appCtx.getPrefBoolean(
+                BookshelfLayoutProfilePreferences.showLastUpdateTime(mode),
+                defaults.showLastUpdateTime,
+            ),
+            sort = appCtx.getPrefInt(
+                BookshelfLayoutProfilePreferences.sort(mode),
+                defaults.sort,
+            ),
+        ).normalized(mode)
+    }
+
+    fun setBookshelfLayoutProfile(
+        mode: BookshelfLayoutMode,
+        profile: BookshelfLayoutProfile,
+    ) {
+        val normalized = profile.normalized(mode)
+        appCtx.putPrefInt(
+            BookshelfLayoutProfilePreferences.columns(mode),
+            normalized.columns,
+        )
+        appCtx.putPrefInt(
+            BookshelfLayoutProfilePreferences.innerColumns(mode),
+            normalized.innerColumns,
+        )
+        appCtx.putPrefInt(
+            BookshelfLayoutProfilePreferences.showBookName(mode),
+            normalized.showBookName,
+        )
+        appCtx.putPrefInt(
+            BookshelfLayoutProfilePreferences.coverRadius(mode),
+            normalized.coverRadius,
+        )
+        appCtx.putPrefInt(
+            BookshelfLayoutProfilePreferences.spacing(mode),
+            normalized.spacing,
+        )
+        appCtx.putPrefBoolean(
+            BookshelfLayoutProfilePreferences.showUnread(mode),
+            normalized.showUnread,
+        )
+        appCtx.putPrefBoolean(
+            BookshelfLayoutProfilePreferences.showLastUpdateTime(mode),
+            normalized.showLastUpdateTime,
+        )
+        appCtx.putPrefInt(
+            BookshelfLayoutProfilePreferences.sort(mode),
+            normalized.sort,
+        )
+    }
+
+    private inline fun updateActiveBookshelfLayoutProfile(
+        transform: (BookshelfLayoutProfile) -> BookshelfLayoutProfile,
+    ) {
+        val mode = activeBookshelfLayoutMode
+        setBookshelfLayoutProfile(mode, transform(getBookshelfLayoutProfile(mode)))
+    }
 
     var bookshelfTopBarStyle: BookshelfTopBarStyle
         get() = BookshelfTopBarStyle.fromValue(
@@ -342,9 +510,26 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var bookshelfLayout: Int
-        get() = appCtx.getPrefInt(PreferKey.bookshelfLayout, 0)
+        get() = when (activeBookshelfLayoutMode) {
+            BookshelfLayoutMode.LIST -> 0
+            BookshelfLayoutMode.COMPACT -> 1
+            BookshelfLayoutMode.GRID ->
+                getBookshelfLayoutProfile(activeBookshelfLayoutMode).columns
+            BookshelfLayoutMode.GROUP_GRID ->
+                getBookshelfLayoutProfile(activeBookshelfLayoutMode).innerColumns
+        }
         set(value) {
-            appCtx.putPrefInt(PreferKey.bookshelfLayout, value)
+            when {
+                activeBookshelfLayoutMode == BookshelfLayoutMode.GROUP_GRID -> {
+                    updateActiveBookshelfLayoutProfile { it.copy(innerColumns = value) }
+                }
+                value <= 0 -> selectBookshelfLayoutMode(BookshelfLayoutMode.LIST)
+                value == 1 -> selectBookshelfLayoutMode(BookshelfLayoutMode.COMPACT)
+                else -> {
+                    selectBookshelfLayoutMode(BookshelfLayoutMode.GRID)
+                    updateActiveBookshelfLayoutProfile { it.copy(columns = value) }
+                }
+            }
         }
 
     var saveTabPosition: Int
@@ -557,6 +742,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.exportPictureFile, value)
         }
 
+    var exportPlainText: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.exportPlainText, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.exportPlainText, value)
+        }
+
+    var exportFilterInteractiveImages: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.exportFilterInteractiveImages, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.exportFilterInteractiveImages, value)
+        }
+
     var parallelExportBook: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.parallelExportBook, false)
         set(value) {
@@ -654,18 +851,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.changeSourceLoadWordCount)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.changeSourceLoadWordCount, value)
-        }
-
-    var openBookInfoByClickTitle: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.openBookInfoByClickTitle, true)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.openBookInfoByClickTitle, value)
-        }
-
-    var showBookshelfFastScroller: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showBookshelfFastScroller, false)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.showBookshelfFastScroller, value)
         }
 
     var contentSelectSpeakMod: Int
@@ -791,9 +976,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var bookshelfSort: Int
-        get() = appCtx.getPrefInt(PreferKey.bookshelfSort, 0)
+        get() = getBookshelfLayoutProfile(activeBookshelfLayoutMode).sort
         set(value) {
-            appCtx.putPrefInt(PreferKey.bookshelfSort, value)
+            updateActiveBookshelfLayoutProfile { it.copy(sort = value) }
         }
 
     fun getBookSortByGroupId(groupId: Long): Int {

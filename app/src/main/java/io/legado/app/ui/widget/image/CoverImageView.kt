@@ -71,7 +71,7 @@ class CoverImageView @JvmOverloads constructor(
     private var authorHeight = 0f
     private val drawBookName = BookCover.drawBookName
     private val drawBookAuthor by lazy { BookCover.drawBookAuthor }
-    private val coverRadius: Float
+    private var coverRadius: Float
     private val clipRect = RectF()
     private val clipPath = Path()
 
@@ -252,6 +252,14 @@ class CoverImageView @JvmOverloads constructor(
     fun setHeight(height: Int) {
         val width = height * 3 / 4
         minimumWidth = width
+    }
+
+    fun setCoverRadiusDp(radiusDp: Int) {
+        val radiusPx = radiusDp.coerceAtLeast(0) * resources.displayMetrics.density
+        if (coverRadius == radiusPx) return
+        coverRadius = radiusPx
+        invalidateOutline()
+        invalidate()
     }
 
     private val glideListener by lazy {

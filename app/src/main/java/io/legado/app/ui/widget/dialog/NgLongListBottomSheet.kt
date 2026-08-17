@@ -92,7 +92,7 @@ class NgLongListBottomSheet(
     } ?: GradientDrawable().apply {
         val radius = 28.dpToPx().toFloat()
         cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
-        setColor(ContextCompat.getColor(context, R.color.ng_surface_soft))
+        setColor(ContextCompat.getColor(context, R.color.ng_surface_card))
     }
 
     init {

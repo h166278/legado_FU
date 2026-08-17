@@ -54,7 +54,7 @@ Material 3 只作为 Compose 实现底层，不能把 Material 默认外观当�
 | P0 | 标题栏菜单 `NgActionPopup` | 新增类型、更多、选中、分组 | Provider 新增菜单 | `NgMenuPopup`、`NgActionPopup` | 已通过 18dp 圆角、44dp 行高、自适应宽度；不回退系统方形 PopupMenu |
 | P0 | 底部切换 `NgFloatingTabBar` | 两项纯图标、可选图文、选中、无障碍 | Provider 配置／模型 | `NgFloatingTabBar`、`ng_bg_character_tabs` | 已通过 48dp 等宽栏、独立 24dp 图标物理居中和主题强调色选中态 |
 | P1 | 输入 `NgTextField` | Outlined、Compact、密码、错误、只读 | TTS 引擎配置、AI 模型编辑、角色编辑 | `Ng.OutlinedField*` | 56/34dp 与当前一致；焦点、键盘、错误和长文本不改变布局 |
-| P1 | 选择控件 `NgSelectionControl` | Switch、Spinner、Segmented、Slider、Checkbox、Radio | AI 配置、TTS 参数、角色编辑、朗读模式 | `ThemeSwitch`、`Ng.Spinner*`、`Ng.Segmented*`、Compose `NgSlider` | `NgSlider` 已在主题背景虚化与字体缩放进入 Trial：连续型沿用听书进度条，离散型使用加粗圆点刻度轨道；覆盖强调色、禁用态、档位吸附和无障碍进度语义，仍需真机验收后再扩到播放器 |
+| P1 | 选择控件 `NgSelectionControl` | Switch、Spinner、Segmented、Slider、Checkbox、Radio、FilterChip、ChoiceCard | AI 配置、TTS 参数、角色编辑、朗读模式、长列表筛选、导出格式 | `ThemeSwitch`、`Ng.Spinner*`、`Ng.Segmented*`、Compose `NgSlider`、`NgFilterChipGroup`、`NgChoiceCard` | `NgSlider` 已在主题背景虚化与字体缩放进入 Trial；`NgFilterChipGroup` 已在批量换源抽屉进入 Trial，覆盖 WRAP 与固定 70dp 双排横向轨道、空选即全部、多选和长名称省略；`NgChoiceCard` 已在书架管理导出格式进入 Trial，仍需真机验收横向滑动、互斥反馈与日夜主题 |
 | P1 | 标签与状态 `NgTag/Badge` | Info、Success、Warning、Error、Neutral、性别、语言 | AI Provider/Prompt、TTS 引擎与发音人、角色与发音人 | `Ng.Tag.*`、TTS 专用 `ng_bg_tts_*tag` | 24dp 高度、12sp 文案、颜色只表达状态；长标签不能挤压主标题 |
 | P1 | 弹窗 `NgDialog` | Standard、Confirmation、Editor、LongContent、List | AI 净化确认、自定义范围、角色编辑、导入冲突、代码/日志查看 | `Ng.DialogRoot/Header/Body/Section/ActionBar` | 当前圆角、内边距和按钮尺寸；返回、取消、键盘、长内容滚动和横竖屏恢复 |
 | P1 | BottomSheet `NgBottomSheet` | 设置列表、单选、滑杆、长列表 | 发音人、AI 模型选择、TTS 引擎、朗读模式、章节目录 | `NgLongListBottomSheet`、`layout_ng_model_filters`、`layout_tts_voice_filters` | 选择型长列表的背景、28dp 顶部圆角、compact 标题和透明筛选层已通过；设置／滑杆类抽屉及内容卡片继续按业务另验收 |

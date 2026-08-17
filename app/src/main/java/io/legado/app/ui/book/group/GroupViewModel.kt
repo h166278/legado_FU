@@ -20,7 +20,6 @@ class GroupViewModel(application: Application) : BaseViewModel(application) {
         bookSort: Int,
         enableRefresh: Boolean,
         onlyUpdateRead: Boolean,
-        cover: String?,
         finally: () -> Unit
     ) {
         execute {
@@ -28,7 +27,6 @@ class GroupViewModel(application: Application) : BaseViewModel(application) {
             val bookGroup = BookGroup(
                 groupId = groupId,
                 groupName = groupName,
-                cover = cover,
                 bookSort = bookSort,
                 enableRefresh = enableRefresh,
                 onlyUpdateRead = onlyUpdateRead,

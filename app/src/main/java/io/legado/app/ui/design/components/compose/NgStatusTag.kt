@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -13,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,6 +24,7 @@ import io.legado.app.R
 import io.legado.app.ui.design.components.NgStatusTagSpec
 import io.legado.app.ui.design.components.NgStatusTagStyle
 import io.legado.app.ui.design.components.NgStatusTagVariant
+import io.legado.app.ui.design.theme.NgTheme
 
 /** 与 View 版 NgStatusTagView 共用尺寸和语义的 Compose 状态标签。 */
 @Composable
@@ -32,6 +37,22 @@ fun NgStatusTag(
         variant = spec.variant,
         style = spec.style,
         modifier = modifier
+    )
+}
+
+/** 用同一套状态色表达空间受限场景，并保留完整的无障碍状态文案。 */
+@Composable
+fun NgStatusDot(
+    spec: NgStatusTagSpec,
+    modifier: Modifier = Modifier
+) {
+    val (_, contentColor) = tagColors(spec.variant)
+    Box(
+        modifier = modifier
+            .semantics { contentDescription = spec.text.toString() }
+            .size(8.dp)
+            .clip(CircleShape)
+            .background(contentColor)
     )
 }
 
@@ -60,6 +81,15 @@ fun NgStatusTag(
             textSize = 11,
             lineHeight = 13
         )
+
+        NgStatusTagStyle.INLINE -> TagMetrics(
+            minWidth = 0,
+            height = 18,
+            horizontalPadding = 5,
+            cornerRadius = 6,
+            textSize = 10,
+            lineHeight = 12
+        )
     }
     val (containerColor, contentColor) = tagColors(variant)
     Box(
@@ -85,6 +115,8 @@ fun NgStatusTag(
 @Composable
 private fun tagColors(variant: NgStatusTagVariant): Pair<Color, Color> {
     return when (variant) {
+        NgStatusTagVariant.PRIMARY ->
+            Color(NgTheme.colors.selectedContainer) to Color(NgTheme.colors.onPrimaryContainer)
         NgStatusTagVariant.INFO ->
             colorResource(R.color.ng_info_container) to colorResource(R.color.ng_info)
         NgStatusTagVariant.SUCCESS ->

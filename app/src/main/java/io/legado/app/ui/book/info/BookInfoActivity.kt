@@ -89,7 +89,6 @@ import io.legado.app.ui.book.changecover.ChangeCoverDialog
 import io.legado.app.ui.book.character.BookCharacterActivity
 import io.legado.app.ui.book.character.BookCharacterLabels
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
-import io.legado.app.ui.book.group.GroupSelectDialog
 import io.legado.app.ui.book.info.edit.BookInfoEditActivity
 import io.legado.app.ui.book.manga.ReadMangaActivity
 import io.legado.app.ui.book.read.ReadBookActivity
@@ -144,7 +143,6 @@ import kotlinx.coroutines.withContext
 
 class BookInfoActivity :
     VMBaseActivity<ActivityBookInfoBinding, BookInfoViewModel>(toolBarTheme = Theme.Dark, showOpenMenuIcon = false),
-    GroupSelectDialog.CallBack,
     ChangeBookSourceDialog.CallBack,
     ChangeCoverDialog.CallBack,
     VariableDialog.Callback,
@@ -994,33 +992,7 @@ class BookInfoActivity :
     }
 
     private fun openBookScanAiAssistant(book: Book) {
-        val workKey = BookCharacterProfile.workKey(book.name, book.author)
-        val payload = JsonObject().apply {
-            addProperty("work_key", workKey)
-            addProperty("book_name", book.name)
-            addProperty("book_author", book.getRealAuthor())
-            addProperty("book_url", book.bookUrl)
-            addProperty("origin_name", book.originName)
-            book.kind?.takeIf { it.isNotBlank() }?.let { addProperty("category", it) }
-            book.wordCount?.takeIf { it.isNotBlank() }?.let { addProperty("word_count", it) }
-            addProperty("total_chapters", book.totalChapterNum)
-            book.durChapterTitle?.takeIf { it.isNotBlank() }?.let {
-                addProperty("current_chapter_index", book.durChapterIndex + 1)
-                addProperty("current_chapter_title", it)
-            }
-            book.latestChapterTitle?.takeIf { it.isNotBlank() }?.let {
-                addProperty("latest_chapter_title", it)
-            }
-        }
-        val entryContext = AgentModeEntryContext(
-            contextId = "book_detail",
-            title = "AI 扫书：${book.name}",
-            payload = payload
-        )
-        startActivity<AiChatActivity> {
-            putExtra(AiChatActivity.EXTRA_ENTRY, AiChatActivity.ENTRY_BOOK_SCAN)
-            putExtra(AiChatActivity.EXTRA_MODE_ENTRY_CONTEXT, entryContext.toJson())
-        }
+        BookAiAssistantLauncher.openBookScan(this, book)
     }
 
     private fun String.toPlainBookIntro(): String {
@@ -1388,13 +1360,6 @@ class BookInfoActivity :
         tvCacheBook.setOnClickListener {
             viewModel.getBook()?.let { book ->
                 startCacheBook(book)
-            }
-        }
-        tvChangeGroup.setOnClickListener {
-            viewModel.getBook()?.let {
-                showDialogFragment(
-                    GroupSelectDialog(it.group)
-                )
             }
         }
         tvAuthor.setOnClickListener {
@@ -1804,20 +1769,6 @@ class BookInfoActivity :
             showCover(book)
             if (viewModel.inBookshelf) {
                 viewModel.saveBook(book)
-            }
-        }
-    }
-
-    override fun upGroup(requestCode: Int, groupId: Long) {
-        upGroup(groupId)
-        viewModel.getBook()?.let { book ->
-            book.group = groupId
-            if (viewModel.inBookshelf) {
-                viewModel.saveBook(book)
-            } else if (groupId > 0) {
-                viewModel.addToBookshelf {
-                    upTvBookshelf()
-                }
             }
         }
     }

@@ -20,6 +20,7 @@
     <item name="menu_add_books" type="id" />
     <item name="menu_add_local" type="id" />
     <item name="menu_remote" type="id" />
+    <item name="menu_server_config" type="id" />
     <item name="menu_add_url" type="id" />
     <item name="menu_bookshelf_layout" type="id" />
     <item name="menu_bookshelf_backup" type="id" />
@@ -27,12 +28,28 @@
     <item name="menu_import_bookshelf" type="id" />
     <item name="menu_diagnostics" type="id" />
     <item name="menu_source_groups" type="id" />
+    <item name="menu_source_manage" type="id" />
     <item name="menu_clear_history" type="id" />
     <item name="menu_precision_search" type="id" />
     <item name="menu_block_source_dialogs" type="id" />
     <item name="menu_search_scope" type="id" />
 
+    <!-- Shared menu actions kept independently from the removed cache/export hub. -->
+    <item name="menu_book_group" type="id" />
+    <item name="menu_enable_custom_export" type="id" />
+    <item name="menu_export_web_dav" type="id" />
+    <item name="menu_export_no_chapter_name" type="id" />
+    <item name="menu_export_pics_file" type="id" />
+    <item name="menu_parallel_export" type="id" />
+    <item name="menu_export_folder" type="id" />
+    <item name="menu_export_file_name" type="id" />
+    <item name="menu_export_type" type="id" />
+    <item name="menu_export_charset" type="id" />
+
     <item name="fast_scroller" type="id" />
+    <item name="bookshelf_cover_load_key" type="id" />
+    <item name="bookshelf_floating_dock" type="id" />
+    <item name="bookshelf_page_container" type="id" />
 
     <item name="bettermovementmethod_highlight_background_span" type="id" />
     <item name="small_id" type="id" />

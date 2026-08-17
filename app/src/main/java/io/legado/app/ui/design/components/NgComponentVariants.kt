@@ -9,10 +9,16 @@ enum class NgSurfaceVariant {
 
 enum class NgButtonVariant {
     PRIMARY,
+    PRIMARY_LIGHT_CONTENT,
     TONAL,
     OUTLINE,
     DANGER,
     ON_IMAGE
+}
+
+enum class NgButtonShapeVariant {
+    PILL,
+    ROUNDED,
 }
 
 enum class NgSettingsTrailing {
@@ -26,11 +32,13 @@ enum class NgSettingsTrailing {
 enum class NgDialogVariant {
     STANDARD,
     CONFIRMATION,
+    COMPACT_CONFIRMATION,
     EDITOR,
     LONG_CONTENT
 }
 
 enum class NgStatusTagVariant {
+    PRIMARY,
     INFO,
     SUCCESS,
     WARNING,
@@ -40,13 +48,24 @@ enum class NgStatusTagVariant {
 
 enum class NgStatusTagStyle {
     REGULAR,
-    COMPACT
+    COMPACT,
+    INLINE
 }
 
 enum class NgManagementTrailing {
     NONE,
     DRAG,
     MORE
+}
+
+enum class NgManagementListCardVariant {
+    DEFAULT,
+    COMPACT_GRID
+}
+
+enum class NgFilterChipGroupVariant {
+    WRAP,
+    TWO_ROW_RAIL
 }
 
 data class NgStatusTagSpec(

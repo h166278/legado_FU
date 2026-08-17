@@ -33,6 +33,9 @@ class FastScrollRecyclerView : RecyclerView {
 
     private fun layout(context: Context, attrs: AttributeSet?) {
         mFastScroller = FastScroller(context, attrs)
+        // The same AttributeSet belongs to the RecyclerView. FastScroller needs its custom
+        // attributes, but must not inherit the RecyclerView background as a narrow side pill.
+        mFastScroller.background = null
         mFastScroller.id = R.id.fast_scroller
     }
 

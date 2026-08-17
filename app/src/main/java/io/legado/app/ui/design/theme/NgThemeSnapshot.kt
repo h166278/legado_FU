@@ -77,6 +77,10 @@ data class NgTypographyTokens(
     val pageTitleSp: Int = 24,
     val sectionTitleSp: Int = 20,
     val itemTitleSp: Int = 16,
+    val compactItemTitleSp: Int = 14,
+    val denseItemTitleSp: Int = 11,
+    val denseItemSummarySp: Int = 10,
+    val denseBadgeSp: Int = 11,
     val bodySp: Int = 15,
     val summarySp: Int = 13,
     val labelSp: Int = 12

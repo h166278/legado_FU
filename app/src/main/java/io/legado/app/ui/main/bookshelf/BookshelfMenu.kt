@@ -2,6 +2,11 @@ package io.legado.app.ui.main.bookshelf
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
@@ -21,10 +26,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -42,7 +50,7 @@ internal fun bookshelfMenuItems(
         add(
             NgExpandableActionMenuItem(
                 itemId = R.id.menu_read_record,
-                titleRes = R.string.browse_history,
+                titleRes = R.string.read_record,
                 iconRes = R.drawable.ic_history
             )
         )
@@ -81,17 +89,10 @@ internal fun bookshelfMenuItems(
     )
     add(
         NgExpandableActionMenuItem(
-            R.id.menu_download,
-            R.string.cache_export,
-            R.drawable.ic_download_line,
-            dividerBefore = true
-        )
-    )
-    add(
-        NgExpandableActionMenuItem(
             R.id.menu_group_manage,
             R.string.group_manage,
-            R.drawable.ic_groups
+            R.drawable.ic_groups,
+            dividerBefore = true
         )
     )
     add(
@@ -243,28 +244,60 @@ private fun BookshelfContentToolbarActionContent(
     horizontalPadding: Dp = 0.dp
 ) {
     val contentColor = bookshelfContentToolbarActionColor()
-    Row(
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressProgress by animateFloatAsState(
+        targetValue = if (isPressed) 1f else 0f,
+        animationSpec = tween(durationMillis = if (isPressed) 90 else 140),
+        label = "bookshelfToolbarPress"
+    )
+    val backgroundColor = colorResource(
+        if (isPressed) R.color.ng_bookshelf_action_pressed
+        else R.color.ng_bookshelf_action_surface
+    )
+    Box(
         modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = horizontalPadding),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+            .graphicsLayer {
+                val scale = 1f - (0.03f * pressProgress)
+                scaleX = scale
+                scaleY = scale
+                alpha = 1f - (0.08f * pressProgress)
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(16.dp)
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(backgroundColor)
         )
-        Spacer(modifier = Modifier.size(2.dp))
-        Text(
-            text = stringResource(labelRes),
-            color = contentColor,
-            fontSize = 11.sp,
-            lineHeight = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = horizontalPadding),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.size(2.dp))
+            Text(
+                text = stringResource(labelRes),
+                color = contentColor,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

@@ -1,21 +1,25 @@
 package io.legado.app.ui.main.bookshelf.style1.books
 
-import android.annotation.SuppressLint
-import android.graphics.Rect
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.LinearLayout
-import androidx.core.view.isGone
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import androidx.recyclerview.widget.RecyclerView.Adapter.StateRestorationPolicy
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.AppLog
@@ -28,16 +32,16 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.FragmentBooksBinding
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.BookshelfLayoutMode
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
+import io.legado.app.model.ReadManga
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.data.entities.BookCharacterProfile
@@ -45,28 +49,30 @@ import io.legado.app.service.ExportBookService
 import io.legado.app.ui.book.character.BookCharacterActivity
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.utils.SelectDirectoryContract
+import io.legado.app.ui.book.info.BookAiAssistantLauncher
 import io.legado.app.ui.book.info.BookInfoActivity
+import io.legado.app.ui.book.manage.ExportSettingsDialog
+import io.legado.app.ui.book.manage.ExportSettingsResult
 import io.legado.app.ui.book.read.aloud.ReadAloudLauncher
+import io.legado.app.ui.book.toc.TocActivityResult
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.main.bookshelf.BookshelfBookActionSheet
 import io.legado.app.ui.main.bookshelf.BookshelfBookGroupSheet
-import io.legado.app.ui.main.bookshelf.style1.BookshelfFragment1
+import io.legado.app.ui.main.bookshelf.SimulatedReadingDialog
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.utils.ACache
-import io.legado.app.utils.FileDoc
-import io.legado.app.utils.checkWrite
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChangeFirst
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.startService
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -78,19 +84,20 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import kotlin.math.max
 
 /**
  * 书架界面
  */
-class BooksFragment() : BaseFragment(R.layout.fragment_books),
-    BaseBooksAdapter.CallBack,
+class BooksFragment() : BaseFragment(0),
     BookshelfBookActionSheet.Callback,
-    ChangeBookSourceDialog.CallBack {
+    ChangeBookSourceDialog.CallBack,
+    ExportSettingsDialog.Callback,
+    SimulatedReadingDialog.Callback {
 
-    constructor(position: Int, group: BookGroup) : this() {
+    constructor(group: BookGroup) : this() {
         val bundle = Bundle()
-        bundle.putInt("position", position)
         bundle.putLong("groupId", group.groupId)
         bundle.putInt("bookSort", group.getRealBookSort())
         bundle.putBoolean("enableRefresh", group.enableRefresh)
@@ -98,163 +105,135 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
         arguments = bundle
     }
 
-    private val binding by viewBinding(FragmentBooksBinding::bind)
     private val activityViewModel by activityViewModels<MainViewModel>()
-    private val bookshelfLayout by lazy { AppConfig.bookshelfLayout }
-    private val booksAdapter: BaseBooksAdapter<*> by lazy {
-        when (bookshelfLayout) {
-            0 -> {
-                BooksAdapterList(requireContext(), this, this, viewLifecycleOwner.lifecycle)
-            }
-            1 -> {
-                BooksAdapterList2(requireContext(), this, this, viewLifecycleOwner.lifecycle)
-            }
-            else -> {
-                BooksAdapterGrid(requireContext(), this)
-            }
-        }
-    }
+    private val layoutMode by lazy { AppConfig.activeBookshelfLayoutMode }
+    private var layoutProfile by mutableStateOf(AppConfig.getBookshelfLayoutProfile(layoutMode))
+    private var bookItems by mutableStateOf<List<Book>>(
+        emptyList(),
+        referentialEqualityPolicy(),
+    )
+    private var bottomInsetPx by mutableIntStateOf(0)
+    private var scrollToTopToken by mutableLongStateOf(0L)
+    private var coverRevision by mutableIntStateOf(0)
+    private var lastUpdateTick by mutableLongStateOf(System.currentTimeMillis())
+    private var updatingBookUrls by mutableStateOf<Set<String>>(emptySet())
     private var booksFlowJob: Job? = null
-    var position = 0
-        private set
     var groupId = -1L
         private set
+    val configuredGroupId: Long
+        get() = arguments?.getLong("groupId", groupId) ?: groupId
     var bookSort = 0
         private set
     private var upLastUpdateTimeJob: Job? = null
-    private var enableRefresh = true
+    private var refreshAllowed by mutableStateOf(true)
     private var onlyUpdateRead = false
-    private val bookshelfMargin by lazy { AppConfig.bookshelfMargin }
-    private var itemCount = 0
-    private var totalRows = 0
     private var actionBook: Book? = null
+    private var tocBook: Book? = null
     private var exportBook: Book? = null
+    private var pendingExportSettings = ExportSettingsResult()
     private val exportBookPathKey = "exportBookPath"
+    private val tocActivityResult = registerForActivityResult(TocActivityResult()) { result ->
+        val book = tocBook ?: return@registerForActivityResult
+        tocBook = null
+        result ?: return@registerForActivityResult
+        viewLifecycleOwner.lifecycleScope.launch {
+            val chapterChanged = result[2] as Boolean
+            val updatedBook = withContext(IO) {
+                book.copy().apply {
+                    durChapterIndex = result[0] as Int
+                    durChapterPos = result[1] as Int
+                    durVolumeIndex = result[3] as Int
+                    chapterInVolumeIndex = result[4] as Int
+                    appDb.bookDao.update(this)
+                }
+            }
+            startActivityForBook(updatedBook) {
+                putExtra("chapterChanged", chapterChanged)
+            }
+        }
+    }
     private val exportDir = registerForActivityResult(SelectDirectoryContract()) { result ->
         val book = exportBook ?: return@registerForActivityResult
         result.uri?.let { uri ->
             val path = if (uri.isContentScheme()) uri.toString() else uri.path ?: uri.toString()
             ACache.get().put(exportBookPathKey, path)
-            startExportBook(book, path)
+            startExportBook(book, path, pendingExportSettings)
         }
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View = ComposeView(requireContext()).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         arguments?.let {
-            position = it.getInt("position", 0)
             groupId = it.getLong("groupId", -1)
             bookSort = it.getInt("bookSort", 0)
-            enableRefresh = it.getBoolean("enableRefresh", true)
+            refreshAllowed = it.getBoolean("enableRefresh", true)
             onlyUpdateRead = it.getBoolean("onlyUpdateRead", false)
-            binding.refreshLayout.isEnabled = enableRefresh
         }
-        initRecyclerView()
-        upRecyclerData()
-    }
-
-    private fun initRecyclerView() {
-        binding.rvBookshelf.setEdgeEffectColor(primaryColor)
-        upFastScrollerBar()
-        binding.refreshLayout.setColorSchemeColors(accentColor)
-        binding.refreshLayout.setOnRefreshListener {
-            binding.refreshLayout.isRefreshing = false
-            activityViewModel.upToc(booksAdapter.getItems(), onlyUpdateRead)
-        }
-        if (bookshelfLayout >= 2) {
-            binding.rvBookshelf.layoutManager = GridLayoutManager(context, bookshelfLayout)
-            binding.rvBookshelf.setRecycledViewPool(activityViewModel.booksGridRecycledViewPool)
-        } else {
-            binding.rvBookshelf.layoutManager = LinearLayoutManager(context)
-            binding.rvBookshelf.setRecycledViewPool(activityViewModel.booksListRecycledViewPool)
-        }
-        booksAdapter.stateRestorationPolicy = StateRestorationPolicy.PREVENT_WHEN_EMPTY
-        binding.rvBookshelf.adapter = booksAdapter
-        /**
-         * 应该是当初没有使用override val keepScrollPosition = true 加的代码
-         * 最近阅读插入顶部时会造成滚动
-         * 但是采用keepScrollPosition = true复原滚动后,代码就多余了
-         * 采用下面代码反而会向上多滚动一个行
-         * 再加上2025/12/19代码,因为下面的代码会出现很奇怪的自动滚动到顶部现象,没理出原因,注释掉下面代码
-         * **/
-//        booksAdapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
-//            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-//                val layoutManager = binding.rvBookshelf.layoutManager
-//                if (positionStart == 0 && itemCount == 1 && layoutManager is LinearLayoutManager) {
-//                    val scrollTo = layoutManager.findFirstVisibleItemPosition() - itemCount
-//                    binding.rvBookshelf.scrollToPosition(max(0, scrollTo))
-//                }
-//            }
-//
-//            override fun onItemRangeMoved(fromPosition: Int, toPosition: Int, itemCount: Int) {
-//                val layoutManager = binding.rvBookshelf.layoutManager
-//                if (toPosition == 0 && itemCount == 1 && layoutManager is LinearLayoutManager) {
-//                    val scrollTo = layoutManager.findFirstVisibleItemPosition() - itemCount
-//                    binding.rvBookshelf.scrollToPosition(max(0, scrollTo))
-//                }
-//            }
-//        })
-        binding.rvBookshelf.addItemDecoration( object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(
-                outRect: Rect,
-                view: View,
-                parent: RecyclerView,
-                state: RecyclerView.State
-            ) {
-                val position = parent.getChildAdapterPosition(view)
-                if (bookshelfLayout >= 2) {
-                    val spanCount = bookshelfLayout
-                    val rowIndex = position / spanCount
-                    when (rowIndex) {
-                        0 -> { //第一行加额外上边距
-                            outRect.set(bookshelfMargin, bookshelfMargin + 24, bookshelfMargin, bookshelfMargin)
-                        }
-                        totalRows - 1 -> { //最后一行加额外下边距
-                            outRect.set(bookshelfMargin, bookshelfMargin, bookshelfMargin, bookshelfMargin + 24)
-                        }
-                        else -> {
-                            outRect.set(bookshelfMargin, bookshelfMargin, bookshelfMargin, bookshelfMargin)
-                        }
-                    }
-                } else {
-                    when (position) {
-                        0 -> {
-                            outRect.set(0, bookshelfMargin + 4, 0, bookshelfMargin)
-                        }
-                        itemCount - 1 -> {
-                            outRect.set(0, bookshelfMargin, 0, bookshelfMargin + 12)
-                        }
-                        else -> {
-                            outRect.set(0, bookshelfMargin, 0, bookshelfMargin)
-                        }
-                    }
-                }
+        (view as ComposeView).setContent {
+            NgAppTheme {
+                val bottomInset = with(LocalDensity.current) { bottomInsetPx.toDp() }
+                BookshelfBooksScreen(
+                    books = bookItems,
+                    layoutMode = layoutMode,
+                    columns = layoutProfile.columns,
+                    spacing = layoutProfile.spacing,
+                    showBookName = layoutProfile.showBookName,
+                    coverRadius = layoutProfile.coverRadius,
+                    showUnread = layoutProfile.showUnread,
+                    showLastUpdateTime = layoutProfile.showLastUpdateTime,
+                    bottomInset = bottomInset,
+                    scrollToTopToken = scrollToTopToken,
+                    coverRevision = coverRevision,
+                    lastUpdateTick = lastUpdateTick,
+                    isEInk = AppConfig.isEInkMode,
+                    updatingBookUrls = updatingBookUrls,
+                    refreshEnabled = refreshAllowed && bookItems.isNotEmpty(),
+                    onRefresh = {
+                        // 保留旧书架行为：手势完成后直接后台更新目录，不维持加载态。
+                        activityViewModel.upToc(bookItems, onlyUpdateRead)
+                    },
+                    onOpenBook = ::open,
+                    onOpenBookInfo = ::openBookInfo,
+                    onOpenBookActions = ::openBookActions,
+                )
             }
-        })
+        }
+        (activity as? MainActivity)?.resolveFloatingBottomContentInset { inset ->
+            bottomInsetPx = inset
+        }
+        upRecyclerData()
         startLastUpdateTimeJob()
     }
 
-    private fun upFastScrollerBar() {
-        val showBookshelfFastScroller = AppConfig.showBookshelfFastScroller
-        binding.rvBookshelf.setFastScrollEnabled(showBookshelfFastScroller)
-        if (showBookshelfFastScroller) {
-            binding.rvBookshelf.scrollBarSize = 0
-        } else {
-            binding.rvBookshelf.scrollBarSize =
-                ViewConfiguration.get(requireContext()).scaledScrollBarSize
+    fun updateGroup(group: BookGroup) {
+        val sort = group.getRealBookSort()
+        val sortChanged = bookSort != sort
+        arguments?.apply {
+            putLong("groupId", group.groupId)
+            putInt("bookSort", sort)
+            putBoolean("enableRefresh", group.enableRefresh)
+            putBoolean("onlyUpdateRead", group.onlyUpdateRead)
         }
-    }
-
-    fun upBookSort(sort: Int) {
-        binding.root.post {
-            arguments?.putInt("bookSort", sort)
-            bookSort = sort
-            upRecyclerData()
+        groupId = group.groupId
+        bookSort = sort
+        refreshAllowed = group.enableRefresh
+        onlyUpdateRead = group.onlyUpdateRead
+        if (view != null && sortChanged) {
+            view?.post { upRecyclerData() }
         }
-    }
-
-    fun setEnableRefresh(enable: Boolean) {
-        enableRefresh = enable
-        binding.refreshLayout.isEnabled = enable
     }
 
     /**
@@ -291,15 +270,11 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
             ).catch {
                 AppLog.put("书架更新出错", it)
             }.conflate().flowOn(Dispatchers.Default).collect { list ->
-                itemCount = list.size
-                val spanCount = bookshelfLayout
-                if (spanCount >= 2) {
-                    totalRows = if (itemCount % spanCount == 0) itemCount / spanCount else itemCount / spanCount + 1
-                }
-                binding.tvEmptyMsg.isGone = itemCount > 0
-                binding.refreshLayout.isEnabled = enableRefresh && itemCount > 0
-                booksAdapter.setItems(list)
-                (parentFragment as? BookshelfFragment1)?.onBookCountChanged(groupId, itemCount)
+                bookItems = list
+                updatingBookUrls = list.asSequence()
+                    .map(Book::bookUrl)
+                    .filter(activityViewModel::isUpdate)
+                    .toSet()
                 delay(100)
             }
         }
@@ -307,13 +282,13 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
 
     private fun startLastUpdateTimeJob() {
         upLastUpdateTimeJob?.cancel()
-        if (!AppConfig.showLastUpdateTime || bookshelfLayout >= 2) {
+        if (!layoutProfile.showLastUpdateTime || layoutMode != BookshelfLayoutMode.LIST) {
             return
         }
         upLastUpdateTimeJob = viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (isActive) {
-                    booksAdapter.upLastUpdateTime()
+                    lastUpdateTick = System.currentTimeMillis()
                     delay(30 * 1000)
                 }
             }
@@ -321,42 +296,29 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
     }
 
     fun getBooks(): List<Book> {
-        return booksAdapter.getItems()
+        return bookItems
     }
 
     fun gotoTop() {
-        if (AppConfig.isEInkMode) {
-            binding.rvBookshelf.scrollToPosition(0)
-        } else {
-            binding.rvBookshelf.smoothScrollToPosition(0)
-        }
+        scrollToTopToken++
     }
 
     fun getBooksCount(): Int {
-        return booksAdapter.itemCount
+        return bookItems.size
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        /**
-         * 将 RecyclerView 中的视图全部回收到 RecycledViewPool 中
-         */
-        binding.rvBookshelf.setItemViewCacheSize(0)
-        binding.rvBookshelf.adapter = null
-    }
-
-    override fun open(book: Book) {
+    private fun open(book: Book) {
         startActivityForBook(book)
     }
 
-    override fun openBookInfo(book: Book) {
+    private fun openBookInfo(book: Book) {
         startActivity<BookInfoActivity> {
             putExtra("name", book.name)
             putExtra("author", book.author)
         }
     }
 
-    override fun openBookActions(book: Book) {
+    private fun openBookActions(book: Book) {
         actionBook = book
         BookshelfBookActionSheet(this, book, this).show()
     }
@@ -366,6 +328,11 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
             putExtra("name", book.name)
             putExtra("author", book.author)
         }
+    }
+
+    override fun onChapterList(book: Book) {
+        tocBook = book
+        tocActivityResult.launch(book.bookUrl)
     }
 
     override fun onCharacters(book: Book) {
@@ -383,33 +350,36 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
 
     override fun onExport(book: Book) {
         exportBook = book
-        val path = ACache.get().getAsString(exportBookPathKey)
-        viewLifecycleOwner.lifecycleScope.launch {
-            val canWrite = if (path.isNullOrEmpty()) {
-                false
-            } else {
-                withContext(IO) {
-                    kotlin.runCatching { FileDoc.fromDir(path).checkWrite() }.getOrDefault(false)
-                }
-            }
-            if (canWrite && path != null) {
-                startExportBook(book, path)
-            } else {
-                exportDir.launch(null)
-            }
-        }
+        ExportSettingsDialog.show(childFragmentManager, selectedCount = 1)
     }
 
-    private fun startExportBook(book: Book, path: String) {
-        val exportType = when (AppConfig.exportType) {
-            1 -> "epub"
-            else -> "txt"
-        }
+    override fun onExportSettingsConfirmed(result: ExportSettingsResult) {
+        if (exportBook == null) return
+        pendingExportSettings = result
+        val initialUri = ACache.get().getAsString(exportBookPathKey)
+            ?.takeIf { it.startsWith("content://") }
+            ?.let(android.net.Uri::parse)
+        exportDir.launch(SelectDirectoryContract.Request(initialUri = initialUri))
+    }
+
+    private fun startExportBook(
+        book: Book,
+        path: String,
+        settings: ExportSettingsResult,
+    ) {
+        val exportType = if (settings.exportType == 1) "epub" else "txt"
         requireContext().startService<ExportBookService> {
             action = IntentAction.start
             putExtra("bookUrl", book.bookUrl)
             putExtra("exportType", exportType)
             putExtra("exportPath", path)
+            putExtra("exportUseReplace", true)
+            putExtra("parallelExport", true)
+            putExtra("exportToWebDav", false)
+            putExtra("includeChapterName", true)
+            putExtra("exportPlainText", settings.plainText)
+            putExtra("exportFilterInteractiveImages", settings.filterInteractiveImages)
+            putExtra("exportPictureFile", settings.exportPictures)
         }
         toastOnUi(R.string.export_wait)
     }
@@ -446,6 +416,82 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
     override fun onChangeSource(book: Book) {
         actionBook = book
         showDialogFragment(ChangeBookSourceDialog(book.name, book.author))
+    }
+
+    override fun onSimulatedReading(book: Book) {
+        showDialogFragment(SimulatedReadingDialog(book))
+    }
+
+    override fun onSimulatedReadingConfirmed(
+        bookUrl: String,
+        enabled: Boolean,
+        startDate: LocalDate,
+        startChapter: Int,
+        dailyChapters: Int,
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch(IO) {
+            val book = appDb.bookDao.getBook(bookUrl) ?: return@launch
+            book.setStartDate(startDate)
+            book.setDailyChapters(dailyChapters)
+            book.setStartChapter(startChapter)
+            book.setReadSimulating(enabled)
+            book.save()
+            postEvent(EventBus.UP_BOOKSHELF, bookUrl)
+        }
+    }
+
+    override fun onBookScan(book: Book) {
+        BookAiAssistantLauncher.openBookScan(requireContext(), book)
+    }
+
+    override fun onAllowUpdateChanged(book: Book, allowUpdate: Boolean) {
+        viewLifecycleOwner.lifecycleScope.launch(IO) {
+            val updatedBook = book.copy(canUpdate = allowUpdate)
+            if (!allowUpdate) {
+                updatedBook.removeType(BookType.updateError)
+            }
+            appDb.bookDao.update(updatedBook)
+            postEvent(EventBus.UP_BOOKSHELF, book.bookUrl)
+        }
+    }
+
+    override fun onClearCache(book: Book) {
+        val hostActivity = activity as? AppCompatActivity ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val source = withContext(IO) {
+                appDb.bookSourceDao.getBookSource(book.origin)
+            }
+            SourceCallBack.callBackBtn(
+                hostActivity,
+                SourceCallBack.CLICK_CLEAR_CACHE,
+                source,
+                book,
+                null,
+            ) {
+                clearBookCache(book)
+            }
+        }
+    }
+
+    private fun clearBookCache(book: Book) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val error = withContext(IO) {
+                runCatching {
+                    BookHelp.clearCache(book)
+                    if (ReadBook.book?.bookUrl == book.bookUrl) {
+                        ReadBook.clearTextChapter()
+                    }
+                    if (ReadManga.book?.bookUrl == book.bookUrl) {
+                        ReadManga.clearMangaChapter()
+                    }
+                }.exceptionOrNull()
+            }
+            if (error == null) {
+                toastOnUi(R.string.clear_cache_success)
+            } else {
+                toastOnUi("清理缓存出错\n${error.localizedMessage}")
+            }
+        }
     }
 
     override fun onDelete(book: Book) {
@@ -503,20 +549,26 @@ class BooksFragment() : BaseFragment(R.layout.fragment_books),
         }
     }
 
-    override fun isUpdate(bookUrl: String): Boolean {
-        return activityViewModel.isUpdate(bookUrl)
-    }
-
-    @SuppressLint("NotifyDataSetChanged")
     override fun observeLiveBus() {
         super.observeLiveBus()
-        observeEvent<String>(EventBus.UP_BOOKSHELF) {
-            booksAdapter.notification(it)
+        observeEvent<String>(EventBus.UP_BOOKSHELF) { bookUrl ->
+            if (bookItems.none { it.bookUrl == bookUrl }) {
+                return@observeEvent
+            }
+            updatingBookUrls = if (activityViewModel.isUpdate(bookUrl)) {
+                updatingBookUrls + bookUrl
+            } else {
+                updatingBookUrls - bookUrl
+            }
         }
         observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
-            booksAdapter.notifyDataSetChanged()
+            layoutProfile = AppConfig.getBookshelfLayoutProfile(layoutMode)
+            updatingBookUrls = bookItems.asSequence()
+                .map(Book::bookUrl)
+                .filter(activityViewModel::isUpdate)
+                .toSet()
+            coverRevision++
             startLastUpdateTimeJob()
-            upFastScrollerBar()
         }
     }
 }

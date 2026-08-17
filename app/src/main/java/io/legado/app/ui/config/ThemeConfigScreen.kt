@@ -35,6 +35,7 @@ import io.legado.app.help.config.BookshelfFloatingDockConfig
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.help.config.FloatingBottomBarConfig
+import io.legado.app.help.config.NgDrawerAppearanceConfig
 import io.legado.app.ui.design.components.NgSettingsTrailing
 import io.legado.app.ui.design.components.compose.NgDockSlider
 import io.legado.app.ui.design.components.compose.NgExpandableSettingsItem
@@ -53,6 +54,14 @@ internal data class ThemeConfigScreenState(
     val floatingBottomBarBottomDistancePx: Int = 0,
     val floatingBottomBarTransparency: Int =
         FloatingBottomBarConfig.DEFAULT_TRANSPARENCY_PERCENT,
+    val drawerTransparency: Int =
+        NgDrawerAppearanceConfig.DEFAULT_TRANSPARENCY_PERCENT,
+    val drawerPrimaryStrength: Int =
+        NgDrawerAppearanceConfig.DEFAULT_PRIMARY_STRENGTH_PERCENT,
+    val drawerHorizontalMarginDp: Int =
+        NgDrawerAppearanceConfig.DEFAULT_HORIZONTAL_MARGIN_DP,
+    val drawerCornerRadiusDp: Int =
+        NgDrawerAppearanceConfig.DEFAULT_CORNER_RADIUS_DP,
     val bookshelfTopBarStyle: BookshelfTopBarStyle = BookshelfTopBarStyle.TRADITIONAL,
     val bookshelfFloatingDockMinTopDistancePx: Int = 0,
     val bookshelfFloatingDockTopDistancePx: Int = 0,
@@ -76,6 +85,14 @@ internal fun ThemeConfigScreen(
     onFloatingBottomBarBottomDistanceChangeFinished: () -> Unit,
     onFloatingBottomBarTransparencyChanged: (Int) -> Unit,
     onFloatingBottomBarTransparencyChangeFinished: () -> Unit,
+    onDrawerTransparencyChanged: (Int) -> Unit,
+    onDrawerTransparencyChangeFinished: () -> Unit,
+    onDrawerPrimaryStrengthChanged: (Int) -> Unit,
+    onDrawerPrimaryStrengthChangeFinished: () -> Unit,
+    onDrawerHorizontalMarginChanged: (Int) -> Unit,
+    onDrawerHorizontalMarginChangeFinished: () -> Unit,
+    onDrawerCornerRadiusChanged: (Int) -> Unit,
+    onDrawerCornerRadiusChangeFinished: () -> Unit,
     onBookshelfTopBarStyleSelected: (BookshelfTopBarStyle) -> Unit,
     onBookshelfFloatingDockTopDistanceChanged: (Int) -> Unit,
     onBookshelfFloatingDockTopDistanceChangeFinished: () -> Unit,
@@ -93,6 +110,7 @@ internal fun ThemeConfigScreen(
 ) {
     val selectedMode = THEME_MODES.indexOf(state.themeMode).coerceAtLeast(0)
     var bottomBarExpanded by rememberSaveable { mutableStateOf(false) }
+    var drawerAppearanceExpanded by rememberSaveable { mutableStateOf(false) }
     var bookshelfTopBarExpanded by rememberSaveable { mutableStateOf(false) }
     Column(
         modifier = Modifier
@@ -222,6 +240,102 @@ internal fun ThemeConfigScreen(
                                 onFloatingBottomBarTransparencyChangeFinished
                         )
                     }
+                }
+            }
+            NgExpandableSettingsItem(
+                title = stringResource(R.string.ng_drawer_appearance),
+                summary = stringResource(
+                    R.string.ng_drawer_appearance_summary,
+                    state.drawerTransparency,
+                    state.drawerPrimaryStrength,
+                    state.drawerHorizontalMarginDp,
+                    state.drawerCornerRadiusDp,
+                ),
+                expanded = drawerAppearanceExpanded,
+                onExpandedChange = { drawerAppearanceExpanded = it },
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    NgDockSlider(
+                        title = stringResource(R.string.ng_drawer_transparency),
+                        valueText = stringResource(
+                            R.string.ng_drawer_percent_value,
+                            state.drawerTransparency,
+                        ),
+                        minimumText = stringResource(R.string.ng_drawer_percent_value, 0),
+                        maximumText = stringResource(R.string.ng_drawer_percent_value, 100),
+                        value = state.drawerTransparency.toFloat(),
+                        valueRange = NgDrawerAppearanceConfig.MIN_PERCENT.toFloat()..
+                            NgDrawerAppearanceConfig.MAX_PERCENT.toFloat(),
+                        onValueChange = { value ->
+                            onDrawerTransparencyChanged(value.roundToInt())
+                        },
+                        onValueChangeFinished = onDrawerTransparencyChangeFinished,
+                    )
+                    NgDockSlider(
+                        title = stringResource(R.string.ng_drawer_primary_strength),
+                        valueText = stringResource(
+                            R.string.ng_drawer_percent_value,
+                            state.drawerPrimaryStrength,
+                        ),
+                        minimumText = stringResource(R.string.ng_drawer_percent_value, 0),
+                        maximumText = stringResource(R.string.ng_drawer_percent_value, 100),
+                        value = state.drawerPrimaryStrength.toFloat(),
+                        valueRange = NgDrawerAppearanceConfig.MIN_PERCENT.toFloat()..
+                            NgDrawerAppearanceConfig.MAX_PERCENT.toFloat(),
+                        onValueChange = { value ->
+                            onDrawerPrimaryStrengthChanged(value.roundToInt())
+                        },
+                        onValueChangeFinished = onDrawerPrimaryStrengthChangeFinished,
+                    )
+                    NgDockSlider(
+                        title = stringResource(R.string.ng_drawer_horizontal_margin),
+                        valueText = stringResource(
+                            R.string.ng_drawer_dp_value,
+                            state.drawerHorizontalMarginDp,
+                        ),
+                        minimumText = stringResource(
+                            R.string.ng_drawer_dp_value,
+                            NgDrawerAppearanceConfig.MIN_HORIZONTAL_MARGIN_DP,
+                        ),
+                        maximumText = stringResource(
+                            R.string.ng_drawer_dp_value,
+                            NgDrawerAppearanceConfig.MAX_HORIZONTAL_MARGIN_DP,
+                        ),
+                        value = state.drawerHorizontalMarginDp.toFloat(),
+                        valueRange = NgDrawerAppearanceConfig.MIN_HORIZONTAL_MARGIN_DP.toFloat()..
+                            NgDrawerAppearanceConfig.MAX_HORIZONTAL_MARGIN_DP.toFloat(),
+                        steps = NgDrawerAppearanceConfig.HORIZONTAL_MARGIN_SLIDER_STEPS,
+                        onValueChange = { value ->
+                            onDrawerHorizontalMarginChanged(value.roundToInt())
+                        },
+                        onValueChangeFinished = onDrawerHorizontalMarginChangeFinished,
+                    )
+                    NgDockSlider(
+                        title = stringResource(R.string.ng_drawer_corner_radius),
+                        valueText = stringResource(
+                            R.string.ng_drawer_dp_value,
+                            state.drawerCornerRadiusDp,
+                        ),
+                        minimumText = stringResource(
+                            R.string.ng_drawer_dp_value,
+                            NgDrawerAppearanceConfig.MIN_CORNER_RADIUS_DP,
+                        ),
+                        maximumText = stringResource(
+                            R.string.ng_drawer_dp_value,
+                            NgDrawerAppearanceConfig.MAX_CORNER_RADIUS_DP,
+                        ),
+                        value = state.drawerCornerRadiusDp.toFloat(),
+                        valueRange = NgDrawerAppearanceConfig.MIN_CORNER_RADIUS_DP.toFloat()..
+                            NgDrawerAppearanceConfig.MAX_CORNER_RADIUS_DP.toFloat(),
+                        steps = NgDrawerAppearanceConfig.CORNER_RADIUS_SLIDER_STEPS,
+                        onValueChange = { value ->
+                            onDrawerCornerRadiusChanged(value.roundToInt())
+                        },
+                        onValueChangeFinished = onDrawerCornerRadiusChangeFinished,
+                    )
                 }
             }
             NgExpandableSettingsItem(

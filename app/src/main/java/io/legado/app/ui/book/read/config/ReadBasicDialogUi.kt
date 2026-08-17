@@ -1,28 +1,21 @@
 package io.legado.app.ui.book.read.config
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.ui.design.components.NgButtonVariant
@@ -133,111 +126,6 @@ internal fun ReadCharsetDialogContent(
                     )
                 }
             }
-        }
-        ReadDialogActions(
-            cancelLabel = cancelLabel,
-            confirmLabel = confirmLabel,
-            onCancel = onCancel,
-            onConfirm = onConfirm,
-        )
-    }
-}
-
-@Composable
-internal fun ReadSimulatedReadingDialogContent(
-    title: String,
-    enabledLabel: String,
-    startDateLabel: String,
-    startChapterLabel: String,
-    dailyChaptersLabel: String,
-    enabled: Boolean,
-    startDate: String,
-    startChapter: String,
-    dailyChapters: String,
-    cancelLabel: String,
-    confirmLabel: String,
-    onEnabledChanged: (Boolean) -> Unit,
-    onStartDateClick: () -> Unit,
-    onStartChapterChanged: (String) -> Unit,
-    onDailyChaptersChanged: (String) -> Unit,
-    onCancel: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    ReadConfigDialogSurface(
-        contentPadding = PaddingValues(
-            start = 20.dp,
-            top = 18.dp,
-            end = 20.dp,
-            bottom = 16.dp,
-        ),
-    ) {
-        ReadConfigDialogTitle(title)
-        val colors = NgTheme.colors
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 14.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(colors.surfaceContainerLow).copy(alpha = 0.46f))
-                .padding(horizontal = 12.dp),
-        ) {
-            ReadConfigSwitchRow(
-                title = enabledLabel,
-                checked = enabled,
-                onCheckedChange = onEnabledChanged,
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(0.75.dp)
-                    .background(Color(colors.outline).copy(alpha = 0.35f)),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .clickable(role = Role.Button, onClick = onStartDateClick),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = startDateLabel,
-                    color = Color(colors.onSurface),
-                    fontSize = 14.sp,
-                )
-                Text(
-                    text = startDate,
-                    color = Color(colors.onSurfaceVariant),
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            ReadDialogTextField(
-                value = startChapter,
-                onValueChange = {
-                    onStartChapterChanged(it.filter(Char::isDigit).take(5))
-                },
-                modifier = Modifier.weight(1f),
-                label = startChapterLabel,
-                keyboardType = KeyboardType.Number,
-            )
-            ReadDialogTextField(
-                value = dailyChapters,
-                onValueChange = {
-                    onDailyChaptersChanged(it.filter(Char::isDigit).take(5))
-                },
-                modifier = Modifier.weight(1f),
-                label = dailyChaptersLabel,
-                keyboardType = KeyboardType.Number,
-            )
         }
         ReadDialogActions(
             cancelLabel = cancelLabel,

@@ -121,7 +121,7 @@ object AiAssistantConfigUi {
                     0f, 0f,
                     0f, 0f
                 )
-                setColor(ContextCompat.getColor(context, R.color.ng_surface_soft))
+                setColor(ContextCompat.getColor(context, R.color.ng_surface_card))
             }
         }
         root.addView(View(context).apply {
@@ -231,7 +231,7 @@ object AiAssistantConfigUi {
                     0f, 0f,
                     0f, 0f
                 )
-                setColor(ContextCompat.getColor(context, R.color.ng_surface_soft))
+                setColor(ContextCompat.getColor(context, R.color.ng_surface_card))
             }
         }
         root.addView(View(context).apply {

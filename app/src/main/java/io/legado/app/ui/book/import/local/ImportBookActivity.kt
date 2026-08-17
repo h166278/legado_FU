@@ -1,73 +1,102 @@
 package io.legado.app.ui.book.import.local
 
-import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
+import io.legado.app.base.ComposeActivityBinding
+import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.AppPattern
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.ui.book.import.BaseImportBookActivity
-import io.legado.app.utils.SelectDirectoryContract
-import io.legado.app.ui.widget.SelectActionBar
+import io.legado.app.model.localBook.LocalBook
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
-import io.legado.app.utils.gone
+import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isUri
 import io.legado.app.utils.putPrefInt
-import io.legado.app.utils.visible
+import io.legado.app.utils.startActivityForBook
+import io.legado.app.utils.toastOnUi
+import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.coroutines.resume
 
-/**
- * 导入本地书籍界面
- */
-class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
-    PopupMenu.OnMenuItemClickListener,
-    ImportBookAdapter.CallBack,
-    SelectActionBar.CallBack {
+/** 方案 2：单一亮白目录面板的本地书籍导入页。 */
+class ImportBookActivity :
+    VMBaseActivity<ComposeActivityBinding, ImportBookViewModel>() {
 
+    override val binding by viewBinding(ComposeActivityBinding::inflate)
     override val viewModel by viewModels<ImportBookViewModel>()
-    private val adapter by lazy { ImportBookAdapter(this, this) }
+    override val bindNgToolbarMenu: Boolean = false
+
+    private var items by mutableStateOf<List<ImportBook>>(
+        emptyList(),
+        referentialEqualityPolicy(),
+    )
+    private var selectedItems by mutableStateOf<Set<ImportBook>>(emptySet())
+    private var query by mutableStateOf("")
+    private var searchExpanded by mutableStateOf(false)
+    private var pathSegments by mutableStateOf<List<String>>(emptyList())
+    private var isAtRoot by mutableStateOf(true)
+    private var isLoading by mutableStateOf(false)
+    private var currentSort by mutableIntStateOf(0)
+    private var archivePickerState by mutableStateOf<ArchivePickerState>(
+        ArchivePickerState.Hidden,
+    )
     private var scanDocJob: Job? = null
+    private var localBookTreeSelectListener: ((Boolean) -> Unit)? = null
+
+    private val localBookTreeSelect = registerForActivityResult(SelectDirectoryContract()) {
+        it.uri?.let { treeUri ->
+            AppConfig.defaultBookTreeUri = treeUri.toString()
+            localBookTreeSelectListener?.invoke(true)
+        } ?: localBookTreeSelectListener?.invoke(false)
+    }
 
     private val selectFolder = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             AppConfig.importBookPath = uri.toString()
-            initRootDoc(true)
+            initRootDoc(changedFolder = true)
         }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        searchView.queryHint = getString(R.string.screen) + " • " + getString(R.string.local_book)
+        currentSort = viewModel.sort
+        initContent()
         onBackPressedDispatcher.addCallback(this) {
-            if (!goBackDir()) {
-                finish()
+            when {
+                archivePickerState !is ArchivePickerState.Hidden -> {
+                    archivePickerState = ArchivePickerState.Hidden
+                }
+
+                searchExpanded -> closeSearch()
+                !goBackDir() -> finish()
             }
         }
         lifecycleScope.launch {
-            initView()
-            initEvent()
             if (setBookStorage() && AppConfig.importBookPath.isNullOrBlank()) {
                 AppConfig.importBookPath = AppConfig.defaultBookTreeUri
             }
@@ -75,83 +104,76 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.import_book, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_sort_name)?.isChecked = viewModel.sort == 0
-        menu.findItem(R.id.menu_sort_size)?.isChecked = viewModel.sort == 1
-        menu.findItem(R.id.menu_sort_time)?.isChecked = viewModel.sort == 2
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_select_folder -> selectFolder.launch(null)
-            R.id.menu_scan_folder -> scanFolder()
-            R.id.menu_import_file_name -> alertImportFileName()
-            R.id.menu_sort_name -> upSort(0)
-            R.id.menu_sort_size -> upSort(1)
-            R.id.menu_sort_time -> upSort(2)
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_del_selection -> viewModel.deleteDoc(adapter.selected) {
-                adapter.removeSelection()
+    private fun initContent() {
+        binding.composeView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+        )
+        binding.composeView.setContent {
+            NgAppTheme {
+                ImportBookScreen(
+                    items = items,
+                    selectedItems = selectedItems,
+                    query = query,
+                    searchExpanded = searchExpanded,
+                    pathSegments = pathSegments,
+                    isAtRoot = isAtRoot,
+                    isLoading = isLoading,
+                    sort = currentSort,
+                    archivePickerState = archivePickerState,
+                    onBack = { onBackPressedDispatcher.onBackPressed() },
+                    onSearchExpandedChange = { expanded ->
+                        if (expanded) searchExpanded = true else closeSearch()
+                    },
+                    onQueryChange = ::updateQuery,
+                    onSelectFolder = { selectFolder.launch(null) },
+                    onGoUp = { goBackDir() },
+                    onScanFolder = ::scanFolder,
+                    onSortChange = ::upSort,
+                    onItemClick = ::onItemClick,
+                    onToggleItem = ::toggleItem,
+                    onSelectAll = ::selectAllVisible,
+                    onInvertSelection = ::invertVisibleSelection,
+                    onDeleteSelected = ::deleteSelected,
+                    onAddSelected = ::addSelected,
+                    onDismissArchive = {
+                        archivePickerState = ArchivePickerState.Hidden
+                    },
+                    onArchiveEntryClick = ::onArchiveEntryClick,
+                    onImportArchiveEntries = ::importArchiveEntries,
+                )
             }
-        }
-        return false
-    }
-
-    override fun selectAll(selectAll: Boolean) {
-        adapter.selectAll(selectAll)
-    }
-
-    override fun revertSelection() {
-        adapter.revertSelection()
-    }
-
-    @SuppressLint("NotifyDataSetChanged")
-    override fun onClickSelectBarMainAction() {
-        viewModel.addToBookshelf(adapter.selected) {
-            adapter.selected.forEach {
-                it.isOnBookShelf = true
-            }
-            adapter.selected.clear()
-            adapter.notifyDataSetChanged()
-        }
-    }
-
-    private fun initView() {
-        binding.layTop.setBackgroundColor(backgroundColor)
-        binding.tvEmptyMsg.setText(R.string.empty_msg_import_book)
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
-        binding.selectActionBar.setMainActionText(R.string.add_to_bookshelf)
-        binding.selectActionBar.inflateMenu(R.menu.import_book_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
-    }
-
-    private fun initEvent() {
-        binding.tvGoBack.setOnClickListener {
-            goBackDir()
         }
     }
 
     private fun initData() {
-        viewModel.dataFlowStart = {
-            initRootDoc()
-        }
+        viewModel.dataFlowStart = { initRootDoc() }
         lifecycleScope.launch {
             viewModel.dataFlow.conflate().collect { docs ->
-                adapter.setItems(docs)
+                items = docs.toList()
+            }
+        }
+    }
+
+    private suspend fun setBookStorage() = suspendCancellableCoroutine { continuation ->
+        localBookTreeSelectListener = { selected ->
+            localBookTreeSelectListener = null
+            if (continuation.isActive) continuation.resume(selected)
+        }
+        if (!AppConfig.defaultBookTreeUri.isNullOrBlank()) {
+            localBookTreeSelectListener = null
+            continuation.resume(true)
+            return@suspendCancellableCoroutine
+        }
+        val storageHelp = String(assets.open("storageHelp.md").readBytes())
+        alert(getString(R.string.select_book_folder), storageHelp) {
+            okButton { localBookTreeSelect.launch(null) }
+            cancelButton {
+                localBookTreeSelectListener = null
+                if (continuation.isActive) continuation.resume(false)
+            }
+            onCancelled {
+                localBookTreeSelectListener = null
+                if (continuation.isActive) continuation.resume(false)
             }
         }
     }
@@ -159,30 +181,25 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     private fun initRootDoc(changedFolder: Boolean = false) {
         if (viewModel.rootDoc != null && !changedFolder) {
             upPath()
+            return
+        }
+        val lastPath = AppConfig.importBookPath
+        if (lastPath.isNullOrBlank()) {
+            selectFolder.launch(null)
+            return
+        }
+        val rootUri = if (lastPath.isUri()) lastPath.toUri() else Uri.fromFile(File(lastPath))
+        if (rootUri.isContentScheme()) {
+            initRootPath(rootUri)
         } else {
-            val lastPath = AppConfig.importBookPath
-            if (lastPath.isNullOrBlank()) {
-                binding.tvEmptyMsg.visible()
-                selectFolder.launch(null)
-            } else {
-                val rootUri = if (lastPath.isUri()) {
-                    lastPath.toUri()
-                } else {
-                    Uri.fromFile(File(lastPath))
-                }
-                when {
-                    rootUri.isContentScheme() -> initRootPath(rootUri)
-                    else -> initRootPath(rootUri.path!!)
-                }
-            }
+            rootUri.path?.let(::initRootPath) ?: selectFolder.launch(null)
         }
     }
 
     private fun initRootPath(rootUri: Uri) {
-        kotlin.runCatching {
+        runCatching {
             val doc = DocumentFile.fromTreeUri(this, rootUri)
             if (doc == null || doc.name.isNullOrEmpty() || !doc.isDirectory) {
-                binding.tvEmptyMsg.visible()
                 selectFolder.launch(null)
             } else {
                 viewModel.subDocs.clear()
@@ -190,21 +207,18 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
                 upPath()
             }
         }.onFailure {
-            binding.tvEmptyMsg.visible()
             selectFolder.launch(null)
         }
     }
 
     private fun initRootPath(path: String) {
-        binding.tvEmptyMsg.visible()
         PermissionsCompat.Builder()
             .addPermissions(*Permissions.Group.STORAGE)
             .rationale(R.string.tip_perm_request_storage)
             .onGranted {
-                kotlin.runCatching {
+                runCatching {
                     val file = File(path)
                     if (!file.isDirectory) {
-                        binding.tvEmptyMsg.visible()
                         selectFolder.launch(null)
                     } else {
                         viewModel.subDocs.clear()
@@ -212,81 +226,27 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
                         upPath()
                     }
                 }.onFailure {
-                    binding.tvEmptyMsg.visible()
                     selectFolder.launch(null)
                 }
             }
             .request()
     }
 
-    private fun upSort(sort: Int) {
-        viewModel.sort = sort
-        putPrefInt(PreferKey.localBookImportSort, sort)
-        if (scanDocJob?.isActive != true) {
-            viewModel.dataCallback?.upAdapter()
-        }
-    }
-
     @Synchronized
     private fun upPath() {
-        binding.tvGoBack.isEnabled = viewModel.subDocs.isNotEmpty()
-        viewModel.rootDoc?.let {
+        viewModel.rootDoc?.let { root ->
             scanDocJob?.cancel()
-            upDocs(it)
-        }
-    }
-
-    private fun upDocs(rootDoc: FileDoc) {
-        binding.tvEmptyMsg.gone()
-        var path = rootDoc.name + File.separator
-        var lastDoc = rootDoc
-        for (doc in viewModel.subDocs) {
-            lastDoc = doc
-            path = path + doc.name + File.separator
-        }
-        binding.tvPath.text = path
-        adapter.selected.clear()
-        adapter.clearItems()
-        viewModel.loadDoc(lastDoc)
-    }
-
-    /**
-     * 扫描当前文件夹及所有子文件夹
-     */
-    private fun scanFolder() {
-        viewModel.rootDoc?.let { doc ->
-            adapter.clearItems()
-            val lastDoc = viewModel.subDocs.lastOrNull() ?: doc
-            binding.refreshProgressBar.isAutoLoading = true
-            scanDocJob?.cancel()
-            scanDocJob = lifecycleScope.launch(IO) {
-                viewModel.scanDoc(lastDoc)
-                withContext(Main) {
-                    binding.refreshProgressBar.isAutoLoading = false
-                }
+            pathSegments = buildList {
+                add(root.name)
+                addAll(viewModel.subDocs.map(FileDoc::name))
             }
+            isAtRoot = viewModel.subDocs.isEmpty()
+            selectedItems = emptySet()
+            val current = viewModel.subDocs.lastOrNull() ?: root
+            isLoading = true
+            viewModel.dataCallback?.clear()
+            viewModel.loadDoc(current) { isLoading = false }
         }
-    }
-
-    private fun alertImportFileName() {
-        alert(R.string.import_file_name) {
-            setMessage("""使用js处理文件名变量src，将书名作者分别赋值到变量name author""")
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "js"
-                editView.setText(AppConfig.bookImportFileName)
-            }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.bookImportFileName = alertBinding.editView.text?.toString()
-            }
-            cancelButton()
-        }
-    }
-
-    @Synchronized
-    override fun nextDoc(fileDoc: FileDoc) {
-        viewModel.subDocs.add(fileDoc)
-        upPath()
     }
 
     @Synchronized
@@ -300,27 +260,168 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
         }
     }
 
-    override fun onSearchTextChange(newText: String?) {
-        viewModel.updateCallBackFlow(newText)
+    private fun updateQuery(value: String) {
+        query = value
+        viewModel.updateCallBackFlow(value)
     }
 
-    override fun upCountView() {
-        binding.selectActionBar.upCountView(adapter.selected.size, adapter.checkableCount)
+    private fun closeSearch() {
+        searchExpanded = false
+        updateQuery("")
     }
 
-    override fun startRead(fileDoc: FileDoc) {
-        if (!ArchiveUtils.isArchive(fileDoc.name)) {
-            appDb.bookDao.getBookByFileName(fileDoc.name)?.let {
-                val filePath = fileDoc.toString()
-                if (it.bookUrl != filePath) {
-                    it.bookUrl = filePath
-                    appDb.bookDao.insert(it)
-                }
-                startReadBook(it)
-            }
-        } else {
-            onArchiveFileClick(fileDoc)
+    private fun upSort(sort: Int) {
+        viewModel.sort = sort
+        currentSort = sort
+        putPrefInt(PreferKey.localBookImportSort, sort)
+        if (scanDocJob?.isActive != true) {
+            viewModel.dataCallback?.upAdapter()
         }
     }
 
+    private fun scanFolder() {
+        val root = viewModel.rootDoc ?: return
+        val current = viewModel.subDocs.lastOrNull() ?: root
+        selectedItems = emptySet()
+        isLoading = true
+        viewModel.dataCallback?.clear()
+        scanDocJob?.cancel()
+        scanDocJob = lifecycleScope.launch(IO) {
+            try {
+                viewModel.scanDoc(current)
+            } finally {
+                withContext(Main) { isLoading = false }
+            }
+        }
+    }
+
+    private fun onItemClick(item: ImportBook) {
+        when {
+            item.isDir -> {
+                viewModel.subDocs.add(item.file)
+                upPath()
+            }
+
+            ArchiveUtils.isArchive(item.name) -> openArchive(item.file)
+            item.isOnBookShelf -> startRead(item.file)
+            else -> toggleItem(item)
+        }
+    }
+
+    private fun toggleItem(item: ImportBook) {
+        if (!item.isSelectableForImport) return
+        selectedItems = if (item in selectedItems) {
+            selectedItems - item
+        } else {
+            selectedItems + item
+        }
+    }
+
+    private fun selectAllVisible() {
+        val selectable = items.filter(ImportBook::isSelectableForImport)
+        selectedItems = if (selectable.isNotEmpty() && selectable.all(selectedItems::contains)) {
+            selectedItems - selectable.toSet()
+        } else {
+            selectedItems + selectable
+        }
+    }
+
+    private fun invertVisibleSelection() {
+        var updated = selectedItems
+        items.filter(ImportBook::isSelectableForImport).forEach { item ->
+            updated = if (item in updated) updated - item else updated + item
+        }
+        selectedItems = updated
+    }
+
+    private fun addSelected() {
+        val selected = HashSet(selectedItems)
+        if (selected.isEmpty()) return
+        viewModel.addToBookshelf(selected) {
+            selected.forEach { it.isOnBookShelf = true }
+            selectedItems = emptySet()
+            viewModel.dataCallback?.upAdapter()
+        }
+    }
+
+    private fun deleteSelected() {
+        val selected = HashSet(selectedItems)
+        if (selected.isEmpty()) return
+        viewModel.deleteDoc(selected) {
+            selectedItems = emptySet()
+            upPath()
+        }
+    }
+
+    private fun startRead(fileDoc: FileDoc) {
+        appDb.bookDao.getBookByFileName(fileDoc.name)?.let { book ->
+            val filePath = fileDoc.toString()
+            if (book.bookUrl != filePath) {
+                book.bookUrl = filePath
+                appDb.bookDao.insert(book)
+            }
+            startActivityForBook(book)
+        }
+    }
+
+    private fun openArchive(fileDoc: FileDoc) {
+        archivePickerState = ArchivePickerState.Loading(fileDoc)
+        lifecycleScope.launch(IO) {
+            val result = runCatching {
+                ArchiveUtils.getArchiveFilesName(fileDoc) { entryName ->
+                    entryName.matches(AppPattern.bookFileRegex)
+                }.map { entryName ->
+                    val displayName = entryName.substringAfterLast('/').substringAfterLast('\\')
+                    ArchiveBookEntry(
+                        entryName = entryName,
+                        displayName = displayName,
+                        isOnBookShelf = LocalBook.isOnBookShelf(displayName),
+                    )
+                }
+            }
+            withContext(Main) {
+                result.onSuccess { entries ->
+                    if (entries.isEmpty()) {
+                        archivePickerState = ArchivePickerState.Hidden
+                        toastOnUi(R.string.unsupport_archivefile_entry)
+                    } else {
+                        archivePickerState = ArchivePickerState.Ready(
+                            archive = fileDoc,
+                            entries = entries,
+                        )
+                    }
+                }.onFailure {
+                    archivePickerState = ArchivePickerState.Hidden
+                    toastOnUi(it.localizedMessage ?: getString(R.string.error))
+                }
+            }
+        }
+    }
+
+    private fun onArchiveEntryClick(entry: ArchiveBookEntry) {
+        val state = archivePickerState as? ArchivePickerState.Ready ?: return
+        if (entry.isOnBookShelf) {
+            appDb.bookDao.getBookByFileName(entry.displayName)?.let(::startActivityForBook)
+            return
+        }
+        val selected = if (entry.entryName in state.selectedEntryNames) {
+            state.selectedEntryNames - entry.entryName
+        } else {
+            state.selectedEntryNames + entry.entryName
+        }
+        archivePickerState = state.copy(selectedEntryNames = selected)
+    }
+
+    private fun importArchiveEntries() {
+        val state = archivePickerState as? ArchivePickerState.Ready ?: return
+        if (state.selectedEntryNames.isEmpty() || state.importing) return
+        archivePickerState = state.copy(importing = true)
+        viewModel.addArchiveEntries(state.archive, state.selectedEntryNames) { success ->
+            archivePickerState = if (success) {
+                ArchivePickerState.Hidden
+            } else {
+                state.copy(importing = false)
+            }
+        }
+    }
 }

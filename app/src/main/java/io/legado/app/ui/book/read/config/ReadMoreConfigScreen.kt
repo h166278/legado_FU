@@ -73,7 +73,6 @@ internal object ReadMoreConfigKeys {
     const val CLICK_REGIONAL_CONFIG = "clickRegionalConfig"
     const val CUSTOM_PAGE_KEY = "customPageKey"
     const val DISABLE_RETURN_KEY = "disableReturnKey"
-    const val SIMULATED_READING = "simulatedReading"
     const val BOOK_IMAGE_STYLE = "bookImageStyle"
 }
 
@@ -346,12 +345,6 @@ private fun ContentSettingsPage(
             text = stringResource(R.string.read_settings_current_book),
             color = Color(NgTheme.colors.secondary),
         )
-        ActionSettingRow(
-            title = stringResource(R.string.simulated_reading),
-            value = state.actionValue(ReadMoreConfigKeys.SIMULATED_READING),
-            onClick = { actions.onAction(ReadMoreConfigKeys.SIMULATED_READING) },
-        )
-        ReadMoreDivider(contentColor)
         ChoiceSettingRow(
             title = stringResource(R.string.image_style),
             selectedValue = state.value(ReadMoreConfigKeys.BOOK_IMAGE_STYLE),

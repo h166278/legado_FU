@@ -70,6 +70,19 @@ fun NgActionBarButton(
             content = content
         )
 
+        NgButtonVariant.PRIMARY_LIGHT_CONTENT -> Button(
+            onClick = onClick,
+            modifier = buttonModifier,
+            enabled = enabled,
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(colors.primary),
+                contentColor = Color.White
+            ),
+            contentPadding = contentPadding,
+            content = content
+        )
+
         NgButtonVariant.DANGER -> NgOutlinedActionBarButton(
             onClick = onClick,
             modifier = buttonModifier,

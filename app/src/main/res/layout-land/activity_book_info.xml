@@ -225,17 +225,6 @@
                                 tools:ignore="RtlSymmetry"
                                 tools:text="@string/group_s" />
 
-                            <ImageButton
-                                android:id="@+id/tv_change_group"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                android:layout_marginStart="8dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/change_group"
-                                android:padding="6dp"
-                                android:scaleType="centerInside"
-                                android:src="@drawable/ic_groups"
-                                app:tint="@color/tv_text_summary" />
                         </LinearLayout>
 
                         <LinearLayout

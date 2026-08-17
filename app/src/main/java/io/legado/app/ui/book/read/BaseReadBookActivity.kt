@@ -1,7 +1,6 @@
 package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
-import android.app.DatePickerDialog
 import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
@@ -32,7 +31,6 @@ import io.legado.app.ui.book.read.config.PaddingConfigDialog
 import io.legado.app.ui.book.read.config.PageKeyDialog
 import io.legado.app.ui.book.read.config.ReadCharsetDialogContent
 import io.legado.app.ui.book.read.config.ReadOfflineCacheDialogContent
-import io.legado.app.ui.book.read.config.ReadSimulatedReadingDialogContent
 import io.legado.app.ui.book.read.config.showReadComposeDialog
 import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.ColorUtils
@@ -46,8 +44,6 @@ import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /**
  * 阅读界面
@@ -282,66 +278,6 @@ abstract class BaseReadBookActivity :
                     },
                 )
             }
-        }
-    }
-
-    fun showSimulatedReading() {
-        val book = ReadBook.book ?: return
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        var enabled by mutableStateOf(book.getReadSimulating())
-        var startChapter by mutableStateOf(book.getStartChapter().toString())
-        var dailyChapters by mutableStateOf(book.getDailyChapters().toString())
-        var startDate by mutableStateOf(
-            (book.getStartDate() ?: LocalDate.now()).format(dateFormatter)
-        )
-        showReadComposeDialog(this, marginDp = 28) { dismiss ->
-            ReadSimulatedReadingDialogContent(
-                title = getString(R.string.simulated_reading),
-                enabledLabel = getString(R.string.enable),
-                startDateLabel = getString(R.string.start_from),
-                startChapterLabel = getString(R.string.start_chapter),
-                dailyChaptersLabel = getString(R.string.daily_chapters),
-                enabled = enabled,
-                startDate = startDate,
-                startChapter = startChapter,
-                dailyChapters = dailyChapters,
-                cancelLabel = getString(R.string.cancel),
-                confirmLabel = getString(R.string.ok),
-                onEnabledChanged = { enabled = it },
-                onStartDateClick = {
-                    val localStartDate = runCatching {
-                        LocalDate.parse(startDate, dateFormatter)
-                    }.getOrDefault(LocalDate.now())
-                    DatePickerDialog(
-                        this,
-                        { _, year, month, dayOfMonth ->
-                            startDate = LocalDate.of(year, month + 1, dayOfMonth)
-                                .format(dateFormatter)
-                        },
-                        localStartDate.year,
-                        localStartDate.monthValue - 1,
-                        localStartDate.dayOfMonth,
-                    ).show()
-                },
-                onStartChapterChanged = { startChapter = it },
-                onDailyChaptersChanged = { dailyChapters = it },
-                onCancel = dismiss,
-                onConfirm = {
-                    val start = startChapter.toIntOrNull() ?: 0
-                    val num = dailyChapters.toIntOrNull() ?: book.totalChapterNum
-                    val date = runCatching {
-                        LocalDate.parse(startDate, dateFormatter)
-                    }.getOrDefault(LocalDate.now())
-                    book.setStartDate(date)
-                    book.setDailyChapters(num)
-                    book.setStartChapter(start)
-                    book.setReadSimulating(enabled)
-                    book.save()
-                    dismiss()
-                    ReadBook.clearTextChapter()
-                    viewModel.initData(intent)
-                },
-            )
         }
     }
 

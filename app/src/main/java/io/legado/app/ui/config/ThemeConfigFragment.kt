@@ -21,6 +21,7 @@ import io.legado.app.help.config.BookshelfFloatingDockConfig
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.help.config.FloatingBottomBarConfig
+import io.legado.app.help.config.NgDrawerAppearanceConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.normalizeThemeMode
 import io.legado.app.help.http.addHeaders
@@ -96,6 +97,14 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                             ::setFloatingBottomBarTransparencyDraft,
                         onFloatingBottomBarTransparencyChangeFinished =
                             ::saveFloatingBottomBarTransparency,
+                        onDrawerTransparencyChanged = ::setDrawerTransparencyDraft,
+                        onDrawerTransparencyChangeFinished = ::saveDrawerTransparency,
+                        onDrawerPrimaryStrengthChanged = ::setDrawerPrimaryStrengthDraft,
+                        onDrawerPrimaryStrengthChangeFinished = ::saveDrawerPrimaryStrength,
+                        onDrawerHorizontalMarginChanged = ::setDrawerHorizontalMarginDraft,
+                        onDrawerHorizontalMarginChangeFinished = ::saveDrawerHorizontalMargin,
+                        onDrawerCornerRadiusChanged = ::setDrawerCornerRadiusDraft,
+                        onDrawerCornerRadiusChangeFinished = ::saveDrawerCornerRadius,
                         onBookshelfTopBarStyleSelected = ::setBookshelfTopBarStyle,
                         onBookshelfFloatingDockTopDistanceChanged =
                             ::setBookshelfFloatingDockTopDistanceDraft,
@@ -183,6 +192,10 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                     density = displayMetrics.density
                 ),
             floatingBottomBarTransparency = AppConfig.floatingBottomBarTransparency,
+            drawerTransparency = AppConfig.ngDrawerTransparency,
+            drawerPrimaryStrength = AppConfig.ngDrawerPrimaryStrength,
+            drawerHorizontalMarginDp = AppConfig.ngDrawerHorizontalMarginDp,
+            drawerCornerRadiusDp = AppConfig.ngDrawerCornerRadiusDp,
             bookshelfTopBarStyle = AppConfig.bookshelfTopBarStyle,
             bookshelfFloatingDockMinTopDistancePx =
                 BookshelfFloatingDockConfig.MIN_TOP_DISTANCE_PX,
@@ -275,6 +288,46 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     private fun saveFloatingBottomBarTransparency() {
         AppConfig.floatingBottomBarTransparency =
             screenState.floatingBottomBarTransparency
+    }
+
+    private fun setDrawerTransparencyDraft(value: Int) {
+        val normalized = NgDrawerAppearanceConfig.normalizePercent(value)
+        if (normalized == screenState.drawerTransparency) return
+        screenState = screenState.copy(drawerTransparency = normalized)
+    }
+
+    private fun saveDrawerTransparency() {
+        AppConfig.ngDrawerTransparency = screenState.drawerTransparency
+    }
+
+    private fun setDrawerPrimaryStrengthDraft(value: Int) {
+        val normalized = NgDrawerAppearanceConfig.normalizePercent(value)
+        if (normalized == screenState.drawerPrimaryStrength) return
+        screenState = screenState.copy(drawerPrimaryStrength = normalized)
+    }
+
+    private fun saveDrawerPrimaryStrength() {
+        AppConfig.ngDrawerPrimaryStrength = screenState.drawerPrimaryStrength
+    }
+
+    private fun setDrawerHorizontalMarginDraft(value: Int) {
+        val normalized = NgDrawerAppearanceConfig.normalizeHorizontalMarginDp(value)
+        if (normalized == screenState.drawerHorizontalMarginDp) return
+        screenState = screenState.copy(drawerHorizontalMarginDp = normalized)
+    }
+
+    private fun saveDrawerHorizontalMargin() {
+        AppConfig.ngDrawerHorizontalMarginDp = screenState.drawerHorizontalMarginDp
+    }
+
+    private fun setDrawerCornerRadiusDraft(value: Int) {
+        val normalized = NgDrawerAppearanceConfig.normalizeCornerRadiusDp(value)
+        if (normalized == screenState.drawerCornerRadiusDp) return
+        screenState = screenState.copy(drawerCornerRadiusDp = normalized)
+    }
+
+    private fun saveDrawerCornerRadius() {
+        AppConfig.ngDrawerCornerRadiusDp = screenState.drawerCornerRadiusDp
     }
 
     private fun setBookshelfTopBarStyle(style: BookshelfTopBarStyle) {

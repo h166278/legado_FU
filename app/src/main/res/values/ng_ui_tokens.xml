@@ -3,10 +3,12 @@
     <!-- Reading NG UI Kit P0: MD3-like structure with Reading NG colors. -->
     <color name="ng_background">@color/background</color>
     <color name="ng_surface">@color/white</color>
-    <color name="ng_surface_card">#E6FFFFFF</color>
+    <color name="ng_surface_card">#FFFFFFFF</color>
     <color name="ng_book_detail_card_surface">@color/ng_settings_item</color>
     <color name="ng_book_detail_card_stroke">@color/ng_settings_item_stroke</color>
-    <color name="ng_surface_soft">#FFFAF7</color>
+    <color name="ng_bookshelf_manage_header_surface">#F2FFFFFF</color>
+    <color name="ng_bookshelf_manage_control_surface">#E6FFFFFF</color>
+    <color name="ng_bookshelf_manage_workspace_surface">#99FFFFFF</color>
     <color name="ng_surface_panel">#F2FFFFFF</color>
     <color name="ng_search_surface">#CCFFFFFF</color>
     <color name="ng_search_surface_pressed">#E6FFFFFF</color>
@@ -73,6 +75,7 @@
     <dimen name="ng_radius_m">12dp</dimen>
     <dimen name="ng_radius_l">18dp</dimen>
     <dimen name="ng_radius_xl">24dp</dimen>
+    <dimen name="ng_book_cover_radius">6dp</dimen>
     <dimen name="ng_dialog_radius">28dp</dimen>
     <dimen name="ng_dialog_margin">16dp</dimen>
     <dimen name="ng_dialog_padding">16dp</dimen>

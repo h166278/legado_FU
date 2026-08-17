@@ -146,10 +146,18 @@ class NgManagementListCardView @JvmOverloads constructor(
                 },
                 LayoutParams(
                     LayoutParams.WRAP_CONTENT,
-                    if (tag.style == NgStatusTagStyle.COMPACT) 20.dp else 24.dp
+                    when (tag.style) {
+                        NgStatusTagStyle.INLINE -> 18.dp
+                        NgStatusTagStyle.COMPACT -> 20.dp
+                        NgStatusTagStyle.REGULAR -> 24.dp
+                    }
                 ).apply {
                     if (index > 0) {
-                        marginStart = if (tag.style == NgStatusTagStyle.COMPACT) 6.dp else 8.dp
+                        marginStart = when (tag.style) {
+                            NgStatusTagStyle.INLINE -> 4.dp
+                            NgStatusTagStyle.COMPACT -> 6.dp
+                            NgStatusTagStyle.REGULAR -> 8.dp
+                        }
                     }
                 }
             )

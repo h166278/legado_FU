@@ -316,21 +316,37 @@ fun Book.isSameNameAuthor(other: Any?): Boolean {
     return false
 }
 
+object BookExportFileNameRules {
+    const val NAME_ONLY = "name"
+    const val NAME_AUTHOR = "\"《\" + name + \"》-\" + author"
+    const val NAME_AUTHOR_CHAPTER_COUNT =
+        "\"《\" + name + \"》-\" + author + \"-1-\" + chapterCount"
+
+    fun presetOrDefault(rule: String?): String = when (rule) {
+        NAME_ONLY,
+        NAME_AUTHOR,
+        NAME_AUTHOR_CHAPTER_COUNT -> rule
+
+        else -> NAME_AUTHOR
+    }
+}
+
 fun Book.getExportFileName(suffix: String): String {
     val jsStr = AppConfig.bookExportFileName
     if (jsStr.isNullOrBlank()) {
-        return "$name 作者：${getRealAuthor()}.$suffix"
+        return "《$name》-${getRealAuthor()}.$suffix"
     }
     val bindings = buildScriptBindings { bindings ->
         bindings["epubIndex"] = ""// 兼容老版本,修复可能存在的错误
         bindings["name"] = name
         bindings["author"] = getRealAuthor()
+        bindings["chapterCount"] = totalChapterNum
     }
     return kotlin.runCatching {
         RhinoScriptEngine.eval(jsStr, bindings).toString() + "." + suffix
     }.onFailure {
         AppLog.put("导出书名规则错误,使用默认规则\n${it.localizedMessage}", it)
-    }.getOrDefault("$name 作者：${getRealAuthor()}.$suffix")
+    }.getOrDefault("《$name》-${getRealAuthor()}.$suffix")
 }
 
 /**
@@ -381,6 +397,7 @@ fun tryParesExportFileName(jsStr: String): Boolean {
         bindings["name"] = "name"
         bindings["author"] = "author"
         bindings["epubIndex"] = "epubIndex"
+        bindings["chapterCount"] = "chapterCount"
     }
     return runCatching {
         RhinoScriptEngine.eval(jsStr, bindings)

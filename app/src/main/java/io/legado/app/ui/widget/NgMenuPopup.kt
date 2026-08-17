@@ -43,11 +43,19 @@ object NgMenuPopup {
         toolbar: Toolbar?,
         menu: Menu,
         prepareMenu: () -> Unit = {},
+        includeOverflowSubMenus: Boolean = false,
         onItemClick: (MenuItem) -> Unit
     ) {
         if (toolbar == null) return
         bindActionSubMenus(context, menu, prepareMenu, onItemClick)
-        bindOverflowMenu(toolbar, menu, prepareMenu, onItemClick, popupPresenter = null)
+        bindOverflowMenu(
+            toolbar = toolbar,
+            menu = menu,
+            prepareMenu = prepareMenu,
+            onItemClick = onItemClick,
+            popupPresenter = null,
+            includeSubMenus = includeOverflowSubMenus
+        )
     }
 
     fun bindReadingToolbarMenu(
@@ -87,6 +95,7 @@ object NgMenuPopup {
         widthDp: Int = DEFAULT_WIDTH_DP,
         itemIds: List<Int>? = null,
         includeInvisible: Boolean = false,
+        headerTitle: CharSequence? = null,
         onItemClick: (MenuItem) -> Unit
     ) {
         val items = menu.toPopupItems(
@@ -94,8 +103,26 @@ object NgMenuPopup {
             includeInvisible = includeInvisible
         )
         if (items.isEmpty()) return
-        NgActionPopup(anchor.context, items, widthDp) { item ->
-            (item.payload as? MenuItem)?.let(onItemClick)
+        NgActionPopup(
+            context = anchor.context,
+            items = items,
+            widthDp = widthDp,
+            headerTitle = headerTitle
+        ) { item ->
+            (item.payload as? MenuItem)?.let { menuItem ->
+                val subMenu = menuItem.subMenu
+                if (subMenu == null) {
+                    onItemClick(menuItem)
+                } else {
+                    show(
+                        anchor = anchor,
+                        menu = subMenu,
+                        widthDp = widthDp,
+                        headerTitle = menuItem.title,
+                        onItemClick = onItemClick
+                    )
+                }
+            }
         }.show(anchor)
     }
 
@@ -128,6 +155,7 @@ object NgMenuPopup {
                     iconRes = iconRes,
                     iconDrawable = item.icon.takeIf { iconRes == 0 },
                     checked = item.isChecked,
+                    hasSubMenu = item.subMenu != null,
                     dividerBefore = groupChanged,
                     payload = item
                 )
@@ -152,7 +180,11 @@ object NgMenuPopup {
                 contentDescription = item.title
             ) { anchor ->
                 prepareMenu()
-                show(anchor, subMenu, onItemClick = onItemClick)
+                show(
+                    anchor = anchor,
+                    menu = subMenu,
+                    onItemClick = onItemClick
+                )
             }
         }
     }
@@ -162,9 +194,10 @@ object NgMenuPopup {
         menu: Menu,
         prepareMenu: () -> Unit,
         onItemClick: (MenuItem) -> Unit,
-        popupPresenter: OverflowPopupPresenter?
+        popupPresenter: OverflowPopupPresenter?,
+        includeSubMenus: Boolean = false
     ) {
-        val candidateIds = overflowCandidates(menu).map { it.itemId }
+        val candidateIds = overflowCandidates(menu, includeSubMenus).map { it.itemId }
         if (candidateIds.isEmpty()) return
         bindNativeOverflow(
             toolbar,
@@ -176,14 +209,14 @@ object NgMenuPopup {
         )
     }
 
-    private fun overflowCandidates(menu: Menu): List<MenuItem> {
+    private fun overflowCandidates(menu: Menu, includeSubMenus: Boolean): List<MenuItem> {
         return (0 until menu.size())
             .map { menu.getItem(it) }
             .filter { item ->
                 item.itemId != R.id.menu_more &&
                     item.isVisible &&
                     item.actionView == null &&
-                    item.subMenu == null &&
+                    (item.subMenu == null || includeSubMenus) &&
                     !item.wantsActionButton()
             }
     }
@@ -301,10 +334,10 @@ object NgMenuPopup {
 
             R.id.menu_log -> R.drawable.ic_bug_report
             R.id.menu_network_log -> R.drawable.ic_network_check
+            R.id.menu_close -> R.drawable.ic_baseline_close
             R.id.menu_refresh,
             R.id.menu_web_refresh,
             R.id.menu_rss_refresh,
-            R.id.menu_refresh_list,
             R.id.menu_refresh_sort,
             R.id.menu_refresh_explore -> R.drawable.ic_refresh_black_24dp
 
@@ -335,15 +368,12 @@ object NgMenuPopup {
             R.id.menu_sort_name,
             R.id.menu_sort_url,
             R.id.menu_sort_time,
-            R.id.menu_sort_read_long,
-            R.id.menu_sort_read_time,
             R.id.menu_sort_respondTime,
             R.id.menu_sort_enable -> R.drawable.ic_sort
 
             R.id.menu_enabled_group,
             R.id.menu_enable_selection,
             R.id.menu_enable_explore,
-            R.id.menu_enable_record,
             R.id.menu_can_update,
             R.id.menu_update_enable -> R.drawable.ic_check
 
@@ -361,8 +391,7 @@ object NgMenuPopup {
             R.id.menu_export_all,
             R.id.menu_export_bookmark,
             R.id.menu_export_md,
-            R.id.menu_export,
-            R.id.menu_export_all_use_book_source -> R.drawable.ic_export
+            R.id.menu_export -> R.drawable.ic_export
             R.id.menu_share_source -> R.drawable.ic_share
             R.id.menu_check_source,
             R.id.menu_check_selected_interval -> R.drawable.ic_check_source
@@ -370,10 +399,8 @@ object NgMenuPopup {
             R.id.menu_top_sel -> R.drawable.ic_expand_more
             R.id.menu_bottom_sel -> R.drawable.ic_expand_more
             R.id.menu_del_selection -> R.drawable.ic_outline_delete
-            R.id.menu_top,
-            R.id.menu_top_source -> R.drawable.ic_arrow_drop_up
-            R.id.menu_bottom,
-            R.id.menu_bottom_source -> R.drawable.ic_arrow_down
+            R.id.menu_top -> R.drawable.ic_arrow_drop_up
+            R.id.menu_bottom -> R.drawable.ic_arrow_down
             R.id.menu_del,
             R.id.menu_delete,
             R.id.menu_delete_source,
@@ -405,8 +432,7 @@ object NgMenuPopup {
 
             R.id.menu_toc_regex,
             R.id.menu_update_toc,
-            R.id.menu_catalog,
-            R.id.menu_load_toc -> R.drawable.ic_toc
+            R.id.menu_catalog -> R.drawable.ic_toc
             R.id.menu_split_long_chapter,
             R.id.menu_load_word_count -> R.drawable.ic_chapter_list
             R.id.menu_reverse_toc,
@@ -443,7 +469,6 @@ object NgMenuPopup {
             R.id.menu_get_progress,
             R.id.menu_cover_progress,
             R.id.menu_read_record -> R.drawable.ic_history
-            R.id.menu_simulated_reading,
             R.id.menu_aloud -> R.drawable.ic_read_aloud
             R.id.menu_same_title_removed,
             R.id.menu_del_ruby_tag,

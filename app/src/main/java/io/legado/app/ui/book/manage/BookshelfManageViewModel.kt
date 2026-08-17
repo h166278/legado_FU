@@ -19,19 +19,53 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.SourceCallBack
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
-import io.legado.app.utils.stackTraceStr
+import io.legado.app.utils.normalizeFileName
+import io.legado.app.utils.sendValue
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeToOutputStream
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import java.io.File
 
 
 class BookshelfManageViewModel(application: Application) : BaseViewModel(application) {
     var groupId: Long = -1L
-    var groupName: String? = null
     val batchChangeSourceState = MutableLiveData<Boolean>()
     val batchChangeSourceProcessLiveData = MutableLiveData<String>()
     var batchChangeSourceCoroutine: Coroutine<Unit>? = null
+    val cacheChapterCountLiveData = MutableLiveData<String>()
+    val cacheChapters = hashMapOf<String, HashSet<String>>()
+    private var loadCacheFilesCoroutine: Coroutine<Unit>? = null
+
+    fun loadCacheFiles(books: List<Book>) {
+        loadCacheFilesCoroutine?.cancel()
+        loadCacheFilesCoroutine = execute {
+            books.forEach { book ->
+                if (!book.isLocal && !cacheChapters.contains(book.bookUrl)) {
+                    val chapterCaches = hashSetOf<String>()
+                    val cacheNames = BookHelp.getChapterFiles(book)
+                    if (cacheNames.isNotEmpty()) {
+                        appDb.bookChapterDao.getChapterList(book.bookUrl).forEach { chapter ->
+                            if (cacheNames.contains(chapter.getFileName()) || chapter.isVolume) {
+                                chapterCaches.add(chapter.url)
+                            }
+                        }
+                    }
+                    cacheChapters[book.bookUrl] = chapterCaches
+                    cacheChapterCountLiveData.sendValue(book.bookUrl)
+                }
+                ensureActive()
+            }
+        }
+    }
+
+    fun addCachedChapter(bookUrl: String, chapterUrl: String) {
+        cacheChapters[bookUrl]?.let { chapters ->
+            if (chapters.add(chapterUrl)) {
+                cacheChapterCountLiveData.sendValue(bookUrl)
+            }
+        }
+    }
 
     fun upCanUpdate(books: List<Book>, canUpdate: Boolean) {
         execute {
@@ -66,20 +100,33 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
         }
     }
 
-    fun saveAllUseBookSourceToFile(success: (file: File) -> Unit) {
+    fun saveBookSourcesToFile(
+        books: List<Book>,
+        success: (file: File, name: String) -> Unit
+    ) {
         execute {
+            val sources = books.asSequence()
+                .filterNot { it.isLocal }
+                .mapNotNull { appDb.bookSourceDao.getBookSource(it.origin) }
+                .distinctBy { it.bookSourceUrl }
+                .toList()
+            check(sources.isNotEmpty()) { context.getString(R.string.error_no_source) }
             val path = "${context.filesDir}/shareBookSource.json"
             FileUtils.delete(path)
             val file = FileUtils.createFileWithReplace(path)
-            val sources = appDb.bookDao.getAllUseBookSource()
             file.outputStream().buffered().use {
                 GSON.writeToOutputStream(it, sources)
             }
-            file
-        }.onSuccess {
-            success.invoke(it)
+            val name = if (sources.size == 1) {
+                "bookSource_${sources.first().bookSourceName.normalizeFileName()}.json"
+            } else {
+                "bookSource.json"
+            }
+            file to name
+        }.onSuccess { (file, name) ->
+            success(file, name)
         }.onError {
-            context.toastOnUi(it.stackTraceStr)
+            context.toastOnUi(it.localizedMessage ?: context.getString(R.string.error_no_source))
         }
     }
 
@@ -127,6 +174,10 @@ class BookshelfManageViewModel(application: Application) : BaseViewModel(applica
                 BookHelp.clearCache(it)
             }
         }.onSuccess {
+            books.filterNot { it.isLocal }.forEach { book ->
+                cacheChapters[book.bookUrl] = hashSetOf()
+                cacheChapterCountLiveData.sendValue(book.bookUrl)
+            }
             context.toastOnUi(R.string.clear_cache_success)
         }
     }

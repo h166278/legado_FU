@@ -27,9 +27,13 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.legado.app.R
+import io.legado.app.help.config.NgDrawerAppearanceConfig
 import io.legado.app.ui.design.theme.NgColorMath
+import io.legado.app.ui.design.theme.NgDrawerPalette
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.design.theme.NgThemeSnapshot
 import io.legado.app.help.config.ReadFloatingAppearanceConfig
@@ -127,6 +131,97 @@ object NgGlassDefaults {
     }
 
     /**
+     * 不接受主题种子染色的中性玻璃承载面。
+     *
+     * 用于书架管理 Dock 这类需要稳定白／深灰材质、但仍保留 NG 玻璃边缘与
+     * 模糊层级的容器。主题主色只应出现在容器内的操作与选中反馈中。
+     */
+    @Composable
+    fun neutralStyle(
+        containerAlpha: Float = NgTheme.effects.drawerAlpha
+    ): NgGlassStyle {
+        val snapshot = NgTheme.snapshot
+        val base = style(containerAlpha)
+        val neutralContainer = colorResource(R.color.ng_surface_panel)
+        return remember(snapshot.isEInk, base, neutralContainer, containerAlpha) {
+            val resolvedAlpha = if (snapshot.isEInk) {
+                1f
+            } else {
+                containerAlpha.coerceIn(0f, 1f)
+            }
+            base.copy(
+                containerTop = neutralContainer.copy(
+                    alpha = (resolvedAlpha + 0.04f).coerceAtMost(1f)
+                ),
+                containerBottom = neutralContainer.copy(alpha = resolvedAlpha),
+                accentGlow = Color.Transparent
+            )
+        }
+    }
+
+    /** 与书籍详情页内容卡一致的奶白玻璃材质。 */
+    @Composable
+    fun bookDetailStyle(
+        containerColor: Color = colorResource(R.color.ng_book_detail_card_surface)
+    ): NgGlassStyle {
+        val snapshot = NgTheme.snapshot
+        val base = style(containerAlpha = 1f)
+        val border = colorResource(R.color.ng_book_detail_card_stroke)
+        return remember(snapshot.isEInk, base, containerColor, border) {
+            base.copy(
+                containerTop = containerColor,
+                containerBottom = containerColor,
+                accentGlow = Color.Transparent,
+                borderColor = border,
+                edgeHighlight = if (snapshot.isEInk) {
+                    Color.Transparent
+                } else {
+                    base.edgeHighlight.copy(alpha = 0.30f)
+                },
+                surfaceGloss = if (snapshot.isEInk) {
+                    Color.Transparent
+                } else {
+                    base.surfaceGloss.copy(alpha = 0.08f)
+                },
+                depthEdge = Color.Transparent,
+                shadowElevation = 0.dp,
+                borderWidth = 0.6.dp,
+                highlightWidth = if (snapshot.isEInk) 0.dp else 0.6.dp
+            )
+        }
+    }
+
+    /**
+     * 不使用高光、弧面和深度边缘的中性平面承载面。
+     *
+     * 用于操作轨等需要保留整体悬浮层级、但内部控件必须与承载面处在同一平面的场景。
+     */
+    @Composable
+    fun flatNeutralStyle(
+        containerAlpha: Float = NgTheme.effects.drawerAlpha
+    ): NgGlassStyle {
+        val snapshot = NgTheme.snapshot
+        val base = neutralStyle(containerAlpha)
+        val neutralContainer = colorResource(R.color.ng_surface_panel)
+        return remember(snapshot.isEInk, base, neutralContainer, containerAlpha) {
+            val resolvedAlpha = if (snapshot.isEInk) {
+                1f
+            } else {
+                containerAlpha.coerceIn(0f, 1f)
+            }
+            base.copy(
+                containerTop = neutralContainer.copy(alpha = resolvedAlpha),
+                containerBottom = neutralContainer.copy(alpha = resolvedAlpha),
+                accentGlow = Color.Transparent,
+                edgeHighlight = Color.Transparent,
+                surfaceGloss = Color.Transparent,
+                depthEdge = Color.Transparent,
+                highlightWidth = 0.dp
+            )
+        }
+    }
+
+    /**
      * 阅读主菜单这类悬浮在高对比正文上的独立玻璃卡。
      *
      * 保留主题色雾化和液态边缘，直接透出承载面后方的实时内容。阅读菜单不提供截图
@@ -145,6 +240,22 @@ object NgGlassDefaults {
                 transparencyPercent = transparencyPercent,
                 primaryStrengthPercent = primaryStrengthPercent,
                 colorStyle = colorStyle,
+            )
+        }
+    }
+
+    /** 全局底部抽屉专用材质，不复用阅读浮窗的轻薄染色曲线。 */
+    @Composable
+    fun drawerStyle(
+        transparencyPercent: Int,
+        primaryStrengthPercent: Int,
+    ): NgGlassStyle {
+        val snapshot = NgTheme.snapshot
+        return remember(snapshot, transparencyPercent, primaryStrengthPercent) {
+            resolveNgDrawerGlassStyle(
+                snapshot = snapshot,
+                transparencyPercent = transparencyPercent,
+                primaryStrengthPercent = primaryStrengthPercent,
             )
         }
     }
@@ -340,6 +451,90 @@ internal fun resolveNgFloatingGlassStyle(
         shadowElevation = 0.dp,
         borderWidth = 0.6.dp,
         highlightWidth = 0.8.dp
+    )
+}
+
+internal fun resolveNgDrawerGlassStyle(
+    snapshot: NgThemeSnapshot,
+    transparencyPercent: Int,
+    primaryStrengthPercent: Int,
+): NgGlassStyle {
+    if (snapshot.isEInk) {
+        return resolveNgGlassStyle(snapshot, requestedContainerAlpha = 1f)
+    }
+    val colors = snapshot.colors
+    val base = resolveNgGlassStyle(
+        snapshot = snapshot,
+        requestedContainerAlpha = if (snapshot.isDark) 0.84f else 0.86f,
+    )
+    val normalizedTransparency = NgDrawerAppearanceConfig.normalizePercent(
+        transparencyPercent
+    )
+    val normalizedStrength = NgDrawerAppearanceConfig.normalizePercent(
+        primaryStrengthPercent
+    )
+    val surfaceColors = NgDrawerPalette.resolveSurfaceColors(
+        snapshot = snapshot,
+        primaryStrengthPercent = normalizedStrength,
+    )
+    val semanticColors = NgDrawerPalette.resolveSemanticColors(
+        snapshot = snapshot,
+        primaryStrengthPercent = normalizedStrength,
+    )
+    val highlightBase = if (snapshot.isDark) {
+        NgColorMath.blend(colors.surface, colors.onSurface, 0.46f)
+    } else {
+        0xFFFFFFFF.toInt()
+    }
+    val topAlpha = NgDrawerAppearanceConfig.surfaceAlpha(
+        transparencyPercent = normalizedTransparency,
+        defaultAlpha = if (snapshot.isDark) 0.84f else 0.80f,
+    )
+    val bottomAlpha = NgDrawerAppearanceConfig.surfaceAlpha(
+        transparencyPercent = normalizedTransparency,
+        defaultAlpha = if (snapshot.isDark) 0.80f else 0.76f,
+    )
+    val strength = NgDrawerAppearanceConfig.strengthFraction(normalizedStrength).toFloat()
+    val accentAlpha = (if (snapshot.isDark) 0.10f else 0.08f) * strength
+    return base.copy(
+        containerTop = Color(
+            NgColorMath.withAlpha(surfaceColors.top, topAlpha)
+        ),
+        containerBottom = Color(
+            NgColorMath.withAlpha(surfaceColors.bottom, bottomAlpha)
+        ),
+        accentGlow = Color(
+            NgColorMath.withAlpha(surfaceColors.bottom, accentAlpha)
+        ),
+        borderColor = Color(
+            NgColorMath.withAlpha(
+                semanticColors.outline,
+                if (snapshot.isDark) 0.34f else 0.26f,
+            )
+        ),
+        edgeHighlight = Color(
+            NgColorMath.withAlpha(
+                highlightBase,
+                if (snapshot.isDark) 0.56f else 0.86f,
+            )
+        ),
+        surfaceGloss = Color(
+            NgColorMath.withAlpha(
+                highlightBase,
+                if (snapshot.isDark) 0.14f else 0.12f,
+            )
+        ),
+        depthEdge = Color(
+            NgColorMath.withAlpha(
+                semanticColors.outline,
+                if (snapshot.isDark) 0.18f else 0.08f,
+            )
+        ),
+        contentColor = Color(semanticColors.content),
+        blurRadius = 0.dp,
+        shadowElevation = 0.dp,
+        borderWidth = 0.6.dp,
+        highlightWidth = 0.8.dp,
     )
 }
 

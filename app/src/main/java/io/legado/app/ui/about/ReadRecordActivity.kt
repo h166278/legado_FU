@@ -1,235 +1,202 @@
 package io.legado.app.ui.about
 
-import android.content.Context
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
+import androidx.activity.addCallback
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.base.ComposeActivityBinding
 import io.legado.app.data.appDb
-import io.legado.app.data.entities.ReadRecordShow
-import io.legado.app.databinding.ActivityReadRecordBinding
-import io.legado.app.databinding.ItemReadRecordBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.book.search.SearchActivity
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyTint
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.getInt
 import io.legado.app.utils.putInt
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
+/** 阅读记录。页面渲染使用 Compose，数据与跳转行为沿用原实现。 */
+class ReadRecordActivity : BaseActivity<ComposeActivityBinding>() {
 
-    private val adapter by lazy { RecordAdapter(this) }
-    private var sortMode
-        get() = LocalConfig.getInt("readRecordSort")
-        set(value) {
-            LocalConfig.putInt("readRecordSort", value)
-        }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
+    override val binding by viewBinding(ComposeActivityBinding::inflate)
+    override val bindNgToolbarMenu: Boolean = false
 
-    override val binding by viewBinding(ActivityReadRecordBinding::inflate)
-
+    private var items by mutableStateOf<List<ReadRecordUiItem>>(
+        emptyList(),
+        referentialEqualityPolicy(),
+    )
+    private var totalReadTime by mutableLongStateOf(0L)
+    private var query by mutableStateOf("")
+    private var searchExpanded by mutableStateOf(false)
+    private var recordEnabled by mutableStateOf(AppConfig.enableReadRecord)
+    private var deleteTarget by mutableStateOf<ReadRecordUiItem?>(null)
+    private var clearAllDialogVisible by mutableStateOf(false)
+    private var loadJob: Job? = null
+    private var sortMode by mutableIntStateOf(LocalConfig.getInt(READ_RECORD_SORT_KEY))
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initView()
-        initAllTime()
-        initData()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_read_record, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_enable_record)?.isChecked = AppConfig.enableReadRecord
-        when (sortMode) {
-            1 -> menu.findItem(R.id.menu_sort_read_long)?.isChecked = true
-            2 -> menu.findItem(R.id.menu_sort_read_time)?.isChecked = true
-            else -> menu.findItem(R.id.menu_sort_name)?.isChecked = true
+        initContent()
+        onBackPressedDispatcher.addCallback(this) {
+            if (searchExpanded) closeSearch() else finish()
         }
-        return super.onMenuOpened(featureId, menu)
+        loadData()
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_sort_name -> {
-                sortMode = 0
-                item.isChecked = true
-                initData()
+    private fun initContent() {
+        binding.composeView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+        )
+        binding.composeView.setContent {
+            NgAppTheme {
+                ReadRecordScreen(
+                    items = items,
+                    totalReadTime = formatDuring(totalReadTime),
+                    query = query,
+                    searchExpanded = searchExpanded,
+                    sortMode = sortMode,
+                    recordEnabled = recordEnabled,
+                    deleteTarget = deleteTarget,
+                    clearAllDialogVisible = clearAllDialogVisible,
+                    onBack = { onBackPressedDispatcher.onBackPressed() },
+                    onSearchExpandedChange = { expanded ->
+                        if (expanded) searchExpanded = true else closeSearch()
+                    },
+                    onQueryChange = {
+                        query = it
+                        loadData()
+                    },
+                    onSortChange = ::changeSort,
+                    onRecordEnabledChange = ::changeRecordEnabled,
+                    onClearAllRequest = { clearAllDialogVisible = true },
+                    onClearAllDismiss = { clearAllDialogVisible = false },
+                    onClearAllConfirm = ::clearAll,
+                    onItemClick = ::openItem,
+                    onDeleteRequest = { deleteTarget = it },
+                    onDeleteDismiss = { deleteTarget = null },
+                    onDeleteConfirm = ::deleteItem,
+                )
             }
-
-            R.id.menu_sort_read_long -> {
-                sortMode = 1
-                item.isChecked = true
-                initData()
-            }
-
-            R.id.menu_sort_read_time -> {
-                sortMode = 2
-                item.isChecked = true
-                initData()
-            }
-
-            R.id.menu_enable_record -> {
-                AppConfig.enableReadRecord = !item.isChecked
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    private fun initView() {
-        initSearchView()
-        binding.tvBookName.setText(R.string.all_read_time)
-        binding.tvRemove.setOnClickListener {
-            alert(R.string.delete, R.string.sure_del) {
-                yesButton {
-                    appDb.readRecordDao.clear()
-                    initData()
-                }
-                noButton()
-            }
-        }
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.applyNavigationBarPadding()
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.search)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String): Boolean {
-                searchView.clearFocus()
-                return false
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                initData(newText)
-                return false
-            }
-        })
-    }
-
-    private fun initAllTime() {
-        lifecycleScope.launch {
-            val allTime = withContext(IO) {
-                appDb.readRecordDao.allTime
-            }
-            binding.tvReadingTime.text = formatDuring(allTime)
         }
     }
 
-    private fun initData(searchKey: String? = null) {
-        lifecycleScope.launch {
-            val readRecords = withContext(IO) {
-                appDb.readRecordDao.search(searchKey ?: "").let { records ->
-                    when (sortMode) {
-                        1 -> records.sortedByDescending { it.readTime }
-                        2 -> records.sortedByDescending { it.lastRead }
-                        else -> records.sortedWith { o1, o2 ->
-                            o1.bookName.cnCompare(o2.bookName)
+    private fun closeSearch() {
+        searchExpanded = false
+        if (query.isNotEmpty()) {
+            query = ""
+            loadData()
+        }
+    }
+
+    private fun changeSort(mode: Int) {
+        if (sortMode == mode) return
+        sortMode = mode
+        LocalConfig.putInt(READ_RECORD_SORT_KEY, mode)
+        loadData()
+    }
+
+    private fun changeRecordEnabled(enabled: Boolean) {
+        recordEnabled = enabled
+        AppConfig.enableReadRecord = enabled
+    }
+
+    private fun loadData() {
+        loadJob?.cancel()
+        val searchKey = query
+        val currentSort = sortMode
+        loadJob = lifecycleScope.launch {
+            val result = withContext(IO) {
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val records = appDb.readRecordDao.search(searchKey).let { records ->
+                    when (currentSort) {
+                        SORT_READING_DURATION -> records.sortedByDescending { it.readTime }
+                        SORT_LAST_READ -> records.sortedByDescending { it.lastRead }
+                        else -> records.sortedWith { first, second ->
+                            first.bookName.cnCompare(second.bookName)
                         }
                     }
                 }
-            }
-            adapter.setItems(readRecords)
-        }
-    }
-
-    inner class RecordAdapter(context: Context) :
-        RecyclerAdapter<ReadRecordShow, ItemReadRecordBinding>(context) {
-
-        private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-        override fun getViewBinding(parent: ViewGroup): ItemReadRecordBinding {
-            return ItemReadRecordBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemReadRecordBinding,
-            item: ReadRecordShow,
-            payloads: MutableList<Any>,
-        ) {
-            binding.apply {
-                tvBookName.text = item.bookName
-                tvReadingTime.text = formatDuring(item.readTime)
-                if (item.lastRead > 0) {
-                    tvLastReadTime.text = dateFormat.format(item.lastRead)
+                val booksByName = if (records.isEmpty()) {
+                    emptyMap()
                 } else {
-                    tvLastReadTime.text = ""
+                    appDb.bookDao.findByName(*records.map { it.bookName }.toTypedArray())
+                        .groupBy { it.name }
+                        .mapValues { (_, books) -> books.first() }
                 }
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemReadRecordBinding) {
-            binding.apply {
-                root.setOnClickListener {
-                    val item = getItem(holder.layoutPosition) ?: return@setOnClickListener
-                    lifecycleScope.launch {
-                        val book = withContext(IO) {
-                            appDb.bookDao.findByName(item.bookName).firstOrNull()
-                        }
-                        if (book == null) {
-                            SearchActivity.start(this@ReadRecordActivity, item.bookName)
+                records.map { record ->
+                    ReadRecordUiItem(
+                        record = record,
+                        book = booksByName[record.bookName],
+                        durationText = formatDuring(record.readTime),
+                        lastReadText = if (record.lastRead > 0) {
+                            dateFormat.format(record.lastRead)
                         } else {
-                            startActivityForBook(book)
-                        }
-                    }
-                }
-                tvRemove.setOnClickListener {
-                    getItem(holder.layoutPosition)?.let { item ->
-                        sureDelAlert(item)
-                    }
-                }
+                            ""
+                        },
+                    )
+                } to appDb.readRecordDao.allTime
             }
+            items = result.first
+            totalReadTime = result.second
         }
-
-        private fun sureDelAlert(item: ReadRecordShow) {
-            alert(R.string.delete) {
-                setMessage(getString(R.string.sure_del_any, item.bookName))
-                yesButton {
-                    appDb.readRecordDao.deleteByName(item.bookName)
-                    initData()
-                }
-                noButton()
-            }
-        }
-
     }
 
-    fun formatDuring(mss: Long): String {
+    private fun openItem(item: ReadRecordUiItem) {
+        lifecycleScope.launch {
+            val book = item.book ?: withContext(IO) {
+                appDb.bookDao.findByName(item.record.bookName).firstOrNull()
+            }
+            if (book == null) {
+                SearchActivity.start(this@ReadRecordActivity, item.record.bookName)
+            } else {
+                startActivityForBook(book)
+            }
+        }
+    }
+
+    private fun clearAll() {
+        clearAllDialogVisible = false
+        lifecycleScope.launch {
+            withContext(IO) { appDb.readRecordDao.clear() }
+            loadData()
+        }
+    }
+
+    private fun deleteItem(item: ReadRecordUiItem) {
+        deleteTarget = null
+        lifecycleScope.launch {
+            withContext(IO) { appDb.readRecordDao.deleteByName(item.record.bookName) }
+            loadData()
+        }
+    }
+
+    private fun formatDuring(mss: Long): String {
         val days = mss / (1000 * 60 * 60 * 24)
         val hours = mss % (1000 * 60 * 60 * 24) / (1000 * 60 * 60)
         val minutes = mss % (1000 * 60 * 60) / (1000 * 60)
         val seconds = mss % (1000 * 60) / 1000
-        val d = if (days > 0) "${days}天" else ""
-        val h = if (hours > 0) "${hours}小时" else ""
-        val m = if (minutes > 0) "${minutes}分钟" else ""
-        val s = if (seconds > 0) "${seconds}秒" else ""
-        var time = "$d$h$m$s"
-        if (time.isBlank()) {
-            time = "0秒"
-        }
-        return time
+        val dayText = if (days > 0) "${days}天" else ""
+        val hourText = if (hours > 0) "${hours}小时" else ""
+        val minuteText = if (minutes > 0) "${minutes}分钟" else ""
+        val secondText = if (seconds > 0) "${seconds}秒" else ""
+        return "$dayText$hourText$minuteText$secondText".ifBlank { "0秒" }
     }
 
+    private companion object {
+        const val READ_RECORD_SORT_KEY = "readRecordSort"
+        const val SORT_READING_DURATION = 1
+        const val SORT_LAST_READ = 2
+    }
 }

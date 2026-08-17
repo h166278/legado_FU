@@ -9,6 +9,7 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
+import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -24,8 +25,10 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.SourceInteractionPolicy
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
+import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallel
 import io.legado.app.utils.mapParallelSafe
 import io.legado.app.utils.onEachIndexed
@@ -96,6 +99,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             .thenBy { it.originOrder }
     }
     private var task: Job? = null
+    private val interactionPolicy = SourceInteractionPolicy(
+        blockDialogs = context.getPrefBoolean(PreferKey.searchBlockSourceDialogs)
+    )
     val bookMap = ConcurrentHashMap<String, Book>()
     val searchDataFlow = callbackFlow {
 
@@ -225,7 +231,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun search() {
-        task = viewModelScope.launch(searchPool!!) {
+        task = viewModelScope.launch(searchPool!! + interactionPolicy) {
             flow {
                 for (bs in bookSourceParts) {
                     bs.getBookSource()?.let {
@@ -255,6 +261,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 AppLog.put("换源搜索出错\n${it.localizedMessage}", it)
             }.collect()
         }
+    }
+
+    fun setBlockSourceDialogs(blockDialogs: Boolean) {
+        interactionPolicy.updateBlockDialogs(blockDialogs)
     }
 
     private suspend fun search(source: BookSource) {
@@ -376,7 +386,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun refreshList() {
-        task = viewModelScope.launch(searchPool!!) {
+        task = viewModelScope.launch(searchPool!! + interactionPolicy) {
             flow {
                 for (searchBook in searchBookList) {
                     emit(searchBook)

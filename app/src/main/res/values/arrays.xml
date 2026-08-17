@@ -27,11 +27,6 @@
 		<item>视频</item>
 	</string-array>
 
-	<string-array name="group_style">
-		<item>Tab</item>
-		<item>Folder</item>
-	</string-array>
-
 	<string-array name="book_sort">
 		<item>@string/text_default</item>
 		<item>@string/bookshelf_px_0</item>

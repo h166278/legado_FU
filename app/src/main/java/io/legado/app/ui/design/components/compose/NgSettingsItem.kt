@@ -202,6 +202,54 @@ fun NgSettingsItem(
     }
 }
 
+/** NG 设置卡内的紧凑滑轨项，统一标题、当前值、图标与轨道层级。 */
+@Composable
+fun NgSettingsSliderItem(
+    title: String,
+    valueText: String,
+    minimumText: String,
+    maximumText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier,
+    steps: Int = 0,
+    variant: NgSliderVariant = NgSliderVariant.COMPACT,
+    leading: (@Composable () -> Unit)? = null,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+) {
+    val itemShape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(itemShape)
+            .background(colorResource(R.color.ng_settings_item))
+            .border(0.6.dp, colorResource(R.color.ng_settings_item_stroke), itemShape)
+            .padding(start = 14.dp, top = 8.dp, end = 14.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(12.dp))
+        }
+        Box(modifier = Modifier.weight(1f)) {
+            NgDockSlider(
+                title = title,
+                valueText = valueText,
+                minimumText = minimumText,
+                maximumText = maximumText,
+                showBoundLabels = false,
+                value = value,
+                valueRange = valueRange,
+                steps = steps,
+                variant = variant,
+                onValueChange = onValueChange,
+                onValueChangeFinished = onValueChangeFinished,
+            )
+        }
+    }
+}
+
 @Composable
 private fun NgSettingsSwitch(
     checked: Boolean,

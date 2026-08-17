@@ -106,6 +106,27 @@ class ImportBookViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
+    fun addArchiveEntries(
+        archive: FileDoc,
+        entryNames: Set<String>,
+        finally: (Boolean) -> Unit,
+    ) {
+        var success = false
+        execute {
+            LocalBook.importArchiveFile(archive.uri) { entryName ->
+                entryName in entryNames
+            }
+        }.onError {
+            context.toastOnUi("添加书架失败，请重新选择压缩包内书籍")
+            AppLog.put("添加压缩包内书籍失败\n${it.localizedMessage}", it)
+        }.onSuccess {
+            success = true
+            context.toastOnUi("添加书架成功")
+        }.onFinally {
+            finally(success)
+        }
+    }
+
     fun deleteDoc(bookList: HashSet<ImportBook>, finally: () -> Unit) {
         execute {
             bookList.forEach {
@@ -116,7 +137,7 @@ class ImportBookViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
-    fun loadDoc(fileDoc: FileDoc) {
+    fun loadDoc(fileDoc: FileDoc, finally: () -> Unit = {}) {
         execute {
             val docList = fileDoc.list { item ->
                 when {
@@ -128,6 +149,8 @@ class ImportBookViewModel(application: Application) : BaseViewModel(application)
             dataCallback?.setItems(docList!!)
         }.onError {
             context.toastOnUi("获取文件列表出错\n${it.localizedMessage}")
+        }.onFinally {
+            finally()
         }
     }
 

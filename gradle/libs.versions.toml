@@ -72,6 +72,7 @@ webkit = "1.14.0"
 #noinspection GradleDependency
 activity = "1.11.0"
 composeBom = "2024.12.01"
+reorderable = "3.1.0"
 #noinspection GradleDependency
 lifecycle = "2.9.4"
 #noinspection GradleDependency
@@ -97,6 +98,7 @@ androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 
 androidx-annotation = { group = "androidx.annotation", name = "annotation", version = "1.9.1" }
 #androidx-annotation-experimental = { group = "androidx.annotation", name = "annotation-experimental", version = "1.3.1" }

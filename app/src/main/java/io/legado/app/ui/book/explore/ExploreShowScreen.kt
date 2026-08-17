@@ -467,7 +467,7 @@ private fun ExploreShowTopBar(
                         .align(Alignment.CenterEnd)
                         .size(32.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(colorResource(R.color.ng_surface_soft)),
+                        .background(colorResource(R.color.ng_surface_card)),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
@@ -501,7 +501,7 @@ private fun ExploreToolbarButton(
         modifier = modifier
             .size(32.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(colorResource(R.color.ng_surface_soft))
+            .background(colorResource(R.color.ng_surface_card))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

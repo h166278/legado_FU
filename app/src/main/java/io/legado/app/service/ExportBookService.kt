@@ -2,6 +2,9 @@ package io.legado.app.service
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
@@ -20,12 +23,14 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.book.ExportContentImageProcessor
 import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.isLocalModified
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.glide.ImageLoader
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.ui.book.cache.CacheActivity
+import io.legado.app.ui.main.MainActivity
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.HtmlFormatter
@@ -58,7 +63,6 @@ import me.ag2s.epublib.domain.Date
 import me.ag2s.epublib.domain.EpubBook
 import me.ag2s.epublib.domain.FileResourceProvider
 import me.ag2s.epublib.domain.LazyResource
-import me.ag2s.epublib.domain.LazyResourceProvider
 import me.ag2s.epublib.domain.Metadata
 import me.ag2s.epublib.domain.Resource
 import me.ag2s.epublib.domain.TOCReference
@@ -67,6 +71,7 @@ import me.ag2s.epublib.epub.EpubWriterProcessor
 import me.ag2s.epublib.util.ResourceUtil
 import splitties.init.appCtx
 import splitties.systemservices.notificationManager
+import java.io.ByteArrayOutputStream
 import java.nio.charset.Charset
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
@@ -77,6 +82,8 @@ import kotlin.math.min
 class ExportBookService : BaseService() {
 
     companion object {
+        private const val EPUB_COVER_HREF = "Images/cover.jpg"
+
         val exportProgress = ConcurrentHashMap<String, Int>()
         val exportMsg = ConcurrentHashMap<String, String>()
     }
@@ -85,7 +92,14 @@ class ExportBookService : BaseService() {
         val path: String,
         val type: String,
         val epubSize: Int = 1,
-        val epubScope: String? = null
+        val epubScope: String? = null,
+        val useReplace: Boolean = false,
+        val parallel: Boolean = false,
+        val exportToWebDav: Boolean = false,
+        val includeChapterName: Boolean = true,
+        val exportPictures: Boolean = false,
+        val plainText: Boolean = false,
+        val filterInteractiveImages: Boolean = false,
     )
 
     private val groupKey = "${appCtx.packageName}.exportBook"
@@ -103,7 +117,32 @@ class ExportBookService : BaseService() {
                         path = intent.getStringExtra("exportPath")!!,
                         type = intent.getStringExtra("exportType")!!,
                         epubSize = intent.getIntExtra("epubSize", 1),
-                        epubScope = intent.getStringExtra("epubScope")
+                        epubScope = intent.getStringExtra("epubScope"),
+                        useReplace = intent.getBooleanExtra(
+                            "exportUseReplace",
+                            AppConfig.exportUseReplace,
+                        ),
+                        parallel = intent.getBooleanExtra(
+                            "parallelExport",
+                            AppConfig.parallelExportBook,
+                        ),
+                        exportToWebDav = intent.getBooleanExtra(
+                            "exportToWebDav",
+                            AppConfig.exportToWebDav,
+                        ),
+                        includeChapterName = intent.getBooleanExtra(
+                            "includeChapterName",
+                            !AppConfig.exportNoChapterName,
+                        ),
+                        exportPictures = intent.getBooleanExtra(
+                            "exportPictureFile",
+                            AppConfig.exportPictureFile,
+                        ),
+                        plainText = intent.getBooleanExtra("exportPlainText", false),
+                        filterInteractiveImages = intent.getBooleanExtra(
+                            "exportFilterInteractiveImages",
+                            false,
+                        ),
                     )
                     waitExportBooks[bookUrl] = exportConfig
                     exportMsg[bookUrl] = getString(R.string.export_wait)
@@ -146,7 +185,7 @@ class ExportBookService : BaseService() {
         val notification = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_export)
             .setSubText(getString(R.string.export_book))
-            .setContentIntent(activityPendingIntent<CacheActivity>("cacheActivity"))
+            .setContentIntent(activityPendingIntent<MainActivity>("mainActivity"))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentText(notificationContentText)
             .setDeleteIntent(servicePendingIntent<ExportBookService>(IntentAction.stop))
@@ -189,15 +228,17 @@ class ExportBookService : BaseService() {
                     upExportNotification()
                     if (exportConfig.type == "epub") {
                         if (exportConfig.epubScope.isNullOrBlank()) {
-                            exportEpub(exportConfig.path, book)
+                            exportEpub(exportConfig.path, book, exportConfig)
                         } else {
                             CustomExporter(
                                 exportConfig.epubScope,
-                                exportConfig.epubSize
+                                exportConfig.epubSize,
+                                exportConfig.useReplace,
+                                exportConfig.exportToWebDav,
                             ).export(exportConfig.path, book)
                         }
                     } else {
-                        exportTxt(exportConfig.path, book)
+                        exportTxt(exportConfig.path, book, exportConfig)
                     }
                     exportMsg[book.bookUrl] = getString(R.string.export_success)
                 } catch (e: Throwable) {
@@ -232,21 +273,21 @@ class ExportBookService : BaseService() {
         val src: String
     )
 
-    private suspend fun exportTxt(path: String, book: Book) {
+    private suspend fun exportTxt(path: String, book: Book, config: ExportConfig) {
         exportMsg.remove(book.bookUrl)
         postEvent(EventBus.EXPORT_BOOK, book.bookUrl)
         val fileDoc = FileDoc.fromDir(path)
-        exportTxt(fileDoc, book)
+        exportTxt(fileDoc, book, config)
     }
 
-    private suspend fun exportTxt(fileDoc: FileDoc, book: Book) {
+    private suspend fun exportTxt(fileDoc: FileDoc, book: Book, config: ExportConfig) {
         val filename = book.getExportFileName("txt")
         fileDoc.find(filename)?.delete()
 
         val bookDoc = fileDoc.createFileIfNotExist(filename)
         val charset = Charset.forName(AppConfig.exportCharset)
         bookDoc.openOutputStream().getOrThrow().bufferedWriter(charset).use { bw ->
-            getAllContents(book) { text, srcList ->
+            getAllContents(book, config) { text, srcList ->
                 bw.write(text)
                 srcList?.forEach {
                     val vFile = BookHelp.getImage(book, it.src)
@@ -263,7 +304,7 @@ class ExportBookService : BaseService() {
                 }
             }
         }
-        if (AppConfig.exportToWebDav) {
+        if (config.exportToWebDav) {
             // 导出到webdav
             AppWebDav.exportWebDav(bookDoc.uri, filename)
         }
@@ -271,9 +312,10 @@ class ExportBookService : BaseService() {
 
     private suspend fun getAllContents(
         book: Book,
+        config: ExportConfig,
         append: (text: String, srcList: ArrayList<SrcData>?) -> Unit
     ) = coroutineScope {
-        val useReplace = AppConfig.exportUseReplace && book.getUseReplaceRule()
+        val useReplace = config.useReplace && book.getUseReplaceRule()
         val contentProcessor = ContentProcessor.get(book.name, book.origin)
         val qy = "${book.name}\n${
             getString(R.string.author_show, book.getRealAuthor())
@@ -284,7 +326,7 @@ class ExportBookService : BaseService() {
             )
         }"
         append(qy, null)
-        val threads = if (AppConfig.parallelExportBook) {
+        val threads = if (config.parallel) {
             AppConst.MAX_THREAD
         } else {
             1
@@ -294,7 +336,7 @@ class ExportBookService : BaseService() {
                 emit(chapter)
             }
         }.mapAsync(threads) { chapter ->
-            getExportData(book, chapter, contentProcessor, useReplace)
+            getExportData(book, chapter, contentProcessor, useReplace, config)
         }.collectIndexed { index, result ->
             postEvent(EventBus.EXPORT_BOOK, book.bookUrl)
             exportProgress[book.bookUrl] = index
@@ -307,24 +349,39 @@ class ExportBookService : BaseService() {
         book: Book,
         chapter: BookChapter,
         contentProcessor: ContentProcessor,
-        useReplace: Boolean
+        useReplace: Boolean,
+        config: ExportConfig,
     ): Pair<String, ArrayList<SrcData>?> {
         val content = BookHelp.getContent(book, chapter)
+        val exportContent = content?.let {
+            ExportContentImageProcessor.process(
+                content = it,
+                plainText = config.plainText,
+                filterInteractiveImages = config.filterInteractiveImages,
+            )
+        }
         val content1 = contentProcessor
             .getContent(
                 book,
                 // 不导出vip标识
                 chapter.apply { isVip = false },
-                content ?: if (chapter.isVolume) "" else "null",
-                includeTitle = !AppConfig.exportNoChapterName,
+                exportContent ?: if (chapter.isVolume) "" else "null",
+                includeTitle = config.includeChapterName,
                 useReplace = useReplace,
                 chineseConvert = false,
                 reSegment = false
             ).toString()
-        if (AppConfig.exportPictureFile) {
+            .let {
+                ExportContentImageProcessor.process(
+                    content = it,
+                    plainText = config.plainText,
+                    filterInteractiveImages = config.filterInteractiveImages,
+                )
+            }
+        if (config.exportPictures && !config.plainText) {
             //txt导出图片文件
             val srcList = arrayListOf<SrcData>()
-            content?.split("\n")?.forEachIndexed { index, text ->
+            content1.split("\n").forEachIndexed { index, text ->
                 val matcher = AppPattern.imgPattern.matcher(text)
                 while (matcher.find()) {
                     matcher.group(1)?.let {
@@ -342,14 +399,14 @@ class ExportBookService : BaseService() {
     /**
      * 导出Epub
      */
-    private suspend fun exportEpub(path: String, book: Book) {
+    private suspend fun exportEpub(path: String, book: Book, config: ExportConfig) {
         exportMsg.remove(book.bookUrl)
         postEvent(EventBus.EXPORT_BOOK, book.bookUrl)
         val fileDoc = FileDoc.fromDir(path)
-        exportEpub(fileDoc, book)
+        exportEpub(fileDoc, book, config)
     }
 
-    private suspend fun exportEpub(fileDoc: FileDoc, book: Book) {
+    private suspend fun exportEpub(fileDoc: FileDoc, book: Book, config: ExportConfig) {
         val filename = book.getExportFileName("epub")
         fileDoc.find(filename)?.delete()
 
@@ -358,36 +415,48 @@ class ExportBookService : BaseService() {
         //set metadata
         setEpubMetadata(book, epubBook)
         //set cover
-        setCover(book, epubBook)
+        val hasCover = setCover(book, epubBook)
         //set css
-        val contentModel = setAssets(fileDoc, book, epubBook)
+        val contentModel = setAssets(fileDoc, book, epubBook, hasCover)
 
         //设置正文
-        setEpubContent(contentModel, book, epubBook)
+        setEpubContent(contentModel, book, epubBook, config)
 
         val bookDoc = fileDoc.createFileIfNotExist(filename)
         bookDoc.openOutputStream().getOrThrow().buffered().use { bookOs ->
             EpubWriter().write(epubBook, bookOs)
         }
 
-        if (AppConfig.exportToWebDav) {
+        if (config.exportToWebDav) {
             // 导出到webdav
             AppWebDav.exportWebDav(bookDoc.uri, filename)
         }
     }
 
-    private fun setAssets(doc: FileDoc, book: Book, epubBook: EpubBook): String {
+    private fun setAssets(
+        doc: FileDoc,
+        book: Book,
+        epubBook: EpubBook,
+        hasCover: Boolean,
+    ): String {
         val customPath = doc.find("Asset")
         val contentModel = if (customPath == null) {//使用内置模板
-            setAssets(book, epubBook)
+            setAssets(book, epubBook, hasCover)
         } else {//外部模板
-            setAssetsExternal(customPath, book, epubBook)
+            setAssetsExternal(customPath, book, epubBook, hasCover)
         }
 
         return contentModel
     }
 
-    private fun setAssetsExternal(doc: FileDoc, book: Book, epubBook: EpubBook): String {
+    private fun setAssetsExternal(
+        doc: FileDoc,
+        book: Book,
+        epubBook: EpubBook,
+        hasCover: Boolean,
+    ): String {
+        val hasExternalCover = doc.find("Images")?.find("cover.jpg") != null
+        val canReferenceCover = hasCover || hasExternalCover
         var contentModel = ""
         doc.list()!!.forEach { folder ->
             if (folder.isDir && folder.name == "Text") {
@@ -413,7 +482,7 @@ class ExportBookService : BaseService() {
                                     book.getDisplayIntro(),
                                     book.kind,
                                     book.wordCount,
-                                    file.readText(),
+                                    file.readText().withoutMissingEpubCover(canReferenceCover),
                                     "${folder.name}/${file.name}"
                                 )
                             )
@@ -454,7 +523,7 @@ class ExportBookService : BaseService() {
         return contentModel
     }
 
-    private fun setAssets(book: Book, epubBook: EpubBook): String {
+    private fun setAssets(book: Book, epubBook: EpubBook, hasCover: Boolean): String {
         epubBook.resources.add(
             Resource(
                 appCtx.assets.open("epub/fonts.css").readBytes(),
@@ -481,7 +550,8 @@ class ExportBookService : BaseService() {
                 book.getDisplayIntro(),
                 book.kind,
                 book.wordCount,
-                String(appCtx.assets.open("epub/cover.html").readBytes()),
+                String(appCtx.assets.open("epub/cover.html").readBytes())
+                    .withoutMissingEpubCover(hasCover),
                 "Text/cover.html"
             )
         )
@@ -500,32 +570,73 @@ class ExportBookService : BaseService() {
         return String(appCtx.assets.open("epub/chapter.html").readBytes())
     }
 
-    private fun setCover(book: Book, epubBook: EpubBook) {
-        kotlin.runCatching {
-            val file = Glide.with(this)
-                .asFile()
-                .load(book.getDisplayCover())
-                .submit()
-                .get()
-            val provider = LazyResourceProvider { _ ->
-                file.inputStream()
-            }
-            epubBook.coverImage = LazyResource(provider, "Images/cover.jpg")
+    private fun setCover(book: Book, epubBook: EpubBook): Boolean {
+        val coverPath = book.getDisplayCover()?.takeIf { it.isNotBlank() } ?: return false
+        val coverTarget = ImageLoader.loadBitmap(this, coverPath)
+            .disallowHardwareConfig()
+            .submit()
+        return kotlin.runCatching {
+            val jpegData = coverTarget.get().toJpegBytes()
+            epubBook.coverImage = Resource(jpegData, EPUB_COVER_HREF)
+            true
         }.onFailure {
             AppLog.put("获取书籍封面出错\n${it.localizedMessage}", it)
+        }.getOrDefault(false).also {
+            Glide.with(this).clear(coverTarget)
         }
+    }
+
+    private fun Bitmap.toJpegBytes(): ByteArray {
+        val jpegBitmap = if (hasAlpha()) {
+            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { target ->
+                Canvas(target).apply {
+                    drawColor(AndroidColor.WHITE)
+                    drawBitmap(this@toJpegBytes, 0f, 0f, null)
+                }
+            }
+        } else {
+            this
+        }
+        return try {
+            ByteArrayOutputStream().use { output ->
+                check(jpegBitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)) {
+                    "封面转换为 JPEG 失败"
+                }
+                output.toByteArray()
+            }
+        } finally {
+            if (jpegBitmap !== this) jpegBitmap.recycle()
+        }
+    }
+
+    private fun String.withoutMissingEpubCover(hasCover: Boolean): String {
+        if (hasCover) return this
+        return replace(
+            Regex(
+                pattern = """<div\s+class=["']pic["'][^>]*>\s*<img\b[^>]*cover\.jpg[^>]*>\s*</div>""",
+                options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+            ),
+            "",
+        ).replace(
+            Regex(
+                pattern = """<img\b[^>]*cover\.jpg[^>]*>""",
+                options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+            ),
+            "",
+        )
     }
 
     private suspend fun setEpubContent(
         contentModel: String,
         book: Book,
-        epubBook: EpubBook
+        epubBook: EpubBook,
+        config: ExportConfig,
     ) = coroutineScope {
         //正文
-        val useReplace = AppConfig.exportUseReplace && book.getUseReplaceRule()
+        val useReplace = config.useReplace && book.getUseReplaceRule()
         val contentProcessor = ContentProcessor.get(book.name, book.origin)
         val replaceBook = book.toReplaceBook()
-        val threads = if (AppConfig.parallelExportBook) {
+        val threads = if (config.parallel) {
             AppConst.MAX_THREAD
         } else {
             1
@@ -537,9 +648,16 @@ class ExportBookService : BaseService() {
             }
         }.mapAsyncIndexed(threads) { index, chapter ->
             val content = BookHelp.getContent(book, chapter)
+            val filteredContent = content?.let {
+                ExportContentImageProcessor.process(
+                    content = it,
+                    plainText = false,
+                    filterInteractiveImages = config.filterInteractiveImages,
+                )
+            }
             val (contentFix, resources) = fixPic(
                 book,
-                content ?: if (chapter.isVolume) "" else "null",
+                filteredContent ?: if (chapter.isVolume) "" else "null",
                 chapter
             )
             // 不导出vip标识
@@ -554,6 +672,13 @@ class ExportBookService : BaseService() {
                     chineseConvert = false,
                     reSegment = false
                 ).toString()
+                .let {
+                    ExportContentImageProcessor.process(
+                        content = it,
+                        plainText = false,
+                        filterInteractiveImages = config.filterInteractiveImages,
+                    )
+                }
             val title = chapter.run {
                 // 不导出vip标识
                 isVip = false
@@ -643,7 +768,12 @@ class ExportBookService : BaseService() {
      * @param scope 导出范围
      * @param size epub 文件包含最大章节数
      */
-    inner class CustomExporter(scopeStr: String, private val size: Int) {
+    inner class CustomExporter(
+        scopeStr: String,
+        private val size: Int,
+        private val useReplaceRule: Boolean,
+        private val exportToWebDav: Boolean,
+    ) {
 
         private var scope = parseScope(scopeStr)
 
@@ -710,7 +840,7 @@ class ExportBookService : BaseService() {
             updateProgress: (chapterList: MutableList<BookChapter>, index: Int) -> Unit
         ) {
             //正文
-            val useReplace = AppConfig.exportUseReplace && book.getUseReplaceRule()
+            val useReplace = useReplaceRule && book.getUseReplaceRule()
             val contentProcessor = ContentProcessor.get(book.name, book.origin)
             val replaceBook = book.toReplaceBook()
             var chapterList: MutableList<BookChapter> = ArrayList()
@@ -797,9 +927,9 @@ class ExportBookService : BaseService() {
                 //set metadata
                 setEpubMetadata(book, epubBook)
                 //set cover
-                setCover(book, epubBook)
+                val hasCover = setCover(book, epubBook)
                 //set css
-                contentModel = setAssets(fileDoc, book, epubBook)
+                contentModel = setAssets(fileDoc, book, epubBook, hasCover)
 
                 // add epubBook
                 result.add(Pair(filename, epubBook))
@@ -827,7 +957,7 @@ class ExportBookService : BaseService() {
                     .write(epubBook, bookOs)
             }
 
-            if (AppConfig.exportToWebDav) {
+            if (exportToWebDav) {
                 // 导出到webdav
                 AppWebDav.exportWebDav(bookDoc.uri, filename)
             }
