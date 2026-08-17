@@ -1,11 +1,11 @@
 package io.legado.app.ui.widget.dialog
 
-import android.app.Dialog
 import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.ColorDrawable
 import android.view.ViewGroup
 import android.view.Window
+import androidx.activity.ComponentDialog
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -31,7 +31,7 @@ import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgTheme
 
 @Suppress("unused")
-class WaitDialog(private val dialogContext: Context) : Dialog(dialogContext) {
+class WaitDialog(private val dialogContext: Context) : ComponentDialog(dialogContext) {
 
     private var message by mutableStateOf(dialogContext.getString(R.string.loading))
 
