@@ -1,6 +1,7 @@
 package io.legado.app.help
 
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.KeyboardAssist
@@ -15,21 +16,52 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.printOnDebug
+import io.legado.app.utils.splitNotBlank
 import splitties.init.appCtx
 import java.io.File
 
 object DefaultData {
 
+    private const val legacySourceRepositoryUrl = "https://www.yckceo.com"
+    private const val sourceRepositoryName = "源仓库"
+    private const val legacySourceRepositoryGroup = "ledegao"
+
+    private val legacyDefaultRssGroups = listOf(
+        LegacyDefaultRssGroup(
+            sourceUrl = "https://shuyuan.yiove.com",
+            sourceName = "Yiove 书源仓库",
+            group = "书源",
+        ),
+        LegacyDefaultRssGroup(
+            sourceUrl = "https://pan.miaogongzi.net",
+            sourceName = "Meow云",
+            group = "legado",
+        ),
+        LegacyDefaultRssGroup(
+            sourceUrl = "https://ycoo.net",
+            sourceName = "源社区",
+            group = "ledegao",
+        ),
+    )
+
     fun upVersion() {
-        if (LocalConfig.versionCode < AppConst.appInfo.versionCode) {
+        val isAppUpgrade = LocalConfig.versionCode < AppConst.appInfo.versionCode
+        val isFreshInstall = LocalConfig.versionCode == 0L
+        val shouldUpgradeRssSources = LocalConfig.needUpRssSources
+        if (isAppUpgrade || shouldUpgradeRssSources) {
             Coroutine.async {
-                if (LocalConfig.needUpTxtTocRule) {
+                if (isAppUpgrade && LocalConfig.needUpTxtTocRule) {
                     importDefaultTocRules()
                 }
-                if (LocalConfig.needUpRssSources) {
-                    importDefaultRssSources()
+                if (shouldUpgradeRssSources) {
+                    if (isFreshInstall && appDb.rssSourceDao.size == 0) {
+                        importDefaultRssSources()
+                    } else {
+                        upgradeDefaultRssSources()
+                    }
+                    LocalConfig.markRssSourcesUpdated()
                 }
-                if (LocalConfig.needUpDictRule) {
+                if (isAppUpgrade && LocalConfig.needUpDictRule) {
                     importDefaultDictRules()
                 }
             }.onError {
@@ -105,8 +137,54 @@ object DefaultData {
         appDb.rssSourceDao.insert(*rssSources.toTypedArray())
     }
 
+    private fun upgradeDefaultRssSources() {
+        val replacement = rssSources.singleOrNull { it.sourceName == sourceRepositoryName }
+            ?: return
+        val dao = appDb.rssSourceDao
+        appDb.runInTransaction {
+            val legacy = dao.getByKey(legacySourceRepositoryUrl)
+            if (legacy?.sourceName == sourceRepositoryName) {
+                if (!dao.has(replacement.sourceUrl)) {
+                    dao.insert(
+                        replacement.copy(
+                            enabled = legacy.enabled,
+                            customOrder = legacy.customOrder,
+                            sourceGroup = removeLegacyGroup(
+                                legacy.sourceGroup,
+                                legacySourceRepositoryGroup,
+                            ),
+                        )
+                    )
+                }
+                dao.delete(legacySourceRepositoryUrl)
+            }
+            legacyDefaultRssGroups.forEach { default ->
+                val source = dao.getByKey(default.sourceUrl) ?: return@forEach
+                if (source.sourceName != default.sourceName) return@forEach
+                val sourceGroup = removeLegacyGroup(source.sourceGroup, default.group)
+                if (sourceGroup != source.sourceGroup) {
+                    dao.update(source.copy(sourceGroup = sourceGroup))
+                }
+            }
+        }
+    }
+
+    private fun removeLegacyGroup(sourceGroup: String?, legacyGroup: String): String? {
+        return sourceGroup
+            ?.splitNotBlank(AppPattern.splitGroupRegex)
+            ?.filterNot { it == legacyGroup }
+            ?.joinToString(",")
+            ?.ifBlank { null }
+    }
+
     fun importDefaultDictRules() {
         appDb.dictRuleDao.insert(*dictRules.toTypedArray())
     }
+
+    private data class LegacyDefaultRssGroup(
+        val sourceUrl: String,
+        val sourceName: String,
+        val group: String,
+    )
 
 }
