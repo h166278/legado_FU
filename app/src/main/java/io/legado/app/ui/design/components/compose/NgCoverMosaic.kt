@@ -112,6 +112,16 @@ fun NgCoverMosaic(
                 visibleItemCount = visibleItemCount,
                 metrics = metrics,
                 containerCorner = metrics.folderContainerCorner,
+                containerAlpha = when {
+                    NgTheme.snapshot.isEInk -> 1f
+                    NgTheme.snapshot.isDark -> 0.48f
+                    else -> 0.32f
+                },
+                borderAlpha = when {
+                    NgTheme.snapshot.isEInk -> 1f
+                    NgTheme.snapshot.isDark -> 0.30f
+                    else -> 0.34f
+                },
                 showEmptySlots = false,
                 itemContent = itemContent,
                 modifier = Modifier
@@ -141,6 +151,8 @@ private fun CoverMosaicFrame(
     visibleItemCount: Int,
     metrics: NgCoverMosaicMetrics,
     containerCorner: Dp,
+    containerAlpha: Float = 0.88f,
+    borderAlpha: Float = 0.26f,
     showEmptySlots: Boolean,
     itemContent: @Composable (index: Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -150,10 +162,10 @@ private fun CoverMosaicFrame(
     Box(
         modifier = modifier
             .clip(containerShape)
-            .background(Color(NgTheme.colors.cardContainer).copy(alpha = 0.88f))
+            .background(Color(NgTheme.colors.cardContainer).copy(alpha = containerAlpha))
             .border(
                 width = 0.8.dp,
-                color = Color(NgTheme.colors.outlineVariant).copy(alpha = 0.26f),
+                color = Color(NgTheme.colors.outlineVariant).copy(alpha = borderAlpha),
                 shape = containerShape,
             ),
     ) {
