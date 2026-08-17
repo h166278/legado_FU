@@ -97,6 +97,11 @@ class RssSourceActivity :
                     }
                     RssSourceTextDialog(
                         title = title,
+                        placeholder = if (request == SourceInputRequest.IMPORT_ONLINE) {
+                            getString(R.string.rss_source_import_url_hint)
+                        } else {
+                            title
+                        },
                         suggestions = if (request == SourceInputRequest.IMPORT_ONLINE) {
                             importHistory()
                         } else {

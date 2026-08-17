@@ -1,20 +1,23 @@
 package io.legado.app.ui.rss.source.edit
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,12 +28,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,9 +46,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.data.entities.RssSource
-import io.legado.app.ui.design.components.compose.NgFormSelectField
+import io.legado.app.ui.design.components.compose.NgFlatActionRail
+import io.legado.app.ui.design.components.compose.NgFlatActionRailItem
+import io.legado.app.ui.design.components.compose.NgFlatActionRailVariant
+import io.legado.app.ui.design.components.compose.NgFloatingTabBar
+import io.legado.app.ui.design.components.compose.NgFloatingTabSpec
+import io.legado.app.ui.design.components.compose.NgFormGroup
+import io.legado.app.ui.design.components.compose.NgFormGroupDivider
+import io.legado.app.ui.design.components.compose.NgFormSelectMenuVariant
 import io.legado.app.ui.design.components.compose.NgFormSelectOption
-import io.legado.app.ui.design.components.compose.NgFormSwitchRow
+import io.legado.app.ui.design.components.compose.NgFormSelectRow
+import io.legado.app.ui.design.components.compose.NgFormSwitchSettingRow
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.rss.RssPageScaffold
 import io.legado.app.ui.rss.RssToolbarAction
@@ -115,21 +131,21 @@ internal fun RssSourceEditScreen(
             RssToolbarAction(
                 R.id.menu_clear_cookie,
                 R.string.cookie,
-                R.drawable.ic_baseline_close
+                R.drawable.ic_clear
             )
         )
         add(RssToolbarAction(R.id.menu_copy_source, R.string.copy_source, R.drawable.ic_copy))
-        add(RssToolbarAction(R.id.menu_paste_source, R.string.paste_source, R.drawable.ic_import))
+        add(RssToolbarAction(R.id.menu_paste_source, R.string.paste_source, R.drawable.ic_paste))
         add(
             RssToolbarAction(
                 R.id.menu_qr_code_camera,
                 R.string.import_by_qr_code,
-                R.drawable.ic_import
+                R.drawable.ic_scan
             )
         )
         add(RssToolbarAction(R.id.menu_share_str, R.string.str_share, R.drawable.ic_share))
-        add(RssToolbarAction(R.id.menu_share_qr, R.string.qr_share, R.drawable.ic_share))
-        add(RssToolbarAction(R.id.menu_log, R.string.log, R.drawable.ic_code))
+        add(RssToolbarAction(R.id.menu_share_qr, R.string.qr_share, R.drawable.ic_qr_code))
+        add(RssToolbarAction(R.id.menu_log, R.string.log, R.drawable.ic_history))
         add(
             RssToolbarAction(
                 R.id.menu_network_log,
@@ -166,8 +182,13 @@ internal fun RssSourceEditScreen(
         Column(Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(
+                    start = 14.dp,
+                    top = 12.dp,
+                    end = 14.dp,
+                    bottom = 14.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
                     SourceGlobalOptions(
@@ -186,73 +207,12 @@ internal fun RssSourceEditScreen(
                         onAction(RssSourceEditAction.SelectTab(it))
                     }
                 }
-                items(editFields, key = RssSourceEditField::key) { field ->
-                    if (field.boolean) {
-                        NgFormSwitchRow(
-                            title = field.label,
-                            checked = field.value.toBoolean(),
-                            onCheckedChange = {
-                                onAction(RssSourceEditAction.UpdateField(field.key, it.toString()))
-                            }
-                        )
-                    } else {
-                        var fieldValue by remember(field.key) {
-                            mutableStateOf(TextFieldValue(field.value))
-                        }
-                        LaunchedEffect(field.value) {
-                            if (fieldValue.text != field.value) {
-                                fieldValue = TextFieldValue(
-                                    text = field.value,
-                                    selection = TextRange(field.value.length)
-                                )
-                            }
-                        }
-                        OutlinedTextField(
-                            value = fieldValue,
-                            onValueChange = { next ->
-                                fieldValue = next
-                                onAction(RssSourceEditAction.UpdateField(field.key, next.text))
-                                onAction(
-                                    RssSourceEditAction.FocusField(
-                                        field.key,
-                                        next.selection.start,
-                                        next.selection.end
-                                    )
-                                )
-                            },
-                            label = { Text(field.label) },
-                            trailingIcon = {
-                                TextButton(
-                                    onClick = {
-                                        onAction(
-                                            RssSourceEditAction.ExpandField(field.key, field.label)
-                                        )
-                                    }
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_code),
-                                        contentDescription = stringResource(R.string.edit_content)
-                                    )
-                                }
-                            },
-                            minLines = if (field.key in compactSourceFields) 1 else 3,
-                            maxLines = if (field.key in compactSourceFields) 3 else 12,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onFocusChanged {
-                                    if (it.isFocused) {
-                                        onAction(
-                                            RssSourceEditAction.FocusField(
-                                                field.key,
-                                                fieldValue.selection.start,
-                                                fieldValue.selection.end
-                                            )
-                                        )
-                                    }
-                                }
-                        )
-                    }
+                item {
+                    SourceEditFieldsGroup(
+                        fields = editFields,
+                        selectedTab = selectedTab,
+                        onAction = onAction
+                    )
                 }
             }
             SourceEditorHelpers(onAction)
@@ -269,54 +229,65 @@ private fun SourceGlobalOptions(
 ) {
     val sourceTypes = stringArrayResource(R.array.rss_type)
     val layoutTypes = stringArrayResource(R.array.layout_type)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        NgFormSwitchRow(
-            title = stringResource(R.string.is_enable),
-            checked = source.enabled,
-            onCheckedChange = { onSourceChange(source.copy(enabled = it)) }
-        )
-        NgFormSwitchRow(
-            title = stringResource(R.string.single_url),
-            checked = source.singleUrl,
-            onCheckedChange = { onSourceChange(source.copy(singleUrl = it)) }
-        )
-        NgFormSwitchRow(
-            title = stringResource(R.string.auto_save_cookie),
-            checked = source.enabledCookieJar == true,
-            onCheckedChange = { onSourceChange(source.copy(enabledCookieJar = it)) }
-        )
-        NgFormSwitchRow(
-            title = stringResource(R.string.enable_preload),
-            checked = source.preload,
-            onCheckedChange = { onSourceChange(source.copy(preload = it)) }
-        )
-        NgFormSwitchRow(
-            title = stringResource(R.string.auto_complete),
-            checked = autoComplete,
-            onCheckedChange = onAutoCompleteChange
-        )
-        NgFormSelectField(
-            label = stringResource(R.string.book_type),
-            selectedValue = source.type.coerceIn(sourceTypes.indices).toString(),
-            options = sourceTypes.mapIndexed { index, value ->
-                NgFormSelectOption(value, index.toString())
-            },
-            onValueChange = {
-                onSourceChange(source.copy(type = it.toIntOrNull() ?: 0))
-            },
-            arrowIcon = painterResource(R.drawable.ic_arrow_drop_down)
-        )
-        NgFormSelectField(
-            label = stringResource(R.string.layout_type),
-            selectedValue = source.articleStyle.coerceIn(layoutTypes.indices).toString(),
-            options = layoutTypes.mapIndexed { index, value ->
-                NgFormSelectOption(value, index.toString())
-            },
-            onValueChange = {
-                onSourceChange(source.copy(articleStyle = it.toIntOrNull() ?: 0))
-            },
-            arrowIcon = painterResource(R.drawable.ic_arrow_drop_down)
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        NgFormGroup(title = stringResource(R.string.rss_source_general_settings)) {
+            NgFormSwitchSettingRow(
+                title = stringResource(R.string.is_enable),
+                checked = source.enabled,
+                onCheckedChange = { onSourceChange(source.copy(enabled = it)) }
+            )
+            NgFormGroupDivider()
+            NgFormSwitchSettingRow(
+                title = stringResource(R.string.single_url),
+                checked = source.singleUrl,
+                onCheckedChange = { onSourceChange(source.copy(singleUrl = it)) }
+            )
+            NgFormGroupDivider()
+            NgFormSwitchSettingRow(
+                title = stringResource(R.string.auto_save_cookie),
+                checked = source.enabledCookieJar == true,
+                onCheckedChange = { onSourceChange(source.copy(enabledCookieJar = it)) }
+            )
+            NgFormGroupDivider()
+            NgFormSwitchSettingRow(
+                title = stringResource(R.string.enable_preload),
+                checked = source.preload,
+                onCheckedChange = { onSourceChange(source.copy(preload = it)) }
+            )
+            NgFormGroupDivider()
+            NgFormSwitchSettingRow(
+                title = stringResource(R.string.auto_complete),
+                checked = autoComplete,
+                onCheckedChange = onAutoCompleteChange
+            )
+        }
+        NgFormGroup(title = stringResource(R.string.rss_source_display_settings)) {
+            NgFormSelectRow(
+                title = stringResource(R.string.book_type),
+                selectedValue = source.type.coerceIn(sourceTypes.indices).toString(),
+                options = sourceTypes.mapIndexed { index, value ->
+                    NgFormSelectOption(value, index.toString())
+                },
+                onValueChange = {
+                    onSourceChange(source.copy(type = it.toIntOrNull() ?: 0))
+                },
+                arrowIcon = painterResource(R.drawable.ic_arrow_drop_down),
+                menuVariant = NgFormSelectMenuVariant.END_ANCHORED_COMPACT
+            )
+            NgFormGroupDivider()
+            NgFormSelectRow(
+                title = stringResource(R.string.layout_type),
+                selectedValue = source.articleStyle.coerceIn(layoutTypes.indices).toString(),
+                options = layoutTypes.mapIndexed { index, value ->
+                    NgFormSelectOption(value, index.toString())
+                },
+                onValueChange = {
+                    onSourceChange(source.copy(articleStyle = it.toIntOrNull() ?: 0))
+                },
+                arrowIcon = painterResource(R.drawable.ic_arrow_drop_down),
+                menuVariant = NgFormSelectMenuVariant.END_ANCHORED_COMPACT
+            )
+        }
     }
 }
 
@@ -326,60 +297,210 @@ private fun SourceEditTabs(selected: Int, onSelect: (Int) -> Unit) {
         stringResource(R.string.source_tab_base),
         stringResource(R.string.source_tab_start),
         stringResource(R.string.source_tab_list),
-        "WEB_VIEW"
+        stringResource(R.string.source_tab_web_view)
     )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        titles.forEachIndexed { index, title ->
-            Surface(
-                onClick = { onSelect(index) },
-                shape = RoundedCornerShape(15.dp),
-                color = Color(
-                    if (selected == index) NgTheme.colors.selectedContainer
-                    else NgTheme.colors.surfaceContainerLow
+    NgFloatingTabBar(
+        items = titles.map { NgFloatingTabSpec(text = it) },
+        selectedIndex = selected,
+        onTabSelected = onSelect
+    )
+}
+
+@Composable
+private fun SourceEditFieldsGroup(
+    fields: List<RssSourceEditField>,
+    selectedTab: Int,
+    onAction: (RssSourceEditAction) -> Unit
+) {
+    val titles = listOf(
+        stringResource(R.string.source_tab_base),
+        stringResource(R.string.source_tab_start),
+        stringResource(R.string.source_tab_list),
+        stringResource(R.string.source_tab_web_view)
+    )
+    NgFormGroup(title = titles[selectedTab.coerceIn(titles.indices)]) {
+        fields.forEachIndexed { index, field ->
+            if (field.boolean) {
+                NgFormSwitchSettingRow(
+                    title = field.label,
+                    checked = field.value.toBoolean(),
+                    onCheckedChange = {
+                        onAction(
+                            RssSourceEditAction.UpdateField(
+                                field.key,
+                                it.toString()
+                            )
+                        )
+                    }
                 )
-            ) {
-                Text(
-                    text = title,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    color = Color(NgTheme.colors.onSurface),
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            } else {
+                RssSourceEditorTextField(
+                    field = field,
+                    onAction = onAction
                 )
+            }
+            if (index < fields.lastIndex) {
+                NgFormGroupDivider()
             }
         }
     }
 }
 
 @Composable
-private fun SourceEditorHelpers(onAction: (RssSourceEditAction) -> Unit) {
-    Row(
+private fun RssSourceEditorTextField(
+    field: RssSourceEditField,
+    onAction: (RssSourceEditAction) -> Unit
+) {
+    var fieldValue by remember(field.key) {
+        mutableStateOf(TextFieldValue(field.value))
+    }
+    LaunchedEffect(field.value) {
+        if (fieldValue.text != field.value) {
+            fieldValue = TextFieldValue(
+                text = field.value,
+                selection = TextRange(field.value.length)
+            )
+        }
+    }
+    val compact = field.key in compactSourceFields
+    val fieldShape = RoundedCornerShape(NgTheme.shapes.smallDp.dp)
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 10.dp)
     ) {
-        TextButton(onClick = { onAction(RssSourceEditAction.InsertUrlOption) }) {
-            Text("插入URL参数", maxLines = 1)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = field.label,
+                modifier = Modifier.weight(1f),
+                color = Color(NgTheme.colors.onSurfaceVariant),
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        onAction(RssSourceEditAction.ExpandField(field.key, field.label))
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_code),
+                    contentDescription = stringResource(R.string.edit_content),
+                    tint = Color(NgTheme.colors.primary),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
-        TextButton(onClick = { onAction(RssSourceEditAction.Help) }) {
-            Text("订阅源教程", maxLines = 1)
-        }
-        TextButton(onClick = { onAction(RssSourceEditAction.JsHelp) }) {
-            Text("JS教程", maxLines = 1)
-        }
-        TextButton(onClick = { onAction(RssSourceEditAction.RegexHelp) }) {
-            Text("正则教程", maxLines = 1)
-        }
-        TextButton(onClick = { onAction(RssSourceEditAction.SelectFile) }) {
-            Text("选择文件", maxLines = 1)
-        }
+        BasicTextField(
+            value = fieldValue,
+            onValueChange = { next ->
+                fieldValue = next
+                onAction(RssSourceEditAction.UpdateField(field.key, next.text))
+                onAction(
+                    RssSourceEditAction.FocusField(
+                        field.key,
+                        next.selection.start,
+                        next.selection.end
+                    )
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .heightIn(
+                    min = if (compact) 38.dp else 68.dp,
+                    max = if (compact) 62.dp else 132.dp
+                )
+                .clip(fieldShape)
+                .background(Color(NgTheme.colors.inputContainer))
+                .border(
+                    width = 0.8.dp,
+                    color = Color(NgTheme.colors.outline),
+                    shape = fieldShape
+                )
+                .onFocusChanged {
+                    if (it.isFocused) {
+                        onAction(
+                            RssSourceEditAction.FocusField(
+                                field.key,
+                                fieldValue.selection.start,
+                                fieldValue.selection.end
+                            )
+                        )
+                    }
+                }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            textStyle = TextStyle(
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 14.sp,
+                lineHeight = 19.sp
+            ),
+            cursorBrush = SolidColor(Color(NgTheme.colors.primary)),
+            minLines = if (compact) 1 else 2,
+            maxLines = if (compact) 2 else 6
+        )
+    }
+}
+
+@Composable
+private fun SourceEditorHelpers(onAction: (RssSourceEditAction) -> Unit) {
+    val items = listOf(
+        NgFlatActionRailItem(
+            iconRes = R.drawable.ic_code,
+            label = stringResource(R.string.rss_source_tool_url),
+            contentDescription = stringResource(R.string.rss_source_insert_url_option)
+        ),
+        NgFlatActionRailItem(
+            iconRes = R.drawable.ic_help,
+            label = stringResource(R.string.rss_source_tool_guide),
+            contentDescription = stringResource(R.string.rss_source_tutorial)
+        ),
+        NgFlatActionRailItem(
+            iconRes = R.drawable.ic_code,
+            label = "JS",
+            contentDescription = stringResource(R.string.rss_source_js_tutorial)
+        ),
+        NgFlatActionRailItem(
+            iconRes = R.drawable.ic_find_replace,
+            label = stringResource(R.string.rss_source_tool_regex),
+            contentDescription = stringResource(R.string.rss_source_regex_tutorial)
+        ),
+        NgFlatActionRailItem(
+            iconRes = R.drawable.ic_folder_open,
+            label = stringResource(R.string.rss_source_tool_file),
+            contentDescription = stringResource(R.string.select_file)
+        )
+    )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = colorResource(R.color.ng_surface_card),
+        tonalElevation = 0.dp,
+        shadowElevation = if (NgTheme.snapshot.isEInk) 0.dp else 2.dp
+    ) {
+        NgFlatActionRail(
+            items = items,
+            onItemClick = { index ->
+                onAction(
+                    when (index) {
+                        0 -> RssSourceEditAction.InsertUrlOption
+                        1 -> RssSourceEditAction.Help
+                        2 -> RssSourceEditAction.JsHelp
+                        3 -> RssSourceEditAction.RegexHelp
+                        else -> RssSourceEditAction.SelectFile
+                    }
+                )
+            },
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            variant = NgFlatActionRailVariant.SEGMENTED
+        )
     }
 }
 

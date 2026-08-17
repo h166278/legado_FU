@@ -31,16 +31,26 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.design.theme.NgTheme
 
+enum class NgManagementDrawerPanelVariant {
+    DEFAULT,
+    COMPACT,
+}
+
 /** NG 管理抽屉中的不透明连续列表承载面。 */
 @Composable
 fun NgManagementDrawerPanel(
     modifier: Modifier = Modifier,
+    variant: NgManagementDrawerPanelVariant = NgManagementDrawerPanelVariant.DEFAULT,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val cornerRadius = when (variant) {
+        NgManagementDrawerPanelVariant.DEFAULT -> NgTheme.shapes.largeDp.dp
+        NgManagementDrawerPanelVariant.COMPACT -> NgTheme.shapes.mediumDp.dp
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(NgTheme.shapes.largeDp.dp))
+            .clip(RoundedCornerShape(cornerRadius))
             .background(colorResource(R.color.ng_surface_card)),
         content = content,
     )
