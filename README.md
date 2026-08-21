@@ -1,20 +1,92 @@
 # 阅融 Legafuse
 
-> 集成各版本优点的开源阅读器 — 基于 [legado_NG](https://github.com/joestar817/legado_NG) 演进。
+> 基于 [legado_NG](https://github.com/joestar817/legado_NG) 合并演进的开源阅读器，集成多项面向实际阅读体验的改进。
 
-## 特性
+本仓库包含 `joestar817/legado_NG` 最新 `main` 的完整代码，并在此基础上维护阅融自己的功能分支。上游功能、书源规则、WebDAV、TXT/EPUB 阅读和规则引擎等能力继续保留。
 
-- **阿拉伯章节序号自动转中文章节号**：目录、阅读页、书架统一显示 `第一章`、`第九百三十八章`，网络书源与本地 TXT 均生效（`1.` → `第一章`，`10.` → `第十章`，`938.` → `第九百三十八章`；带「第/卷」或非数字的标题不受影响）
-- 继承 legado_NG 全部能力：TXT 目录规则支持 `replacement` JavaScript、WebDAV 同步、规则引擎、自定义书源等
-- 独立包名 `io.legado.legafuse`，可与官方阅读、阅读NG 共存安装
+## 阅融独有功能
+
+以下功能是本项目相对上游 `legado_NG` 增加或整合的主要改动。
+
+### 1. Lottie 高级章节标题
+
+阅读页支持使用 Lottie 动画作为章节标题样式，让章节切换和标题展示更具表现力。
+
+- 支持 Lottie 高级章节标题资源。
+- 支持标题样式包的导入、管理和应用。
+- 对 Lottie 资源解析和加载失败进行保护，避免异常资源导致阅读页崩溃。
+- 预览和正式阅读使用一致的字体资源处理逻辑。
+
+### 2. 高级标题字号与字重调节
+
+高级章节标题不再只能使用固定样式，可以直接调整标题的显示比例和字体粗细。
+
+- 提供标题字号滑块，支持 `50%` 至 `200%` 的显示比例。
+- 提供标题字重调节，适配不同字体和不同阅读主题。
+- 修改设置后即时生效，不需要重新进入阅读页。
+- 标题预览与实际阅读效果保持同步。
+
+### 3. 阿拉伯章节序号自动转换为中文
+
+对目录、阅读页和书架中的数字章节标题进行统一转换，提升中文网文阅读体验。
+
+```text
+1.       -> 第一章
+10.      -> 第十章
+938.     -> 第九百三十八章
+```
+
+- 网络书源和本地 TXT 均支持。
+- 目录、阅读页、书架统一显示转换后的章节号。
+- 已有“第X章”“卷”“非数字标题”等内容不会被重复改写。
+- 转换逻辑按完整数字处理，不会把章节编号简单拆成逐位数字。
+
+### 4. 排版导入与导出修复
+
+修复阅读排版包在导入、导出和备份恢复过程中的配置丢失问题。
+
+- 修复排版导出时字段丢失的问题。
+- 跟随共享排版时，完整导出共享配置，不再与预设配置错误混合。
+- 导入排版包后，预设配置会正确同步为共享配置。
+- 重新导入同一排版包时会校验资源完整性，缺失资源会自动补装。
+- 备份和恢复会携带 `read_style_packages/`，换机或清理数据后排版字体不再无故丢失。
+- 字体加载失败时不会清空已经保存的排版字体设置，避免设置被永久重置为系统默认字体。
+
+### 5. 唤醒菜单保留页眉
+
+优化阅读页唤醒菜单的显示行为：打开菜单时保留页面顶部页眉，不再因为菜单显隐而错误隐藏页眉。
+
+该修复同时覆盖不同阅读页面实现，包括 `PageView` 和 `ReadView`，减少阅读过程中顶部状态和导航信息突然消失的问题。
+
+### 6. 独立应用标识
+
+阅融使用独立的应用名称和包名，可以与官方阅读、阅读NG 并行安装，方便对比体验和迁移数据。
+
+```text
+应用名：阅融 Legafuse
+包名：io.legado.legafuse
+```
 
 ## 与上游的区别
 
-| | 官方 Legado | legado_NG | 阅融 |
-|---|---|---|---|
-| 包名 | io.legado.app | io.legado.app.ng | io.legado.legafuse |
-| 应用名 | 阅读 | 阅读NG | 阅融 |
-| 中文章节号 | ✗ | 仅 TXT 目录规则 | 全局自动 |
+| 功能 | 官方 Legado | legado_NG | 阅融 Legafuse |
+|---|---:|---:|---:|
+| Lottie 高级章节标题 | - | 基础支持/持续演进 | 完整整合与稳定性修复 |
+| 高级标题字号滑块 | - | - | `50%` - `200%` |
+| 高级标题字重调节 | - | - | 支持并即时生效 |
+| 阿拉伯章节号转中文 | - | 局部规则支持 | 目录、阅读页、书架全局支持 |
+| 排版导入/导出与字体恢复 | 基础能力 | 部分支持 | 完整修复与资源完整性校验 |
+| 唤醒菜单保留页眉 | - | - | `PageView` / `ReadView` 均支持 |
+| 独立应用包名 | 官方包名 | NG 包名 | `io.legado.legafuse` |
+
+## 合并与冲突修复
+
+本项目已完成上游代码与阅融功能的合并，并处理阅读页面相关冲突：
+
+- 解决 `ReadView.kt` 中 `upTipVisibility` 方法冲突。
+- 解决 `ReadView.kt` 中 `setTextHighlights` 方法冲突。
+- 保留上游最新代码，同时保留阅融的高级标题、排版、章节号和阅读页行为改进。
+- 合并参考提交：`83fff9339`。
 
 ## 构建
 
@@ -22,14 +94,19 @@
 ./gradlew assembleAppRelease
 ```
 
-GitHub Actions 已配置（`test.yml` / `release.yml`），推送即构建。
+GitHub Actions 已配置 `test.yml` 和 `release.yml`，推送到 `main` 后会自动触发构建。
 
-签名：使用仓库 Secrets `RELEASE_KEY_STORE`（base64 的 jks）、`RELEASE_KEY_ALIAS`、`RELEASE_KEY_PASSWORD`、`RELEASE_STORE_PASSWORD`；未配置时构建为未签名 release。
+未配置签名 Secrets 时，Actions 会生成未签名的 release APK。配置签名需要以下仓库 Secrets：
+
+- `RELEASE_KEY_STORE`：经过 base64 编码的 JKS 文件
+- `RELEASE_KEY_ALIAS`
+- `RELEASE_KEY_PASSWORD`
+- `RELEASE_STORE_PASSWORD`
 
 ## 致谢
 
-- [gedoor/legado](https://github.com/gedoor/legado) — 开源阅读
-- [joestar817/legado_NG](https://github.com/joestar817/legado_NG) — 本仓库基础
+- [gedoor/legado](https://github.com/gedoor/legado) — 开源阅读项目
+- [joestar817/legado_NG](https://github.com/joestar817/legado_NG) — 本项目的上游基础
 
 ## License
 
