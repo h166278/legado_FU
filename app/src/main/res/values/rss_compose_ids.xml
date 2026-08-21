@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- RSS Compose 页面间复用的稳定操作 ID，不再依赖传统 MenuInflater。 -->
+    <item name="menu_search" type="id" />
+    <item name="menu_login" type="id" />
+    <item name="menu_refresh_sort" type="id" />
+    <item name="menu_set_source_variable" type="id" />
+    <item name="menu_edit_source" type="id" />
+    <item name="menu_switch_layout" type="id" />
+    <item name="menu_read_record" type="id" />
+    <item name="menu_clear" type="id" />
+    <item name="menu_group" type="id" />
+    <item name="menu_del_group" type="id" />
+    <item name="menu_del_all" type="id" />
+    <item name="menu_rss_refresh" type="id" />
+    <item name="menu_rss_star" type="id" />
+    <item name="menu_share_it" type="id" />
+    <item name="menu_aloud" type="id" />
+    <item name="menu_browser_open" type="id" />
+    <item name="menu_log" type="id" />
+    <item name="menu_network_log" type="id" />
+    <item name="menu_list_src" type="id" />
+    <item name="menu_content_src" type="id" />
+    <item name="menu_top" type="id" />
+    <item name="menu_bottom" type="id" />
+    <item name="menu_del" type="id" />
+    <item name="menu_enable_selection" type="id" />
+    <item name="menu_disable_selection" type="id" />
+    <item name="menu_add_group" type="id" />
+    <item name="menu_remove_group" type="id" />
+    <item name="menu_top_sel" type="id" />
+    <item name="menu_bottom_sel" type="id" />
+    <item name="menu_export_selection" type="id" />
+    <item name="menu_share_source" type="id" />
+    <item name="menu_check_selected_interval" type="id" />
+    <item name="menu_group_manage" type="id" />
+    <item name="menu_enabled_group" type="id" />
+    <item name="menu_disabled_group" type="id" />
+    <item name="menu_group_login" type="id" />
+    <item name="menu_group_null" type="id" />
+    <item name="source_group" type="id" />
+    <item name="menu_add" type="id" />
+    <item name="menu_import_local" type="id" />
+    <item name="menu_import_onLine" type="id" />
+    <item name="menu_import_qr" type="id" />
+    <item name="menu_import_default" type="id" />
+    <item name="menu_help" type="id" />
+    <item name="menu_edit" type="id" />
+    <item name="menu_disable" type="id" />
+</resources>

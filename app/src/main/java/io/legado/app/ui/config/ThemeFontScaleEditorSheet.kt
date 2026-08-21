@@ -1,0 +1,188 @@
+package io.legado.app.ui.config
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.legado.app.R
+import io.legado.app.help.config.ThemeConfig
+import io.legado.app.ui.design.components.compose.NgSlider
+import io.legado.app.ui.design.components.compose.NgSliderVariant
+import io.legado.app.ui.design.theme.NgTheme
+import java.util.Locale
+
+internal data class ThemeFontScaleEditorState(
+    val scale: Float,
+    val followSystem: Boolean
+)
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+internal fun ThemeFontScaleEditorSheet(
+    state: ThemeFontScaleEditorState,
+    onDismissRequest: () -> Unit,
+    onScaleChanged: (Float) -> Unit,
+    onFollowSystem: () -> Unit,
+    onSave: () -> Unit
+) {
+    val context = LocalContext.current
+    val snapshot = NgTheme.snapshot
+    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetBackground = remember(context, snapshot.isDark) {
+        runCatching {
+            ThemeConfig.getBgImage(context, context.resources.displayMetrics)
+        }.getOrNull()
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        dragHandle = null,
+        containerColor = Color.Transparent,
+        contentColor = Color(snapshot.colors.onSurface),
+        shape = shape
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.28f)
+                .clip(shape)
+                .background(Color(snapshot.colors.drawerContainer))
+        ) {
+            if (sheetBackground != null) {
+                NgDrawerBackground(
+                    drawable = sheetBackground,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            if (snapshot.isDark) {
+                                Color(snapshot.colors.drawerContainer).copy(alpha = 0.84f)
+                            } else {
+                                Color(0x60FFFFF9)
+                            }
+                        )
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(start = 20.dp, top = 14.dp, end = 20.dp, bottom = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    NgThemeSheetActionButton(
+                        onClick = onFollowSystem,
+                        contentDescription = stringResource(R.string.ng_font_scale_follow_system)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Restore,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = Color(
+                                if (state.followSystem) {
+                                    snapshot.colors.primary
+                                } else {
+                                    snapshot.colors.onSurface
+                                }
+                            )
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.font_scale),
+                        modifier = Modifier.weight(1f),
+                        color = Color(snapshot.colors.onSurface),
+                        fontSize = 21.sp,
+                        lineHeight = 25.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    NgThemeSheetSaveButton(
+                        onClick = onSave,
+                        contentDescription = stringResource(R.string.save)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.ng_font_scale_multiplier),
+                        modifier = Modifier.weight(1f),
+                        color = Color(snapshot.colors.onSurfaceVariant),
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = String.format(Locale.ROOT, "%.1f", state.scale),
+                        color = Color(snapshot.colors.primary),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                NgSlider(
+                    value = state.scale,
+                    onValueChange = onScaleChanged,
+                    valueRange = 0.8f..1.6f,
+                    steps = 7,
+                    variant = NgSliderVariant.DISCRETE
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "0.8",
+                        color = Color(snapshot.colors.onSurfaceVariant),
+                        fontSize = 12.sp
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "1.6",
+                        color = Color(snapshot.colors.onSurfaceVariant),
+                        fontSize = 12.sp
+                    )
+                }
+
+            }
+        }
+    }
+}

@@ -1,0 +1,633 @@
+package io.legado.app.ui.book.read.page
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Typeface
+import android.graphics.drawable.LayerDrawable
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isGone
+import androidx.core.view.isInvisible
+import io.legado.app.R
+import io.legado.app.constant.AppConst.timeFormat
+import io.legado.app.data.entities.Bookmark
+import io.legado.app.databinding.ViewBookPageBinding
+import io.legado.app.help.config.AdvancedTitleConfig
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
+import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReadTipConfig
+import io.legado.app.model.ReadBook
+import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.book.read.page.entities.TextLine
+import io.legado.app.ui.book.read.page.entities.TextPage
+import io.legado.app.ui.book.read.page.entities.TextPos
+import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import io.legado.app.ui.widget.BatteryView
+import io.legado.app.utils.activity
+import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyStatusBarPadding
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.gone
+import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
+import io.legado.app.utils.setTextIfNotEqual
+import splitties.views.backgroundColor
+import java.util.Date
+
+/**
+ * 页面视图
+ */
+class PageView(context: Context) : FrameLayout(context) {
+
+    private val binding = ViewBookPageBinding.inflate(LayoutInflater.from(context), this, true)
+    private val readBookActivity get() = activity as? ReadBookActivity
+    private var battery = 100
+    private var tvTitle: BatteryView? = null
+    private var tvTime: BatteryView? = null
+    private var tvBattery: BatteryView? = null
+    private var tvBatteryP: BatteryView? = null
+    private var tvPage: BatteryView? = null
+    private var tvTotalProgress: BatteryView? = null
+    private var tvTotalProgress1: BatteryView? = null
+    private var tvPageAndTotal: BatteryView? = null
+    private var tvBookName: BatteryView? = null
+    private var tvTimeBattery: BatteryView? = null
+    private var tvTimeBatteryP: BatteryView? = null
+    private var isMainView = false
+    private var advancedTitleKey: String? = null
+    var isScroll = false
+
+    val headerHeight: Int
+        get() {
+            val h1 = if (binding.vwStatusBar.isGone) 0 else binding.vwStatusBar.height
+            val h2 = if (binding.llHeader.isGone) 0 else binding.llHeader.height
+            return h1 + h2 + binding.vwRoot.paddingTop
+        }
+    val imgBgPaddingStart: Int
+        get() {
+            return binding.vwRoot.paddingStart
+        }
+
+    init {
+        if (!isInEditMode) {
+            upStyle()
+            binding.vwStatusBar.applyStatusBarPadding()
+            binding.vwNavigationBar.applyNavigationBarPadding()
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        upBg()
+    }
+
+    fun upStyle() = binding.run {
+        upTipStyle()
+        ReadBookConfig.let {
+            val textColor = it.textColor
+            val tipDividerColor = with(ReadTipConfig) {
+                when (tipDividerColor) {
+                    -1 -> ContextCompat.getColor(context, R.color.divider)
+                    0 -> textColor
+                    else -> tipDividerColor
+                }
+            }
+            tvHeaderLeft.setColor(it.tipHeaderColor)
+            tvHeaderMiddle.setColor(it.tipHeaderColor)
+            tvHeaderRight.setColor(it.tipHeaderColor)
+            tvFooterLeft.setColor(it.tipFooterColor)
+            tvFooterMiddle.setColor(it.tipFooterColor)
+            tvFooterRight.setColor(it.tipFooterColor)
+            vwTopDivider.backgroundColor = tipDividerColor
+            vwBottomDivider.backgroundColor = tipDividerColor
+            upStatusBar()
+            upNavigationBar()
+            upPaddingDisplayCutouts()
+            llHeader.setPadding(
+                it.headerPaddingLeft.dpToPx(),
+                it.headerPaddingTop.dpToPx(),
+                it.headerPaddingRight.dpToPx(),
+                it.headerPaddingBottom.dpToPx()
+            )
+            llFooter.setPadding(
+                it.footerPaddingLeft.dpToPx(),
+                it.footerPaddingTop.dpToPx(),
+                it.footerPaddingRight.dpToPx(),
+                it.footerPaddingBottom.dpToPx()
+            )
+            vwTopDivider.gone(llHeader.isGone || !it.showHeaderLine)
+            vwBottomDivider.gone(llFooter.isGone || !it.showFooterLine)
+        }
+        upTime()
+        upBattery(battery)
+    }
+
+    /**
+     * 显示状态栏时隐藏header
+     */
+    fun upStatusBar() = with(binding.vwStatusBar) {
+//        setPadding(paddingLeft, context.statusBarHeight, paddingRight, paddingBottom)
+        isGone = ReadBookConfig.hideStatusBar || readBookActivity?.isInMultiWindow == true
+    }
+
+    fun upNavigationBar() {
+        binding.vwNavigationBar.isGone = ReadBookConfig.hideNavigationBar
+    }
+
+    fun upPaddingDisplayCutouts() {
+        if (ReadBookConfig.isNineBgImg) {
+            ViewCompat.setOnApplyWindowInsetsListener(binding.vwRoot, null)
+            return
+        }
+        if (AppConfig.paddingDisplayCutouts) {
+            binding.vwRoot.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
+                val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+                binding.vwRoot.setPadding(
+                    insets.left,
+                    if (binding.vwStatusBar.isGone) insets.top else 0,
+                    insets.right,
+                    insets.bottom
+                )
+                windowInsets
+            }
+        } else {
+            ViewCompat.setOnApplyWindowInsetsListener(binding.vwRoot, null)
+            binding.vwRoot.setPadding(0, 0, 0, 0)
+        }
+    }
+
+    /**
+     * 更新阅读信息
+     */
+    private fun upTipStyle() = binding.run {
+        tvHeaderLeft.tag = null
+        tvHeaderMiddle.tag = null
+        tvHeaderRight.tag = null
+        tvFooterLeft.tag = null
+        tvFooterMiddle.tag = null
+        tvFooterRight.tag = null
+        upTipVisibility()
+        llFooter.isGone = when (ReadTipConfig.footerMode) {
+            1 -> true
+            else -> false
+        }
+        ReadTipConfig.apply {
+            tvHeaderLeft.isGone = tipHeaderLeft == none
+            tvHeaderRight.isGone = tipHeaderRight == none
+            tvHeaderMiddle.isGone = tipHeaderMiddle == none
+            tvFooterLeft.isInvisible = tipFooterLeft == none
+            tvFooterRight.isGone = tipFooterRight == none
+            tvFooterMiddle.isGone = tipFooterMiddle == none
+        }
+        tvTitle = getTipView(ReadTipConfig.chapterTitle)?.apply {
+            tag = ReadTipConfig.chapterTitle
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvTime = getTipView(ReadTipConfig.time)?.apply {
+            tag = ReadTipConfig.time
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvBattery = getTipView(ReadTipConfig.battery)?.apply {
+            tag = ReadTipConfig.battery
+            isBattery = true
+            textSize = 11f
+        }
+        tvPage = getTipView(ReadTipConfig.page)?.apply {
+            tag = ReadTipConfig.page
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvTotalProgress = getTipView(ReadTipConfig.totalProgress)?.apply {
+            tag = ReadTipConfig.totalProgress
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvTotalProgress1 = getTipView(ReadTipConfig.totalProgress1)?.apply {
+            tag = ReadTipConfig.totalProgress1
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvPageAndTotal = getTipView(ReadTipConfig.pageAndTotal)?.apply {
+            tag = ReadTipConfig.pageAndTotal
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvBookName = getTipView(ReadTipConfig.bookName)?.apply {
+            tag = ReadTipConfig.bookName
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvTimeBattery = getTipView(ReadTipConfig.timeBattery)?.apply {
+            tag = ReadTipConfig.timeBattery
+            isBattery = true
+            typeface = ChapterProvider.typeface
+            textSize = 11f
+        }
+        tvBatteryP = getTipView(ReadTipConfig.batteryPercentage)?.apply {
+            tag = ReadTipConfig.batteryPercentage
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        tvTimeBatteryP = getTipView(ReadTipConfig.timeBatteryPercentage)?.apply {
+            tag = ReadTipConfig.timeBatteryPercentage
+            isBattery = false
+            typeface = ChapterProvider.typeface
+            textSize = 12f
+        }
+        val headerTypeface = ChapterProvider.loadOptionalTypeface(ReadBookConfig.headerFont)
+            ?: ChapterProvider.typeface
+        val footerTypeface = if (ReadBookConfig.applyHeaderStyle) {
+            headerTypeface
+        } else {
+            ChapterProvider.loadOptionalTypeface(ReadBookConfig.footerFont)
+                ?: ChapterProvider.typeface
+        }
+        listOf(tvHeaderLeft, tvHeaderMiddle, tvHeaderRight).forEach { view ->
+            view.typeface = headerTypeface
+            view.textSize = ReadBookConfig.headerFontSize.toFloat()
+        }
+        listOf(tvFooterLeft, tvFooterMiddle, tvFooterRight).forEach { view ->
+            view.typeface = footerTypeface
+            view.textSize = if (ReadBookConfig.applyHeaderStyle) {
+                ReadBookConfig.headerFontSize.toFloat()
+            } else {
+                ReadBookConfig.footerFontSize.toFloat()
+            }
+        }
+    }
+
+    fun upTipVisibility() {
+        // 页眉显隐只取决于页眉模式与状态栏隐藏设置，不随唤醒菜单隐藏
+        binding.llHeader.isGone = ReadTipConfig.headerMode != 1 ||
+                !ReadBookConfig.hideStatusBar
+    }
+
+    /**
+     * 获取信息视图
+     * @param tip 信息类型
+     */
+    private fun getTipView(tip: Int): BatteryView? = binding.run {
+        return when (tip) {
+            ReadTipConfig.tipHeaderLeft -> tvHeaderLeft
+            ReadTipConfig.tipHeaderMiddle -> tvHeaderMiddle
+            ReadTipConfig.tipHeaderRight -> tvHeaderRight
+            ReadTipConfig.tipFooterLeft -> tvFooterLeft
+            ReadTipConfig.tipFooterMiddle -> tvFooterMiddle
+            ReadTipConfig.tipFooterRight -> tvFooterRight
+            else -> null
+        }
+    }
+
+    /**
+     * 更新背景
+     */
+    fun upBg() {
+        binding.vwRoot.background = LayerDrawable(
+            arrayOf(
+                ReadBookConfig.bgMeanColor.toDrawable(),
+                ReadBookConfig.bg
+            )
+        )
+        upBgAlpha()
+    }
+
+    /**
+     * 更新背景透明度
+     */
+    fun upBgAlpha() {
+        ReadBookConfig.bg?.alpha = (ReadBookConfig.bgAlpha / 100f * 255).toInt()
+        binding.vwRoot.invalidate()
+    }
+
+    /**
+     * 更新时间信息
+     */
+    fun upTime() {
+        tvTime?.text = timeFormat.format(Date(System.currentTimeMillis()))
+        upTimeBattery()
+    }
+
+    /**
+     * 更新电池信息
+     */
+    @SuppressLint("SetTextI18n")
+    fun upBattery(battery: Int) {
+        this.battery = battery
+        tvBattery?.setBattery(battery)
+        tvBatteryP?.text = "$battery%"
+        upTimeBattery()
+    }
+
+    /**
+     * 更新电池信息
+     */
+    @SuppressLint("SetTextI18n")
+    private fun upTimeBattery() {
+        val time = timeFormat.format(Date(System.currentTimeMillis()))
+        tvTimeBattery?.setBattery(battery, time)
+        tvTimeBatteryP?.text = "$time $battery%"
+    }
+
+    /**
+     * 设置内容
+     */
+    fun setContent(textPage: TextPage, resetPageOffset: Boolean = true) {
+        upAdvancedTitle(textPage)
+        if (isMainView && !isScroll) {
+            setProgress(textPage)
+        } else {
+            post {
+                setProgress(textPage)
+            }
+        }
+        if (resetPageOffset) {
+            resetPageOffset()
+        }
+        binding.contentTextView.setContent(textPage)
+    }
+
+    private fun upAdvancedTitle(textPage: TextPage) {
+        val lottie = binding.advancedTitleLottie
+        val fallback = binding.advancedTitleFallback
+        fun hide() {
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
+            fallback.visibility = View.GONE
+            advancedTitleKey = null
+        }
+        if (ReadBookConfig.titleMode != AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+            hide()
+            return
+        }
+        val block = textPage.advancedTitleBlocks.firstOrNull() ?: run {
+            hide()
+            return
+        }
+        val width = block.width.toInt().coerceAtLeast(1)
+        val height = block.height.toInt().coerceAtLeast(1)
+        fun showFallback() {
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
+            val params = fallback.layoutParams as ViewGroup.LayoutParams
+            params.width = width
+            params.height = height
+            fallback.layoutParams = params
+            fallback.translationX = titleTranslationX(block.offsetX, width)
+            fallback.translationY = titleTranslationY(block.offsetY, height)
+            fallback.text = textPage.title
+            fallback.typeface = advancedTitleTypeface()
+            fallback.setTextColor(AdvancedTitleConfig.textColor ?: ReadBookConfig.resolvedTitleColor)
+            fallback.visibility = View.VISIBLE
+        }
+        if (isScroll) {
+            showFallback()
+            return
+        }
+        fallback.visibility = View.GONE
+        val params = lottie.layoutParams as ViewGroup.LayoutParams
+        params.width = width
+        params.height = height
+        lottie.layoutParams = params
+        lottie.translationX = titleTranslationX(block.offsetX, width)
+        lottie.translationY = titleTranslationY(block.offsetY, height)
+        lottie.setFontAssetDelegate(advancedTitleFontDelegate)
+        if (advancedTitleKey != block.json) {
+            lottie.cancelAnimation()
+            // 解析失败时降级为静态文本标题，避免阅读界面崩溃
+            if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
+                showFallback()
+                return
+            }
+            advancedTitleKey = block.json
+        }
+        lottie.repeatCount = LottieDrawable.INFINITE
+        lottie.visibility = View.VISIBLE
+        lottie.playAnimation()
+    }
+
+    private fun titleTranslationX(offsetX: Float, targetWidth: Int): Float {
+        val contentWidth = binding.contentTextView.width
+        if (contentWidth <= 0) return offsetX
+        return offsetX - (contentWidth - targetWidth) / 2f
+    }
+
+    private fun titleTranslationY(offsetY: Float, targetHeight: Int): Float {
+        val contentHeight = binding.contentTextView.height
+        if (contentHeight <= 0) return offsetY
+        return offsetY.coerceIn(0f, (contentHeight - targetHeight).coerceAtLeast(0).toFloat())
+    }
+
+    private val advancedTitleFontDelegate = AdvancedTitleFontAssetDelegate(
+        preferredTypeface = { ChapterProvider.typeface },
+        preferredWeight = { AdvancedTitleConfig.fontWeight },
+    )
+
+    private fun advancedTitleTypeface(): Typeface {
+        val weight = AdvancedTitleConfig.fontWeight
+        val base = ChapterProvider.typeface ?: Typeface.DEFAULT
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            Typeface.create(base, weight, false)
+        } else {
+            Typeface.create(base, if (weight >= 700) Typeface.BOLD else Typeface.NORMAL)
+        }
+    }
+
+    fun invalidateContentView() {
+        binding.contentTextView.invalidate()
+    }
+
+    /**
+     * 设置无障碍文本
+     */
+    fun setContentDescription(content: String) {
+        binding.contentTextView.contentDescription = content
+    }
+
+    /**
+     * 重置滚动位置
+     */
+    fun resetPageOffset() {
+        binding.contentTextView.resetPageOffset()
+    }
+
+    /**
+     * 设置进度
+     */
+    @SuppressLint("SetTextI18n")
+    fun setProgress(textPage: TextPage) = textPage.apply {
+        tvBookName?.setTextIfNotEqual(ReadBook.book?.name)
+        tvTitle?.setTextIfNotEqual(textPage.title)
+        val readProgress = readProgress
+        tvTotalProgress?.setTextIfNotEqual(readProgress)
+        tvTotalProgress1?.setTextIfNotEqual("${chapterIndex.plus(1)}/${chapterSize}")
+        if (textChapter.isCompleted) {
+            tvPageAndTotal?.setTextIfNotEqual("${index.plus(1)}/$pageSize  $readProgress")
+            tvPage?.setTextIfNotEqual("${index.plus(1)}/$pageSize")
+        } else {
+            val pageSizeInt = pageSize
+            val pageSize = if (pageSizeInt <= 0) "-" else "~$pageSizeInt"
+            tvPageAndTotal?.setTextIfNotEqual("${index.plus(1)}/$pageSize  $readProgress")
+            tvPage?.setTextIfNotEqual("${index.plus(1)}/$pageSize")
+        }
+    }
+
+    fun setAutoPager(autoPager: AutoPager?) {
+        binding.contentTextView.setAutoPager(autoPager)
+    }
+
+    fun submitRenderTask() {
+        binding.contentTextView.submitRenderTask()
+    }
+
+    fun setIsScroll(value: Boolean) {
+        isScroll = value
+        binding.contentTextView.setIsScroll(value)
+    }
+
+    /**
+     * 滚动事件
+     */
+    fun scroll(offset: Int) {
+        binding.contentTextView.scroll(offset)
+    }
+
+    /**
+     * 更新是否开启选择功能
+     */
+    fun upSelectAble(selectAble: Boolean) {
+        binding.contentTextView.selectAble = selectAble
+    }
+
+    fun setTextHighlights(bookmarks: List<Bookmark>) {
+        binding.contentTextView.setTextHighlights(bookmarks)
+    }
+
+    /**
+     * 优先处理页面内单击
+     * @return true:已处理, false:未处理
+     */
+    fun onClick(x: Float, y: Float): Boolean {
+        return binding.contentTextView.click(x - imgBgPaddingStart, y - headerHeight)
+    }
+
+    /**
+     * 长按事件
+     */
+    fun longPress(
+        x: Float, y: Float,
+        select: (textPos: TextPos) -> Unit,
+    ) {
+        return binding.contentTextView.longPress(x - imgBgPaddingStart, y - headerHeight, select)
+    }
+
+    /**
+     * 选择文本
+     */
+    fun selectText(
+        x: Float, y: Float,
+        select: (textPos: TextPos) -> Unit,
+    ) {
+        return binding.contentTextView.selectText(x - imgBgPaddingStart, y - headerHeight, select)
+    }
+
+    fun getCurVisiblePage(): TextPage {
+        return binding.contentTextView.getCurVisiblePage()
+    }
+
+    fun getReadAloudPos(): Pair<Int, TextLine>? {
+        return binding.contentTextView.getReadAloudPos()
+    }
+
+    fun markAsMainView() {
+        isMainView = true
+        binding.contentTextView.isMainView = true
+    }
+
+    fun selectStartMove(x: Float, y: Float) {
+        binding.contentTextView.selectStartMove(x - imgBgPaddingStart, y - headerHeight)
+    }
+
+    fun selectStartMoveIndex(
+        relativePagePos: Int,
+        lineIndex: Int,
+        charIndex: Int
+    ) {
+        binding.contentTextView.selectStartMoveIndex(relativePagePos, lineIndex, charIndex)
+    }
+
+    fun selectStartMoveIndex(textPos: TextPos) {
+        binding.contentTextView.selectStartMoveIndex(textPos)
+    }
+
+    fun selectEndMove(x: Float, y: Float) {
+        binding.contentTextView.selectEndMove(x - imgBgPaddingStart, y - headerHeight)
+    }
+
+    fun selectEndMoveIndex(
+        relativePagePos: Int,
+        lineIndex: Int,
+        charIndex: Int
+    ) {
+        binding.contentTextView.selectEndMoveIndex(relativePagePos, lineIndex, charIndex)
+    }
+
+    fun selectEndMoveIndex(textPos: TextPos) {
+        binding.contentTextView.selectEndMoveIndex(textPos)
+    }
+
+    fun getReverseStartCursor(): Boolean {
+        return binding.contentTextView.reverseStartCursor
+    }
+
+    fun getReverseEndCursor(): Boolean {
+        return binding.contentTextView.reverseEndCursor
+    }
+
+    fun isLongScreenShot(): Boolean {
+        return binding.contentTextView.longScreenshot
+    }
+
+    fun resetReverseCursor() {
+        binding.contentTextView.resetReverseCursor()
+    }
+
+    fun cancelSelect(clearSearchResult: Boolean = false) {
+        binding.contentTextView.cancelSelect(clearSearchResult)
+    }
+
+    fun createBookmark(): Bookmark? {
+        return binding.contentTextView.createBookmark()
+    }
+
+    fun createTextHighlight(): Bookmark? {
+        return binding.contentTextView.createTextHighlight()
+    }
+
+    fun relativePage(relativePagePos: Int): TextPage {
+        return binding.contentTextView.relativePage(relativePagePos)
+    }
+
+    val textPage get() = binding.contentTextView.textPage
+
+    val selectedText: String get() = binding.contentTextView.getSelectedText()
+
+    val selectStartPos get() = binding.contentTextView.selectStart
+}

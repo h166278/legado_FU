@@ -1,0 +1,451 @@
+plugins {
+//    id "com.android.application"
+//    id 'org.jetbrains.kotlin.android'
+//    id 'kotlin-parcelize'
+//    //id 'kotlin-kapt'
+//    id 'com.google.devtools.ksp'
+
+    alias libs.plugins.android.application
+    alias libs.plugins.kotlin.android
+    alias libs.plugins.kotlin.compose
+    alias libs.plugins.kotlin.parcelize
+    alias libs.plugins.room
+    alias libs.plugins.ksp
+    alias libs.plugins.roborazzi
+}
+apply from: 'download.gradle'
+
+static def releaseTime() {
+    return new Date().format("yy.MMddHH", TimeZone.getTimeZone("GMT+8"))
+}
+
+def name = "legado"
+def version = "3." + releaseTime()
+def gitCommits = Integer.parseInt('git rev-list HEAD --count'.execute().text.trim())
+def signingProperties = new Properties()
+def signingPropertiesFile = file("signing.properties")
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+def signingValue = { propName ->
+    project.hasProperty(propName) ? project.property(propName) : signingProperties.getProperty(propName)
+}
+def hasProjectReleaseSigning = project.hasProperty("RELEASE_STORE_FILE")
+def hasReleaseSigning = signingValue("RELEASE_STORE_FILE") != null
+
+android {
+    compileSdk = compile_sdk_version
+    namespace = 'io.legado.app'
+    kotlin {
+        jvmToolchain {
+            languageVersion.set(JavaLanguageVersion.of(17))
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            myConfig {
+                storeFile file(signingValue("RELEASE_STORE_FILE"))
+                storePassword signingValue("RELEASE_STORE_PASSWORD")
+                keyAlias signingValue("RELEASE_KEY_ALIAS")
+                keyPassword signingValue("RELEASE_KEY_PASSWORD")
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+    defaultConfig {
+        applicationId "io.legado.app.ng"
+        minSdk 21
+        targetSdk 36
+        versionCode 10000 + gitCommits
+        versionName version
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        project.ext.set("archivesBaseName", name + "_" + version)
+
+        buildConfigField "String", "Cronet_Version", "\"$CronetVersion\""
+        buildConfigField "String", "Cronet_Main_Version", "\"$CronetMainVersion\""
+
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += [
+                        "room.incremental"     : "true",
+                        "room.expandProjection": "true",
+                        "room.schemaLocation"  : "$projectDir/schemas".toString()
+                ]
+            }
+        }
+    }
+    buildFeatures {
+        buildConfig = true
+        compose = true
+        viewBinding = true
+    }
+    buildTypes {
+        release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.myConfig
+            }
+            applicationIdSuffix '.release'
+            manifestPlaceholders.put("app_name", "@string/app_name")
+
+            minifyEnabled true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
+        }
+        debug {
+            if (hasProjectReleaseSigning) {
+                signingConfig signingConfigs.myConfig
+            }
+            manifestPlaceholders.put("app_name", "@string/app_name")
+
+            applicationIdSuffix '.debug'
+            versionNameSuffix 'debug'
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
+        }
+    }
+    //noinspection GrDeprecatedAPIUsage
+    flavorDimensions = ['mode']
+    productFlavors {
+        app {
+            dimension "mode"
+            manifestPlaceholders.put("APP_CHANNEL_VALUE", "app")
+        }
+    }
+
+    android.applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
+            def flavor = variant.productFlavors[0].name
+            outputFileName = "${name}_${flavor}_${defaultConfig.versionName}.apk"
+        }
+    }
+
+
+    room {
+        schemaDirectory "$projectDir/schemas"
+    }
+    // 设定Room的KSP参数
+    ksp {
+        arg("room.incremental", "true")
+        arg("room.expandProjection", "true")
+        arg("room.generateKotlin", "false")
+        //arg("room.schemaLocation", "$projectDir/schemas")
+
+    }
+
+    compileOptions {
+        // Flag to enable support for the new language APIs
+        coreLibraryDesugaringEnabled = true
+        // Sets Java compatibility
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    packaging {
+        resources.excludes.add('META-INF/*')
+    }
+
+    sourceSets {
+        // Adds exported schema location as test app assets.
+        androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
+    }
+    lint {
+        checkDependencies = true
+    }
+    tasks.withType(JavaCompile).tap {
+        configureEach {
+            //options.compilerArgs << "-Xlint:unchecked"
+        }
+    }
+    lint { //忽略string翻译缺失，后面需要翻译时去掉，todo
+        disable 'MissingTranslation'
+    }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+            all {
+                systemProperty 'robolectric.pixelCopyRenderMode', 'hardware'
+                maxHeapSize = '3072m'
+            }
+        }
+    }
+}
+
+dependencies {
+    //compileOnly "com.android.tools.build:gradle:$agp_version"
+    //noinspection GradleDependency,GradlePackageUpdate
+    //coreLibraryDesugaring('com.android.tools:desugar_jdk_libs_nio:2.0.4')
+    coreLibraryDesugaring(libs.desugar)
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    testImplementation(libs.robolectric)
+    androidTestImplementation(libs.bundles.androidTest)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    //kotlin
+    //noinspection GradleDependency,DifferentStdlibGradleVersion
+    implementation(libs.kotlin.stdlib)
+    //Kotlin反射
+    //noinspection GradleDependency,DifferentStdlibGradleVersion
+    //implementation(libs.kotlin.reflect)
+
+
+    //协程
+    //def coroutines_version = '1.7.3'
+    implementation(libs.bundles.coroutines)
+
+
+    //图像处理库Toolkit
+    implementation(libs.renderscript.intrinsics.replacement.toolkit)
+
+    //androidX
+    implementation(libs.core.ktx)
+    implementation(libs.appcompat.appcompat)
+    implementation(libs.activity.ktx)
+    implementation(libs.activity.compose)
+    implementation(libs.fragment.ktx)
+    implementation(libs.preference.ktx)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.viewpager2)
+    implementation(libs.androidx.webkit)
+    implementation(libs.androidx.documentfile)
+
+    //google
+    implementation(libs.material)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.material.color.utilities)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.reorderable)
+    implementation(libs.flexbox)
+    implementation(libs.gson)
+    implementation(libs.lottie)
+
+    //lifecycle
+    implementation(libs.lifecycle.common.java8)
+    implementation(libs.lifecycle.service)
+
+    //media
+    implementation(libs.media.media)
+    // For media playback using ExoPlayer
+    implementation(libs.media3.exoplayer)
+    implementation(libs.soundtouch.jni.android)
+    implementation(libs.soundtouch.jni.core)
+    //implementation(libs.media3.exoplayer.hls)
+    //implementation(libs.media3.ui)
+    // For loading data using the OkHttp network stack
+    implementation(libs.media3.datasource.okhttp)
+    // For exposing and controlling media sessions
+    //implementation "androidx.media3:media3-session:$media3_version"
+
+    //videoPlayer
+    implementation(libs.gsyVideoPlayer.java)
+    implementation(libs.gsyVideoPlayer.exo2)
+    //弹幕
+    implementation (libs.danmakuFlameMaster)
+
+    //Splitties
+    implementation(libs.splitties.appctx)
+    implementation(libs.splitties.systemservices)
+    implementation(libs.splitties.views)
+
+    //room sql语句不高亮解决方法https://issuetracker.google.com/issues/234612964#comment6
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    //kapt("androidx.room:room-compiler:$room_version")
+    ksp(libs.room.compiler)
+    androidTestImplementation(libs.room.testing)
+
+    //liveEventBus
+    implementation(libs.liveeventbus)
+
+    //规则相关
+    implementation(libs.jsoup)
+    implementation(libs.json.path)
+    implementation(libs.jsoupxpath)
+    implementation(project(path: ':modules:book'))
+    implementation(project(path: ':modules:rhino'))
+
+    //JS rhino
+
+    //网络
+    implementation(libs.okhttp)
+    implementation(fileTree(dir: 'cronetlib', include: ['*.jar', '*.aar']))
+    implementation(libs.protobuf.javalite)
+
+    //Glide
+    implementation(libs.glide.glide)
+    implementation(libs.glide.okhttp)
+    ksp(libs.glide.ksp)
+
+    //Svg
+    implementation(libs.androidsvg)
+    //Glide svg plugin
+    implementation(libs.glide.svg)
+
+    //webServer
+    implementation(libs.nanohttpd.nanohttpd)
+    implementation(libs.nanohttpd.websocket)
+
+    //二维码
+    //noinspection GradleDependency
+    implementation(libs.zxing.lite)
+
+    //颜色选择
+    implementation(libs.colorpicker)
+
+    //压缩解压
+    implementation libs.libarchive
+
+    //apache
+    implementation(libs.commons.text)
+
+    //MarkDown
+    implementation(libs.markwon.core)
+    implementation(libs.markwon.image.glide)
+    implementation(libs.markwon.ext.tables)
+    implementation(libs.markwon.html)
+
+    //转换繁体
+    implementation(libs.quick.chinese.transfer.core)
+
+    //加解密类库,有些书源使用
+    //noinspection GradleDependency,GradlePackageUpdate
+    implementation(libs.hutool.crypto)
+
+    //阅读NG: Firebase项目不属于本fork, 已禁用
+    //implementation platform(libs.firebase.bom)
+    //implementation libs.firebase.analytics
+    //implementation libs.firebase.perf
+
+    implementation libs.glide.recyclerview
+
+    //LeakCanary, 内存泄露检测
+    //debugImplementation('com.squareup.leakcanary:leakcanary-android:2.7')
+
+    //com.github.AmrDeveloper:CodeView代码编辑已集成到应用内
+    //epubLib集成到应用内
+    // 椒盐歌词
+    implementation(libs.lyricViewx)
+    // sora-editor代码编辑器,更丰富的编辑功能
+    implementation(platform(libs.soraEditor.bom))
+    implementation(libs.soraEditor.core)
+    implementation(libs.soraEditor.language.textmate)
+
+    debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+def ngDesignBaselineFile = rootProject.file("config/ng-design-system-baseline.txt")
+
+roborazzi {
+    outputDir.set(file("src/test/screenshots"))
+}
+
+def ngDesignRules = [
+        hex           : ~/(?i)#[0-9a-f]{6,8}/,
+        theme_store   : ~/\bThemeStore\b/,
+        private_scheme: ~/\b(lightColorScheme|darkColorScheme)\s*\(/,
+        visual_boolean: ~/\b(useWhiteBackground|disableGlass|useSurfaceBackground|useDarkText|useStrongBorder)\b/
+]
+
+tasks.register("verifyNgDesignSystem") {
+    group = "verification"
+    description = "阻止 Feature 新增绕过 NG Design System 的视觉实现"
+
+    doLast {
+        def baseline = [:].withDefault { 0 }
+        if (ngDesignBaselineFile.exists()) {
+            ngDesignBaselineFile.eachLine("UTF-8") { line ->
+                def normalized = line.trim()
+                if (normalized && !normalized.startsWith("#")) {
+                    def parts = normalized.split("\\|", 3)
+                    if (parts.length == 3) baseline[parts[0] + "|" + parts[1]] = parts[2] as int
+                }
+            }
+        }
+
+        def sources = files(
+                fileTree("src/main/java/io/legado/app/ui") { include "**/*.kt" },
+                fileTree("src/main/res/layout") { include "**/*.xml" }
+        )
+        def failures = []
+        ngDesignRules.each { ruleName, pattern ->
+            sources.files.sort().each { source ->
+                def relative = rootProject.projectDir.toPath().relativize(source.toPath())
+                        .toString().replace('\\', '/')
+                if (relative.contains("/ui/design/")) return
+                def matcher = pattern.matcher(source.getText("UTF-8"))
+                def count = 0
+                while (matcher.find()) count++
+                def allowed = baseline[ruleName + "|" + relative]
+                if (count > allowed) failures << "${ruleName}|${relative}|${count} (baseline ${allowed})"
+            }
+        }
+
+        fileTree("src/main/res/layout") { include "**/item_*.xml" }.files.each { source ->
+            if (source.getText("UTF-8").contains("NgGlassLayout")) {
+                failures << "recycler_glass|${rootProject.projectDir.toPath().relativize(source.toPath()).toString().replace('\\', '/')}"
+            }
+        }
+        if (!failures.isEmpty()) {
+            throw new GradleException("NG Design System 检查失败:\n" + failures.join("\n"))
+        }
+    }
+}
+
+tasks.named("check").configure {
+    dependsOn(tasks.named("verifyNgDesignSystem"))
+}
+
+def resolveAdbExecutable = {
+    def sdkDir = null
+    def localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        def localProperties = new Properties()
+        localPropertiesFile.withInputStream { localProperties.load(it) }
+        sdkDir = localProperties.getProperty("sdk.dir")
+    }
+    sdkDir = sdkDir ?: System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+    if (!sdkDir) {
+        throw new GradleException("Android SDK path not found. Set sdk.dir in local.properties or ANDROID_HOME/ANDROID_SDK_ROOT.")
+    }
+
+    def adbName = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows") ? "adb.exe" : "adb"
+    def adbExecutable = new File(new File(sdkDir, "platform-tools"), adbName)
+    if (!adbExecutable.isFile()) {
+        throw new GradleException("adb not found at ${adbExecutable}. Check Android SDK installation.")
+    }
+    return adbExecutable.absolutePath
+}
+
+tasks.register("installAppDebugStreaming", Exec) {
+    group = "install"
+    description = "Installs the AppDebug APK with adb streaming install."
+    dependsOn("assembleAppDebug")
+
+    doFirst {
+        def apkDir = layout.buildDirectory.dir("outputs/apk/app/debug").get().asFile
+        def apkFiles = apkDir.exists() ? apkDir.listFiles().findAll { it.name.endsWith(".apk") } : []
+        if (!apkFiles) {
+            throw new GradleException("AppDebug APK not found in ${apkDir}.")
+        }
+        def apkFile = apkFiles.max { it.lastModified() }
+        commandLine(resolveAdbExecutable(), "install", "--streaming", "-r", "-d", apkFile.absolutePath)
+    }
+}
+
+tasks.matching { it.name == "installAppDebug" }.configureEach {
+    dependsOn("installAppDebugStreaming")
+    enabled = false
+}
