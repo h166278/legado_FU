@@ -161,7 +161,6 @@ jobs:
           echo "$RELEASE_KEY_STORE" | base64 --decode > "$GITHUB_WORKSPACE/app/key.jks"
 
       - name: Build With Gradle
-        continue-on-error: true
         run: |
           typeName="${{ env.CHANNEL }}"
           echo "统一版本号"
