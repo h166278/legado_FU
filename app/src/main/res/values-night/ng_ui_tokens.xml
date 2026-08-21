@@ -9,6 +9,7 @@
     <color name="ng_bookshelf_manage_control_surface">#F01F1F1F</color>
     <color name="ng_bookshelf_manage_workspace_surface">#E61F1F1F</color>
     <color name="ng_surface_panel">#E6222222</color>
+    <color name="ng_surface_soft">@color/ng_surface_panel</color>
     <color name="ng_search_surface">@color/ng_surface_card</color>
     <color name="ng_search_surface_pressed">#F02B2B2B</color>
     <color name="ng_search_content">@color/ng_on_surface</color>
