@@ -62,12 +62,15 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isContentScheme
+import io.legado.app.utils.inputStream
 import io.legado.app.utils.list
 import io.legado.app.utils.listFileDocs
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.toastOnUi
 import java.io.File
+import java.io.FileOutputStream
 import java.net.URLDecoder
+import java.util.UUID
 import splitties.init.appCtx
 
 /** 字体选择对话框。内容使用 Compose，目录读取与字体应用行为保持不变。 */
@@ -390,8 +393,33 @@ class FontSelectDialog : BaseComposeDialogFragment() {
     }.getOrNull()
 
     private fun selectCustomFont(item: FileDoc) {
-        selectedFontPath = item.toString()
-        callBack?.selectFont(selectedFontPath)
+        if (!item.isContentScheme) {
+            selectedFontPath = item.toString()
+            callBack?.selectFont(selectedFontPath)
+            return
+        }
+        execute {
+            val extension = item.name.substringAfterLast('.', "ttf")
+                .lowercase()
+                .takeIf { it == "ttf" || it == "otf" }
+                ?: "ttf"
+            val target = FileUtils.createFileIfNotExist(
+                requireContext().externalFiles,
+                "font",
+                "${UUID.randomUUID()}.$extension",
+            )
+            item.uri.inputStream(requireContext()).getOrThrow().use { input ->
+                FileOutputStream(target).use { output -> input.copyTo(output) }
+            }
+            target.absolutePath
+        }.onSuccess { path ->
+            selectedFontPath = path
+            callBack?.selectFont(path)
+            loadFontFiles()
+        }.onError {
+            AppLog.put("复制字体文件失败\\n${it.localizedMessage}", it)
+            toastOnUi("复制字体失败:${it.localizedMessage}")
+        }
     }
 
     private fun selectSystemFont(index: Int) {
