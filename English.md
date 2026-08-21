@@ -1,11 +1,11 @@
 # [English](English.md) [中文](README.md)
 
 <div align="center">
-<img width="125" height="125" src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="legado"/>
+<img width="125" height="125" src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="Reading FU"/>
 <br>
-Reading NG - Next Generation Legado
+Reading FU
 <br>
-An independent reader fork evolved from Reading Sigma.
+An independent reader fork evolved from Legado NG.
 </div>
 
 ## Notice
@@ -14,10 +14,10 @@ Reading NG only provides a reader, rule engine, and management tools. It does no
 
 ## Package Names
 
-Reading NG uses the independent package prefix `io.legado.app.ng`.
+Reading FU uses the independent package prefix `io.legado.fu`.
 
-- Beta: `io.legado.app.ng.release`
-- Debug: `io.legado.app.ng.debug`
+- Release: `io.legado.fu.release`
+- Debug: `io.legado.fu.debug`
 
 It can coexist with the original Legado and Reading Sigma. App data is isolated between versions.
 
