@@ -2,9 +2,14 @@ package io.legado.app.ui.book.read.page
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.LayerDrawable
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
@@ -15,6 +20,8 @@ import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.databinding.ViewBookPageBinding
+import io.legado.app.help.config.AdvancedTitleConfig
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
@@ -42,7 +49,6 @@ class PageView(context: Context) : FrameLayout(context) {
 
     private val binding = ViewBookPageBinding.inflate(LayoutInflater.from(context), this, true)
     private val readBookActivity get() = activity as? ReadBookActivity
-    private var readerOverlayVisible = false
     private var battery = 100
     private var tvTitle: BatteryView? = null
     private var tvTime: BatteryView? = null
@@ -56,6 +62,7 @@ class PageView(context: Context) : FrameLayout(context) {
     private var tvTimeBattery: BatteryView? = null
     private var tvTimeBatteryP: BatteryView? = null
     private var isMainView = false
+    private var advancedTitleKey: String? = null
     var isScroll = false
 
     val headerHeight: Int
@@ -267,10 +274,10 @@ class PageView(context: Context) : FrameLayout(context) {
         }
     }
 
-    fun upTipVisibility(readerOverlayVisible: Boolean = this.readerOverlayVisible) {
-        this.readerOverlayVisible = readerOverlayVisible
+    fun upTipVisibility() {
+        // 页眉显隐只取决于页眉模式与状态栏隐藏设置，不随唤醒菜单隐藏
         binding.llHeader.isGone = ReadTipConfig.headerMode != 1 ||
-                !ReadBookConfig.hideStatusBar || readerOverlayVisible
+                !ReadBookConfig.hideStatusBar
     }
 
     /**
@@ -343,6 +350,7 @@ class PageView(context: Context) : FrameLayout(context) {
      * 设置内容
      */
     fun setContent(textPage: TextPage, resetPageOffset: Boolean = true) {
+        upAdvancedTitle(textPage)
         if (isMainView && !isScroll) {
             setProgress(textPage)
         } else {
@@ -354,6 +362,92 @@ class PageView(context: Context) : FrameLayout(context) {
             resetPageOffset()
         }
         binding.contentTextView.setContent(textPage)
+    }
+
+    private fun upAdvancedTitle(textPage: TextPage) {
+        val lottie = binding.advancedTitleLottie
+        val fallback = binding.advancedTitleFallback
+        fun hide() {
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
+            fallback.visibility = View.GONE
+            advancedTitleKey = null
+        }
+        if (ReadBookConfig.titleMode != AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+            hide()
+            return
+        }
+        val block = textPage.advancedTitleBlocks.firstOrNull() ?: run {
+            hide()
+            return
+        }
+        val width = block.width.toInt().coerceAtLeast(1)
+        val height = block.height.toInt().coerceAtLeast(1)
+        fun showFallback() {
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
+            val params = fallback.layoutParams as ViewGroup.LayoutParams
+            params.width = width
+            params.height = height
+            fallback.layoutParams = params
+            fallback.translationX = titleTranslationX(block.offsetX, width)
+            fallback.translationY = titleTranslationY(block.offsetY, height)
+            fallback.text = textPage.title
+            fallback.typeface = advancedTitleTypeface()
+            fallback.setTextColor(AdvancedTitleConfig.textColor ?: ReadBookConfig.resolvedTitleColor)
+            fallback.visibility = View.VISIBLE
+        }
+        if (isScroll) {
+            showFallback()
+            return
+        }
+        fallback.visibility = View.GONE
+        val params = lottie.layoutParams as ViewGroup.LayoutParams
+        params.width = width
+        params.height = height
+        lottie.layoutParams = params
+        lottie.translationX = titleTranslationX(block.offsetX, width)
+        lottie.translationY = titleTranslationY(block.offsetY, height)
+        lottie.setFontAssetDelegate(advancedTitleFontDelegate)
+        if (advancedTitleKey != block.json) {
+            lottie.cancelAnimation()
+            // 解析失败时降级为静态文本标题，避免阅读界面崩溃
+            if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
+                showFallback()
+                return
+            }
+            advancedTitleKey = block.json
+        }
+        lottie.repeatCount = LottieDrawable.INFINITE
+        lottie.visibility = View.VISIBLE
+        lottie.playAnimation()
+    }
+
+    private fun titleTranslationX(offsetX: Float, targetWidth: Int): Float {
+        val contentWidth = binding.contentTextView.width
+        if (contentWidth <= 0) return offsetX
+        return offsetX - (contentWidth - targetWidth) / 2f
+    }
+
+    private fun titleTranslationY(offsetY: Float, targetHeight: Int): Float {
+        val contentHeight = binding.contentTextView.height
+        if (contentHeight <= 0) return offsetY
+        return offsetY.coerceIn(0f, (contentHeight - targetHeight).coerceAtLeast(0).toFloat())
+    }
+
+    private val advancedTitleFontDelegate = AdvancedTitleFontAssetDelegate(
+        preferredTypeface = { ChapterProvider.typeface },
+        preferredWeight = { AdvancedTitleConfig.fontWeight },
+    )
+
+    private fun advancedTitleTypeface(): Typeface {
+        val weight = AdvancedTitleConfig.fontWeight
+        val base = ChapterProvider.typeface ?: Typeface.DEFAULT
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            Typeface.create(base, weight, false)
+        } else {
+            Typeface.create(base, if (weight >= 700) Typeface.BOLD else Typeface.NORMAL)
+        }
     }
 
     fun invalidateContentView() {

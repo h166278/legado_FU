@@ -20,7 +20,7 @@ import java.util.zip.ZipOutputStream
 internal object ReadStylePackageManager {
 
     private const val CONFIG_NAME = "readConfig.json"
-    private const val PACKAGE_DIR = "read_style_packages"
+    const val PACKAGE_DIR = "read_style_packages"
     private const val MAX_ENTRY_COUNT = 512
     private const val MAX_ENTRY_BYTES = 64L * 1024 * 1024
     private const val MAX_TOTAL_BYTES = 256L * 1024 * 1024
@@ -215,7 +215,18 @@ internal object ReadStylePackageManager {
                 .associate { (name, value) -> name to value.toString() }
 
             if (installedRoot.exists()) {
-                stagingRoot.deleteRecursively()
+                // 已安装过相同包：校验资源完整性。若资源文件缺失（如备份恢复后未还原、
+                // 目录被部分清理），用本次导入的包重新安装，避免「重导也修不好」
+                val resourceMissing = entries.any { name ->
+                    !File(installedRoot, name).exists()
+                }
+                if (resourceMissing) {
+                    installedRoot.deleteRecursively()
+                    require(stagingRoot.renameTo(installedRoot)) { "无法重新安装排版包资源" }
+                    installedByThisImport = true
+                } else {
+                    stagingRoot.deleteRecursively()
+                }
             } else {
                 require(stagingRoot.renameTo(installedRoot)) { "无法安装排版包资源" }
                 installedByThisImport = true

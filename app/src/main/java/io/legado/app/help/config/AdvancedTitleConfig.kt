@@ -1,0 +1,303 @@
+package io.legado.app.help.config
+
+import io.legado.app.R
+import com.airbnb.lottie.LottieCompositionFactory
+import io.legado.app.constant.PreferKey
+import io.legado.app.data.entities.Book
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.getPrefInt
+import io.legado.app.utils.getPrefString
+import io.legado.app.utils.putPrefInt
+import io.legado.app.utils.putPrefString
+import org.json.JSONArray
+import org.json.JSONObject
+import splitties.init.appCtx
+import java.io.File
+
+object AdvancedTitleConfig {
+
+    const val TITLE_MODE_ADVANCED = 3
+    const val SPLIT_DELIMITER = 0
+    const val SPLIT_REGEX = 1
+    const val LOTTIE_BLOCK_ROLE = "advanced_title_lottie"
+    const val DEFAULT_HEIGHT_FACTOR = 55
+    private const val BOOK_RULE_KEY = "advancedTitleRule"
+
+    data class SplitRule(
+        val mode: Int = SPLIT_DELIMITER,
+        val delimiter: String = " ",
+        val regex: String = DEFAULT_REGEX
+    )
+
+    data class Parts(
+        val title: String,
+        val s1: String,
+        val s2: String
+    )
+
+    var globalRule: SplitRule
+        get() = appCtx.getPrefString(PreferKey.advancedTitleConfig)
+            ?.let { GSON.fromJsonObject<SplitRule>(it).getOrNull() }
+            ?: SplitRule()
+        set(value) {
+            appCtx.putPrefString(PreferKey.advancedTitleConfig, GSON.toJson(value))
+        }
+
+    var lottieJson: String?
+        get() = appCtx.getPrefString(PreferKey.advancedTitleLottieJson)
+        set(value) {
+            appCtx.putPrefString(PreferKey.advancedTitleLottieJson, value?.takeIf { it.isNotBlank() })
+        }
+
+    var lottiePath: String?
+        get() = appCtx.getPrefString(PreferKey.advancedTitleLottiePath)
+        set(value) {
+            appCtx.putPrefString(PreferKey.advancedTitleLottiePath, value?.takeIf { it.isNotBlank() })
+        }
+
+    var heightFactor: Int
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleHeightFactor, DEFAULT_HEIGHT_FACTOR)
+            .coerceIn(30, 120)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleHeightFactor, value.coerceIn(30, 120))
+        }
+
+    var fontWeight: Int
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleFontWeight, 400)
+            .coerceIn(100, 900)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleFontWeight, value.coerceIn(100, 900))
+        }
+
+    /** 高级标题文本字号缩放（百分比，50-200，100 表示模板原字号） */
+    var fontSizeScale: Int
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleFontSize, 100)
+            .coerceIn(50, 200)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleFontSize, value.coerceIn(50, 200))
+        }
+
+    var textColor: Int?
+        get() = appCtx.getPrefInt(PreferKey.advancedTitleTextColor, Int.MIN_VALUE)
+            .takeUnless { it == Int.MIN_VALUE }
+        set(value) {
+            appCtx.putPrefInt(PreferKey.advancedTitleTextColor, value ?: Int.MIN_VALUE)
+        }
+
+    fun bookRule(book: Book?): SplitRule? {
+        val value = book?.getVariable(BOOK_RULE_KEY)?.takeIf { it.isNotBlank() } ?: return null
+        return GSON.fromJsonObject<SplitRule>(value).getOrNull()
+    }
+
+    fun setBookRule(book: Book, rule: SplitRule?) {
+        book.putVariable(BOOK_RULE_KEY, rule?.let { GSON.toJson(it) })
+    }
+
+    fun effectiveRule(book: Book?): SplitRule = bookRule(book) ?: globalRule
+
+    fun split(title: String, book: Book? = null): Parts {
+        val cleanTitle = title.trim()
+        val rule = effectiveRule(book)
+        return split(cleanTitle, rule)
+    }
+
+    fun split(title: String, rule: SplitRule): Parts {
+        val cleanTitle = title.trim()
+        return when (rule.mode) {
+            SPLIT_REGEX -> splitByRegex(cleanTitle, rule.regex)
+            else -> splitByDelimiter(cleanTitle, rule.delimiter)
+        }
+    }
+
+    fun renderLottieJson(book: Book, title: String): String? = runCatching {
+        val raw = AdvancedTitlePackageManager.currentTemplate()
+            ?: lottieJson?.takeIf { it.isNotBlank() }
+            ?: lottiePath?.takeIf { it.isNotBlank() }?.let { path ->
+                runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
+            }
+        raw?.let {
+            applyCompatibleTextStyle(
+                replaceVariables(it, book, title),
+                textColor,
+                fontWeight,
+                fontSizeScale
+            )
+        }
+    }.getOrNull()
+
+    fun renderValidLottieJson(book: Book, title: String): String? {
+        val json = renderLottieJson(book, title)?.takeIf { it.isNotBlank() } ?: return null
+        return json.takeIf { hasRenderableLayers(it) }
+    }
+
+    fun isValidLottieJson(json: String): Boolean {
+        return runCatching {
+            val obj = JSONObject(json)
+            obj.has("layers") &&
+                obj.optJSONArray("layers") != null &&
+                LottieCompositionFactory.fromJsonStringSync(
+                    json,
+                    null
+                ).value != null
+        }.getOrDefault(false)
+    }
+
+    fun hasRenderableLayers(json: String): Boolean {
+        return runCatching {
+            val obj = JSONObject(json)
+            obj.optJSONArray("layers")?.length()?.let { it > 0 } == true
+        }.getOrDefault(false)
+    }
+
+    fun preview(title: String, book: Book? = null): String {
+        val parts = split(title, book)
+        return appCtx.getString(
+            R.string.advanced_title_preview_template,
+            parts.s1.ifBlank { appCtx.getString(R.string.empty) },
+            parts.s2.ifBlank { appCtx.getString(R.string.empty) }
+        )
+    }
+
+    private fun splitByDelimiter(title: String, delimiter: String): Parts {
+        val mark = delimiter.ifEmpty { " " }
+        val index = if (mark.isBlank()) {
+            title.indexOfFirst { it.isWhitespace() || it == '　' }
+        } else {
+            title.indexOf(mark)
+        }
+        if (index < 0) return splitByRegex(title, DEFAULT_REGEX)
+        val end = if (mark.isBlank()) {
+            var next = index
+            while (next < title.length && (title[next].isWhitespace() || title[next] == '　')) next++
+            next
+        } else {
+            index + mark.length
+        }
+        val s1 = title.substring(0, index).trim()
+        val s2 = title.substring(end.coerceAtMost(title.length)).trim()
+        return if (s1.isBlank() || s2.isBlank()) {
+            Parts(title, "", title)
+        } else {
+            Parts(title, s1, s2)
+        }
+    }
+
+    private fun splitByRegex(title: String, regex: String): Parts {
+        val pattern = regex.ifBlank { DEFAULT_REGEX }
+        val match = runCatching { Regex(pattern).find(title) }.getOrNull()
+        if (match != null) {
+            val groups = match.groups
+            val namedGroups = groups as? MatchNamedGroupCollection
+            val namedS1 = runCatching { namedGroups?.get("s1")?.value }.getOrNull()
+            val namedS2 = runCatching { namedGroups?.get("s2")?.value }.getOrNull()
+            val s1 = (namedS1 ?: groups.getOrNull(1)?.value).orEmpty().trim()
+            val s2 = (namedS2 ?: groups.getOrNull(2)?.value).orEmpty().trim()
+            if (s1.isNotBlank() && s2.isNotBlank()) return Parts(title, s1, s2)
+        }
+        return Parts(title, "", title)
+    }
+
+    private fun MatchGroupCollection.getOrNull(index: Int): MatchGroup? {
+        return if (index in 0 until size) get(index) else null
+    }
+
+    private fun replaceVariables(
+        source: String,
+        book: Book,
+        title: String
+    ): String {
+        val parts = split(title, book)
+        return replaceTemplateVariables(source, variables(book, parts))
+    }
+
+    internal fun replaceTemplateVariables(
+        source: String,
+        variables: Map<String, String>
+    ): String {
+        return variables.entries.fold(source) { value, entry ->
+            val replacement = GSON.toJson(entry.value).let { encoded ->
+                if (encoded.length >= 2 && encoded.first() == '"' && encoded.last() == '"') {
+                    encoded.substring(1, encoded.lastIndex)
+                } else {
+                    entry.value
+                }
+            }
+            value
+                .replace("\${${entry.key}}", replacement)
+                .replace("{{${entry.key}}}", replacement)
+        }
+    }
+
+    internal fun applyCompatibleTextStyle(
+        source: String,
+        color: Int?,
+        fontWeight: Int,
+        fontSizeScale: Int = 100,
+    ): String {
+        if (color == null && fontWeight == 400 && fontSizeScale == 100) return source
+        return runCatching {
+            val root = JSONObject(source)
+            val layers = root.optJSONArray("layers") ?: return source
+            val weightedFont = if (fontWeight == 400) null else weightedFontFamily(fontWeight)
+            var hasCompatibleLayer = false
+            for (index in 0 until layers.length()) {
+                val layer = layers.optJSONObject(index) ?: continue
+                if (layer.optString("nm") !in COMPATIBLE_TEXT_LAYERS) continue
+                hasCompatibleLayer = true
+                val keyframes = layer.optJSONObject("t")
+                    ?.optJSONObject("d")
+                    ?.optJSONArray("k")
+                    ?: continue
+                for (frameIndex in 0 until keyframes.length()) {
+                    keyframes.optJSONObject(frameIndex)?.optJSONObject("s")?.apply {
+                        // 字号：按缩放百分比改写模板字号，随 JSON 变化触发动画重载
+                        if (fontSizeScale != 100) {
+                            val size = optDouble("s", 0.0)
+                            if (size > 0) put("s", (size * fontSizeScale / 100.0).toInt())
+                        }
+                        // 字重：把权重数值编码进字体名，保证 JSON 随字重变化触发动画重载，
+                        // 避免 Lottie FontAssetManager 缓存旧 Typeface 导致调整不生效
+                        weightedFont?.let { put("f", it) }
+                        color?.let { put("fc", it.toLottieColor()) }
+                    }
+                }
+            }
+            if (hasCompatibleLayer && weightedFont != null) {
+                val fonts = root.optJSONObject("fonts") ?: JSONObject().also { root.put("fonts", it) }
+                val list = fonts.optJSONArray("list") ?: JSONArray().also { fonts.put("list", it) }
+                list.put(JSONObject().apply {
+                    put("fName", weightedFont)
+                    put("fFamily", weightedFont)
+                    put("fStyle", "Regular")
+                    put("ascent", 75)
+                })
+            }
+            root.toString()
+        }.getOrDefault(source)
+    }
+
+    /** 把字重数值编码进字体名，使 JSON 内容随字重变化（用于触发动画重载与字体缓存刷新） */
+    fun weightedFontFamily(weight: Int): String = "${WEIGHTED_FONT_FAMILY}_$weight"
+
+    private fun Int.toLottieColor() = JSONArray().apply {
+        put(((this@toLottieColor ushr 16) and 0xff) / 255.0)
+        put(((this@toLottieColor ushr 8) and 0xff) / 255.0)
+        put((this@toLottieColor and 0xff) / 255.0)
+    }
+
+    private fun variables(book: Book, parts: Parts): Map<String, String> {
+        return mapOf(
+            "title" to parts.title,
+            "s1" to parts.s1,
+            "s2" to parts.s2,
+            "bookName" to book.name,
+            "author" to book.author
+        )
+    }
+
+    const val DEFAULT_REGEX = "^\\s*(第\\S+[章节回卷部篇集])\\s+(.+?)\\s*$"
+    private val COMPATIBLE_TEXT_LAYERS = setOf("chapter_number", "chapter_title")
+    const val WEIGHTED_FONT_FAMILY = "legado_advanced_title_weighted"
+
+}

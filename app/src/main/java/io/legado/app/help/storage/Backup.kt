@@ -13,6 +13,7 @@ import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReadStylePackageManager
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.BookCover
@@ -222,6 +223,11 @@ object Backup {
         for (i in 0 until paths.size) {
             paths[i] = backupPath + File.separator + paths[i]
         }
+        // 排版包内嵌资源（导入排版时随包安装的字体/背景图）随备份携带，
+        // 否则换机/清数据后恢复备份，排版配置中的字体/背景引用会因文件缺失而失效
+        File(appCtx.filesDir, ReadStylePackageManager.PACKAGE_DIR)
+            .takeIf(File::isDirectory)
+            ?.let { paths += it.absolutePath }
         FileUtils.delete(zipFilePath)
         FileUtils.delete(zipFilePath.replace("tmp_", ""))
         val backupFileName = if (AppConfig.onlyLatestBackup) {

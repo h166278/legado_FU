@@ -18,8 +18,10 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookContent
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.getBookSource
+import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
+import org.json.JSONObject
 import io.legado.app.help.config.ReadHighlightRule
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ImageProvider
@@ -223,6 +225,10 @@ class TextChapterLayout(
         val isSingleImageStyle = imageStyle.equals(Book.imgStyleSingle, true)
 
         if (titleMode != 2 || bookChapter.isVolume || contents.isEmpty()) {
+            val advancedTitleHandled = titleMode == AdvancedTitleConfig.TITLE_MODE_ADVANCED &&
+                !bookChapter.isVolume && contents.isNotEmpty() &&
+                setTypeAdvancedTitle(book, displayTitle)
+            if (!advancedTitleHandled) {
             var firstLine = true
             val titleSegments = displayTitle.splitNotBlank("\n").flatMap { title ->
                 ReadTitleStyleParser.parse(
@@ -356,6 +362,7 @@ class TextChapterLayout(
             // 如果是单图模式且当前页有内容，强制分页
             if (isSingleImageStyle && pendingTextPage.lines.isNotEmpty() && contents.isNotEmpty()) {
                 prepareNextPageIfNeed()
+            }
             }
         }
 
@@ -930,6 +937,58 @@ class TextChapterLayout(
         return null
     }
 
+
+    private suspend fun setTypeAdvancedTitle(book: Book, title: String): Boolean {
+        if (title.isBlank() || pageAnim == PageAnim.scrollPageAnim) return false
+        currentCoroutineContext().ensureActive()
+        val json = AdvancedTitleConfig.renderValidLottieJson(book, title) ?: return false
+        val layout = resolveAdvancedTitleLayout(json) ?: return false
+        var startY = durY + titleTopSpacing
+        if (startY + layout.requiredHeight > visibleHeight) {
+            prepareNextPageIfNeed()
+            startY = titleTopSpacing.toFloat()
+        }
+        if (startY + layout.requiredHeight > visibleHeight) return false
+        pendingTextPage.advancedTitleBlocks += TextPage.AdvancedTitleBlock(
+            offsetX = paddingLeft + (visibleWidth - layout.blockWidth) / 2f,
+            offsetY = paddingTop + startY,
+            width = layout.blockWidth,
+            height = layout.blockHeight,
+            json = json
+        )
+        durY = startY + layout.requiredHeight
+        pendingTextPage.height = maxOf(pendingTextPage.height, durY)
+        return true
+    }
+
+    private fun resolveAdvancedTitleLayout(json: String): AdvancedTitleLayout? {
+        if (visibleWidth <= 0 || visibleHeight <= 0) return null
+        val maxHeight = (visibleHeight - titleTopSpacing - titleBottomSpacing).toFloat()
+        if (maxHeight <= 0f) return null
+        val heightScale = AdvancedTitleConfig.heightFactor /
+            AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR.toFloat()
+        val titleScale = ((ReadBookConfig.textSize + ReadBookConfig.titleSize * 1.25f) /
+            ReadBookConfig.textSize.coerceAtLeast(1)).coerceIn(0.6f, 2.5f)
+        val ratio = runCatching {
+            JSONObject(json).let { root ->
+                val width = root.optDouble("w", 720.0).toFloat()
+                val height = root.optDouble("h", 112.0).toFloat()
+                if (width > 0f && height > 0f) height / width else 112f / 720f
+            }
+        }.getOrDefault(112f / 720f)
+        val requestedWidth = (visibleWidth.toFloat() * 0.86f * titleScale * heightScale)
+            .coerceIn(1f, visibleWidth.toFloat())
+        val requestedHeight = requestedWidth * ratio
+        val blockHeight = requestedHeight.coerceAtMost(maxHeight)
+        val blockWidth = (blockHeight / ratio).coerceIn(1f, visibleWidth.toFloat())
+        return AdvancedTitleLayout(blockWidth, blockHeight, blockHeight + titleBottomSpacing)
+    }
+
+    private data class AdvancedTitleLayout(
+        val blockWidth: Float,
+        val blockHeight: Float,
+        val requiredHeight: Float
+    )
 
     /**
      * 排版文字

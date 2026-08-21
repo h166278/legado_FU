@@ -3005,12 +3005,10 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onMenuShow() {
         binding.readView.autoPager.pause()
-        binding.readView.upTipVisibility(true)
     }
 
     override fun onMenuHide() {
         binding.readView.autoPager.resume()
-        binding.readView.upTipVisibility(false)
     }
 
     override fun onLayoutPageCompleted(index: Int, page: TextPage) {
