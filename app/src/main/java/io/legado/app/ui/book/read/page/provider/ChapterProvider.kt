@@ -296,12 +296,15 @@ object ChapterProvider {
             2 -> 300
             else -> weight.coerceIn(100, 900)
         }
+        val baseTypeface = typeface ?: Typeface.DEFAULT
+        // 保留文件字体的原始 Typeface；部分厂商系统在重新创建 400 字重时会回退到系统字体。
+        if (resolvedWeight == 400) return baseTypeface
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            Typeface.create(typeface ?: Typeface.DEFAULT, resolvedWeight, false)
+            Typeface.create(baseTypeface, resolvedWeight, false)
         } else if (resolvedWeight >= 700) {
-            Typeface.create(typeface, Typeface.BOLD)
+            Typeface.create(baseTypeface, Typeface.BOLD)
         } else {
-            Typeface.create(typeface, Typeface.NORMAL)
+            Typeface.create(baseTypeface, Typeface.NORMAL)
         }
     }
 
