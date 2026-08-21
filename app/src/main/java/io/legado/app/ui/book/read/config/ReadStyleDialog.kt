@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentDialog
+import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -27,6 +28,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadHighlightRule
+import io.legado.app.help.config.ReadStylePackageManager
 import io.legado.app.help.config.ReadFloatingAppearanceConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
@@ -1080,20 +1082,55 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
         execute {
             ReadBookConfig.importWithReport(uri.readBytes(requireContext()))
         }.onSuccess { result ->
-            val importedIndex = ReadBookConfig.appendImportedConfig(result.config)
-            ReadBookConfig.styleSelect = importedIndex
-            editorBackgroundCache = null
-            refreshUi()
-            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
-            notifyFloatingAppearanceChanged()
-            if (result.warnings.isEmpty()) {
-                toastOnUi("导入成功")
+            val existingIndex = ReadBookConfig.findPresetIndexByName(result.config.name)
+            if (existingIndex >= 0) {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("预设已存在")
+                    .setMessage("已存在同名预设“${result.config.name}”，请选择处理方式")
+                    .setNegativeButton("取消", null)
+                    .setNeutralButton("保留副本") { _, _ ->
+                        applyImportedConfig(result, null, copyName = true)
+                    }
+                    .setPositiveButton("覆盖") { _, _ ->
+                        applyImportedConfig(result, existingIndex)
+                    }
+                    .show()
             } else {
-                longToast("导入成功\n${result.warnings.joinToString("\n")}")
+                applyImportedConfig(result)
             }
         }.onError {
             it.printOnDebug()
             longToast("导入失败:${it.localizedMessage}")
+        }
+    }
+
+    private fun applyImportedConfig(
+        result: ReadStylePackageManager.ImportResult,
+        replaceIndex: Int? = null,
+        copyName: Boolean = false,
+    ) {
+        val config = if (copyName) {
+            val baseName = result.config.name.ifBlank { "导入预设" }
+            var copyNumber = 2
+            var name = "$baseName（副本）"
+            while (ReadBookConfig.findPresetIndexByName(name) >= 0) {
+                name = "$baseName（副本$copyNumber）"
+                copyNumber++
+            }
+            result.config.copy(name = name)
+        } else {
+            result.config
+        }
+        val importedIndex = ReadBookConfig.appendImportedConfig(config, replaceIndex)
+        ReadBookConfig.styleSelect = importedIndex
+        editorBackgroundCache = null
+        refreshUi()
+        postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+        notifyFloatingAppearanceChanged()
+        if (result.warnings.isEmpty()) {
+            toastOnUi("导入成功")
+        } else {
+            longToast("导入成功\n${result.warnings.joinToString("\n")}")
         }
     }
 
@@ -1117,7 +1154,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun currentExportFileName(): String {
-        val presetName = ReadBookConfig.durConfig.name.normalizeFileName()
+        val presetName = ReadBookConfig.getExportConfig().name.normalizeFileName()
         return if (presetName.isBlank()) configFileName else "$presetName.zip"
     }
 

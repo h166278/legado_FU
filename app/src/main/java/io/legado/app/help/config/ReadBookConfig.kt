@@ -301,12 +301,20 @@ object ReadBookConfig {
         else -> PageAnim.scrollPageAnim
     }
     var isNightTheme = appCtx.getPrefBoolean(PreferKey.readNightTheme, false)
+        get() = if (AppConfig.themeMode == THEME_MODE_FOLLOW_SYSTEM) {
+            // 跟随系统时，阅读页不能继续使用独立保存的日间状态。
+            AppConfig.isSystemNightTheme
+        } else {
+            field
+        }
         set(value) {
             field = value
             if (appCtx.getPrefBoolean(PreferKey.readNightTheme, false) != value) {
                 appCtx.putPrefBoolean(PreferKey.readNightTheme, value)
             }
         }
+
+    private const val THEME_MODE_FOLLOW_SYSTEM = "0"
 
     /**
      * 两端对齐
@@ -568,71 +576,12 @@ object ReadBookConfig {
         }
 
     fun getExportConfig(): Config {
-        val exportConfig = durConfig.copy()
-        if (shareLayout) {
-            exportConfig.textFont = shareConfig.textFont
-            exportConfig.titleFont = shareConfig.titleFont
-            exportConfig.headerFont = shareConfig.headerFont
-            exportConfig.footerFont = shareConfig.footerFont
-            exportConfig.headerFontSize = shareConfig.headerFontSize
-            exportConfig.footerFontSize = shareConfig.footerFontSize
-            exportConfig.applyHeaderStyle = shareConfig.applyHeaderStyle
-            exportConfig.textBold = shareConfig.textBold
-            exportConfig.textSize = shareConfig.textSize
-            exportConfig.textItalic = shareConfig.textItalic
-            exportConfig.textShadow = shareConfig.textShadow
-            exportConfig.shadowRadius = shareConfig.shadowRadius
-            exportConfig.shadowDx = shareConfig.shadowDx
-            exportConfig.shadowDy = shareConfig.shadowDy
-            exportConfig.letterSpacing = shareConfig.letterSpacing
-            exportConfig.lineSpacingExtra = shareConfig.lineSpacingExtra
-            exportConfig.paragraphSpacing = shareConfig.paragraphSpacing
-            exportConfig.titleMode = shareConfig.titleMode
-            exportConfig.titleSize = shareConfig.titleSize
-            exportConfig.titleTopSpacing = shareConfig.titleTopSpacing
-            exportConfig.titleBottomSpacing = shareConfig.titleBottomSpacing
-            exportConfig.titleBold = shareConfig.titleBold
-            exportConfig.titleLineSpacingExtra = shareConfig.titleLineSpacingExtra
-            exportConfig.titleLineSpacingSub = shareConfig.titleLineSpacingSub
-            exportConfig.titleSegType = shareConfig.titleSegType
-            exportConfig.titleSegScaling = shareConfig.titleSegScaling
-            exportConfig.titleSegDistance = shareConfig.titleSegDistance
-            exportConfig.titleSegFlag = shareConfig.titleSegFlag
-            exportConfig.paragraphIndent = shareConfig.paragraphIndent
-            exportConfig.underline = shareConfig.underline
-            exportConfig.underlinePadding = shareConfig.underlinePadding
-            exportConfig.underlineHeight = shareConfig.underlineHeight
-            exportConfig.underlineExtend = shareConfig.underlineExtend
-            exportConfig.copyUnderlineColorsFrom(shareConfig)
-            exportConfig.dottedLine = shareConfig.dottedLine
-            exportConfig.dottedBase = shareConfig.dottedBase
-            exportConfig.dottedRatio = shareConfig.dottedRatio
-            exportConfig.highlightRules = ArrayList(shareConfig.highlightRules)
-            exportConfig.paddingBottom = shareConfig.paddingBottom
-            exportConfig.paddingLeft = shareConfig.paddingLeft
-            exportConfig.paddingRight = shareConfig.paddingRight
-            exportConfig.paddingTop = shareConfig.paddingTop
-            exportConfig.headerPaddingBottom = shareConfig.headerPaddingBottom
-            exportConfig.headerPaddingLeft = shareConfig.headerPaddingLeft
-            exportConfig.headerPaddingRight = shareConfig.headerPaddingRight
-            exportConfig.headerPaddingTop = shareConfig.headerPaddingTop
-            exportConfig.footerPaddingBottom = shareConfig.footerPaddingBottom
-            exportConfig.footerPaddingLeft = shareConfig.footerPaddingLeft
-            exportConfig.footerPaddingRight = shareConfig.footerPaddingRight
-            exportConfig.footerPaddingTop = shareConfig.footerPaddingTop
-            exportConfig.showHeaderLine = shareConfig.showHeaderLine
-            exportConfig.showFooterLine = shareConfig.showFooterLine
-            exportConfig.tipHeaderLeft = shareConfig.tipHeaderLeft
-            exportConfig.tipHeaderMiddle = shareConfig.tipHeaderMiddle
-            exportConfig.tipHeaderRight = shareConfig.tipHeaderRight
-            exportConfig.tipFooterLeft = shareConfig.tipFooterLeft
-            exportConfig.tipFooterMiddle = shareConfig.tipFooterMiddle
-            exportConfig.tipFooterRight = shareConfig.tipFooterRight
-            exportConfig.tipColor = shareConfig.tipColor
-            exportConfig.headerMode = shareConfig.headerMode
-            exportConfig.footerMode = shareConfig.footerMode
-        }
-        return exportConfig
+        // 跟随共享排版时，阅读设置的读写实际都落在 shareConfig（见 config getter），
+        // 直接完整导出共享配置；否则导出当前选中的预设。
+        // 修复：原实现把 durConfig 与 shareConfig 杂交（部分字段覆盖、部分不覆盖），
+        // 导致页眉/页脚/字体等字段取到 shareConfig 的默认值而丢失，背景/文字颜色
+        // 等未覆盖字段又取 durConfig，导出的排版包与用户实际生效的设置不一致。
+        return if (shareLayout) shareConfig.copy() else durConfig.copy()
     }
 
     fun import(byteArray: ByteArray): Config = importWithReport(byteArray).config
@@ -645,10 +594,24 @@ object ReadBookConfig {
         return ReadStylePackageManager.export(getExportConfig(), output)
     }
 
-    internal fun appendImportedConfig(config: Config): Int {
-        configList.add(config)
-        val index = configList.lastIndex
+    fun findPresetIndexByName(name: String): Int =
+        configList.indexOfFirst { it.name == name }
+
+    internal fun appendImportedConfig(config: Config, replaceIndex: Int? = null): Int {
+        val index = replaceIndex?.takeIf { it in configList.indices } ?: run {
+            configList.add(config)
+            configList.lastIndex
+        }
+        if (replaceIndex != null && index in configList.indices) {
+            configList[index] = config
+        }
         readStyleSelect = index
+        // 跟随共享排版时，阅读设置的读写全部走 shareConfig（见 config getter），
+        // 导入的预设必须同步为共享配置，否则切到新预设后页眉/页脚/字体等
+        // 仍取 shareConfig 旧值，表现为「导入的排版设置不生效」
+        if (shareLayout) {
+            shareConfig = config.detachedCopy()
+        }
         save()
         return index
     }
