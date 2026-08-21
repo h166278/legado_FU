@@ -301,12 +301,20 @@ object ReadBookConfig {
         else -> PageAnim.scrollPageAnim
     }
     var isNightTheme = appCtx.getPrefBoolean(PreferKey.readNightTheme, false)
+        get() = if (AppConfig.themeMode == THEME_MODE_FOLLOW_SYSTEM) {
+            // 跟随系统时，阅读页不能继续使用独立保存的日间状态。
+            AppConfig.isSystemNightTheme
+        } else {
+            field
+        }
         set(value) {
             field = value
             if (appCtx.getPrefBoolean(PreferKey.readNightTheme, false) != value) {
                 appCtx.putPrefBoolean(PreferKey.readNightTheme, value)
             }
         }
+
+    private const val THEME_MODE_FOLLOW_SYSTEM = "0"
 
     /**
      * 两端对齐
@@ -586,9 +594,17 @@ object ReadBookConfig {
         return ReadStylePackageManager.export(getExportConfig(), output)
     }
 
-    internal fun appendImportedConfig(config: Config): Int {
-        configList.add(config)
-        val index = configList.lastIndex
+    fun findPresetIndexByName(name: String): Int =
+        configList.indexOfFirst { it.name == name }
+
+    internal fun appendImportedConfig(config: Config, replaceIndex: Int? = null): Int {
+        val index = replaceIndex?.takeIf { it in configList.indices } ?: run {
+            configList.add(config)
+            configList.lastIndex
+        }
+        if (replaceIndex != null && index in configList.indices) {
+            configList[index] = config
+        }
         readStyleSelect = index
         // 跟随共享排版时，阅读设置的读写全部走 shareConfig（见 config getter），
         // 导入的预设必须同步为共享配置，否则切到新预设后页眉/页脚/字体等
