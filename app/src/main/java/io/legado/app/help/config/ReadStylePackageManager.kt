@@ -150,6 +150,16 @@ internal object ReadStylePackageManager {
                 "read_font_title",
                 "标题字体",
             ).orEmpty()
+            portableConfig.headerFont = copyResource(
+                portableConfig.headerFont,
+                "read_font_header",
+                "页眉字体",
+            ).orEmpty()
+            portableConfig.footerFont = copyResource(
+                portableConfig.footerFont,
+                "read_font_footer",
+                "页脚字体",
+            ).orEmpty()
             portableConfig.highlightRules = ArrayList(
                 portableConfig.highlightRules.mapIndexed { index, rule ->
                     rule.copy(
