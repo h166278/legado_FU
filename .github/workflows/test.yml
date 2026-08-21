@@ -52,7 +52,7 @@ jobs:
             PUBLISH="true"
             PRERELEASE="false"
             TAG_NAME="${{ steps.set-ver.outputs.version }}"
-          elif [[ "$REF_NAME" == beta-* ]]; then
+          elif [[ "$REF_NAME" == beta-* || "$REF_NAME" == main ]]; then
             CHANNEL="beta"
             PUBLISH="true"
             PRERELEASE="true"
@@ -222,7 +222,7 @@ jobs:
 
   publish:
     needs: [ prepare, build ]
-    if: github.event_name != 'pull_request' && github.repository == 'joestar817/legado_NG' && needs.prepare.outputs.publish == 'true'
+    if: github.event_name != 'pull_request' && github.repository == 'h166278/legado_FU' && needs.prepare.outputs.publish == 'true'
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
