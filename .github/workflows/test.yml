@@ -78,17 +78,42 @@ jobs:
           echo "DEBUG: CHANNEL=$CHANNEL PUBLISH=$PUBLISH PRERELEASE=$PRERELEASE TAG_NAME=$TAG_NAME"
           echo "DEBUG: COMMIT_RANGE=$COMMIT_RANGE"
 
+          translate_subject() {
+            local subject="$1"
+            case "$subject" in
+              "feat: refine advanced title labels and color controls")
+                echo "* 功能：优化高级标题标签和颜色控制" ;;
+              "fix: import advanced title color switch control")
+                echo "* 修复：导入高级标题颜色开关控件" ;;
+              feat:*|feature:*)
+                echo "* 功能：新增功能和使用体验优化" ;;
+              fix:*|bugfix:*)
+                echo "* 修复：问题修复和稳定性改进" ;;
+              refactor:*)
+                echo "* 重构：优化代码结构" ;;
+              perf:*)
+                echo "* 性能：优化运行效率" ;;
+              docs:*)
+                echo "* 文档：更新说明文档" ;;
+              chore:*|build:*|ci:*)
+                echo "* 构建：更新项目配置" ;;
+              *)
+                echo "* 优化：改进功能并修复问题" ;;
+            esac
+          }
+
           UPDATED_CONTENT=""
           if git rev-parse "$COMMIT_RANGE" >/dev/null 2>&1; then
-            UPDATED_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"* %s" --reverse 2>/dev/null \
-              | grep -vE '^\* (Merge|Sync upstream)' \
-              | grep -vE '^\* $' || true)
+            UPDATED_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"%s" --reverse 2>/dev/null \
+              | grep -vE '^(Merge|Sync upstream)$' \
+              | grep -vE '^$' \
+              | while IFS= read -r subject; do translate_subject "$subject"; done || true)
           else
             echo "DEBUG: invalid commit range, fallback to last commit"
           fi
 
           if [ -z "$UPDATED_CONTENT" ]; then
-            UPDATED_CONTENT=$(git log -1 --pretty=format:"* %s")
+            UPDATED_CONTENT=$(translate_subject "$(git log -1 --pretty=format:"%s")")
           fi
 
           CONTENT_JSON=$(echo "$UPDATED_CONTENT" | jq -Rs . 2>/dev/null || echo "\"Error generating update content\"")
