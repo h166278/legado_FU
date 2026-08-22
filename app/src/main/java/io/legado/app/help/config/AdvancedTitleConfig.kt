@@ -85,6 +85,18 @@ object AdvancedTitleConfig {
             appCtx.putPrefInt(PreferKey.advancedTitleTextColor, value ?: Int.MIN_VALUE)
         }
 
+    fun effectiveFontWeight(): Int = AdvancedTitlePackageManager.activeConfig()
+        ?.normalizedFontWeightOrNull() ?: fontWeight
+
+    fun effectiveFontSizeScale(): Int = AdvancedTitlePackageManager.activeConfig()
+        ?.normalizedFontSizeScaleOrNull() ?: fontSizeScale
+
+    fun effectiveTitleTopSpacing(fallback: Int): Int = AdvancedTitlePackageManager.activeConfig()
+        ?.normalizedTitleTopSpacingOrNull() ?: fallback
+
+    fun effectiveTitleBottomSpacing(fallback: Int): Int = AdvancedTitlePackageManager.activeConfig()
+        ?.normalizedTitleBottomSpacingOrNull() ?: fallback
+
     fun bookRule(book: Book?): SplitRule? {
         val value = book?.getVariable(BOOK_RULE_KEY)?.takeIf { it.isNotBlank() } ?: return null
         return GSON.fromJsonObject<SplitRule>(value).getOrNull()
@@ -120,8 +132,8 @@ object AdvancedTitleConfig {
             applyCompatibleTextStyle(
                 replaceVariables(it, book, title),
                 textColor,
-                fontWeight,
-                fontSizeScale
+                effectiveFontWeight(),
+                effectiveFontSizeScale()
             )
         }
     }.getOrNull()
