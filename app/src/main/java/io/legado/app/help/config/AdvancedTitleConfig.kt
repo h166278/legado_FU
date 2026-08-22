@@ -132,9 +132,12 @@ object AdvancedTitleConfig {
                 runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
             }
         raw?.let {
+            val configuredTextColor = effectiveTextColor()
+            val renderTextColor = configuredTextColor
+                ?: ReadBookConfig.resolvedTitleColor.takeIf { ReadBookConfig.isNightTheme }
             applyCompatibleTextStyle(
                 replaceVariables(it, book, title),
-                effectiveTextColor(),
+                renderTextColor,
                 effectiveFontWeight(),
                 effectiveFontSizeScale(),
                 io.legado.app.help.config.ReadBookConfig.textFont
