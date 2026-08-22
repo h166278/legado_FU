@@ -37,4 +37,7 @@
     <string name="advanced_title_top_spacing">Top spacing</string>
     <string name="advanced_title_bottom_spacing">Bottom spacing</string>
     <string name="advanced_title_builtin_edit_hint">Copy the built-in template before editing it</string>
+    <string name="advanced_title_adjusted">Adjusted</string>
+    <string name="advanced_title_adjust">Adjust</string>
+    <string name="advanced_title_reset_confirmation">Restore the default style for “%1$s”?</string>
 </resources>
