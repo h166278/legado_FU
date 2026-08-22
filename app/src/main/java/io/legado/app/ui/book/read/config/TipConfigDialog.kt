@@ -50,6 +50,7 @@ import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.ui.config.NgInlineColorPicker
+import io.legado.app.ui.design.components.compose.NgSwitchControl
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.widget.dialog.applyNgDialogWindow
