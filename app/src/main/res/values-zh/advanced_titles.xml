@@ -37,4 +37,7 @@
     <string name="advanced_title_top_spacing">上边距</string>
     <string name="advanced_title_bottom_spacing">下边距</string>
     <string name="advanced_title_builtin_edit_hint">内置模板不能直接编辑，请先复制为新模板</string>
+    <string name="advanced_title_adjusted">已调整</string>
+    <string name="advanced_title_adjust">调整</string>
+    <string name="advanced_title_reset_confirmation">确定恢复“%1$s”的默认样式吗？</string>
 </resources>
