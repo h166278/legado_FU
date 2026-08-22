@@ -943,10 +943,12 @@ class TextChapterLayout(
         currentCoroutineContext().ensureActive()
         val json = AdvancedTitleConfig.renderValidLottieJson(book, title) ?: return false
         val layout = resolveAdvancedTitleLayout(json) ?: return false
-        var startY = durY + titleTopSpacing
+        val effectiveTopSpacing = AdvancedTitleConfig.effectiveTitleTopSpacing(titleTopSpacing)
+        val effectiveBottomSpacing = AdvancedTitleConfig.effectiveTitleBottomSpacing(titleBottomSpacing)
+        var startY = durY + effectiveTopSpacing
         if (startY + layout.requiredHeight > visibleHeight) {
             prepareNextPageIfNeed()
-            startY = titleTopSpacing.toFloat()
+            startY = effectiveTopSpacing.toFloat()
         }
         if (startY + layout.requiredHeight > visibleHeight) return false
         pendingTextPage.advancedTitleBlocks += TextPage.AdvancedTitleBlock(
@@ -963,7 +965,9 @@ class TextChapterLayout(
 
     private fun resolveAdvancedTitleLayout(json: String): AdvancedTitleLayout? {
         if (visibleWidth <= 0 || visibleHeight <= 0) return null
-        val maxHeight = (visibleHeight - titleTopSpacing - titleBottomSpacing).toFloat()
+        val maxHeight = (visibleHeight -
+            AdvancedTitleConfig.effectiveTitleTopSpacing(titleTopSpacing) -
+            AdvancedTitleConfig.effectiveTitleBottomSpacing(titleBottomSpacing)).toFloat()
         if (maxHeight <= 0f) return null
         val heightScale = AdvancedTitleConfig.heightFactor /
             AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR.toFloat()
@@ -981,7 +985,11 @@ class TextChapterLayout(
         val requestedHeight = requestedWidth * ratio
         val blockHeight = requestedHeight.coerceAtMost(maxHeight)
         val blockWidth = (blockHeight / ratio).coerceIn(1f, visibleWidth.toFloat())
-        return AdvancedTitleLayout(blockWidth, blockHeight, blockHeight + titleBottomSpacing)
+        return AdvancedTitleLayout(
+            blockWidth,
+            blockHeight,
+            blockHeight + AdvancedTitleConfig.effectiveTitleBottomSpacing(titleBottomSpacing)
+        )
     }
 
     private data class AdvancedTitleLayout(
