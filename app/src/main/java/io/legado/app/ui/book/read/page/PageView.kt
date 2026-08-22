@@ -402,7 +402,7 @@ class PageView(context: Context) : FrameLayout(context) {
             fallback.translationY = titleTranslationY(block.offsetY, height)
             fallback.text = textPage.title
             fallback.typeface = advancedTitleTypeface()
-            fallback.setTextColor(AdvancedTitleConfig.textColor ?: ReadBookConfig.resolvedTitleColor)
+            fallback.setTextColor(AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.resolvedTitleColor)
             fallback.visibility = View.VISIBLE
         }
         if (isScroll) {
