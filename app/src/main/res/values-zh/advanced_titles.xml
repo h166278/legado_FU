@@ -9,12 +9,14 @@
     <string name="advanced_title_builtin_star">星点</string>
     <string name="advanced_title_builtin_page">书页</string>
     <string name="advanced_title_builtin_ink">水墨</string>
+    <string name="advanced_title_builtin_ribbon">左侧竖签</string>
+    <string name="advanced_title_builtin_moon">右侧月相</string>
+    <string name="advanced_title_builtin_seal">印章线稿</string>
     <string name="advanced_title_migrated">已迁移高级标题</string>
     <string name="advanced_title_unnamed">未命名高级标题</string>
     <string name="advanced_title_too_large">Lottie JSON 超过 2 MB 限制</string>
     <string name="advanced_title_package_limit">最多可保存 64 个高级标题</string>
     <string name="advanced_title_apply">应用</string>
-    <string name="advanced_title_adjust">调整</string>
     <string name="advanced_title_current">当前</string>
     <string name="advanced_title_source_builtin">内置</string>
     <string name="advanced_title_source_local">本地</string>
@@ -25,7 +27,6 @@
     <string name="advanced_title_text_color">文字颜色</string>
     <string name="advanced_title_add">添加</string>
     <string name="advanced_title_applied">已应用</string>
-    <string name="advanced_title_adjusted">已调整</string>
     <string name="advanced_title_current_source">当前 · %1$s</string>
     <string name="advanced_title_create_builtin">从内置模板新建</string>
     <string name="advanced_title_import_file">从文件导入</string>
@@ -36,5 +37,4 @@
     <string name="advanced_title_top_spacing">上边距</string>
     <string name="advanced_title_bottom_spacing">下边距</string>
     <string name="advanced_title_builtin_edit_hint">内置模板不能直接编辑，请先复制为新模板</string>
-    <string name="advanced_title_reset_confirmation">恢复“%1$s”的默认样式？将清除字重、字号、边距和文字颜色的自定义设置。</string>
 </resources>
