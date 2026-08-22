@@ -30,4 +30,8 @@
     <string name="advanced_title_import_network">Import from network</string>
     <string name="advanced_title_builtin_copy">Built-in advanced title copy</string>
     <string name="advanced_title_network_url">HTTPS JSON URL</string>
+    <string name="advanced_title_style_edit">Edit template style: %1$s</string>
+    <string name="advanced_title_top_spacing">Top spacing</string>
+    <string name="advanced_title_bottom_spacing">Bottom spacing</string>
+    <string name="advanced_title_builtin_edit_hint">Copy the built-in template before editing it</string>
 </resources>
