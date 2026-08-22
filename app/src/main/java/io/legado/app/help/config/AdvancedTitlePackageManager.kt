@@ -21,7 +21,6 @@ object AdvancedTitlePackageManager {
     const val BUILTIN_ID = "builtin_default"
     const val BUILTIN_STAR_ID = "builtin_star"
     const val BUILTIN_PAGE_ID = "builtin_page"
-    const val BUILTIN_RIBBON_ID = "builtin_ribbon"
     const val BUILTIN_MOON_ID = "builtin_moon"
     const val BUILTIN_SWORD_ID = "builtin_sword"
     const val MAX_JSON_BYTES = 2L * 1024L * 1024L
@@ -124,7 +123,6 @@ object AdvancedTitlePackageManager {
         builtinEntry(),
         builtinEntry(BUILTIN_STAR_ID, R.string.advanced_title_builtin_star),
         builtinEntry(BUILTIN_PAGE_ID, R.string.advanced_title_builtin_page),
-        builtinEntry(BUILTIN_RIBBON_ID, R.string.advanced_title_builtin_ribbon),
         builtinEntry(BUILTIN_MOON_ID, R.string.advanced_title_builtin_moon),
         builtinEntry(BUILTIN_SWORD_ID, R.string.advanced_title_builtin_sword),
     )
@@ -460,7 +458,6 @@ object AdvancedTitlePackageManager {
         val resource = when (id) {
             BUILTIN_STAR_ID -> R.raw.advanced_title_star
             BUILTIN_PAGE_ID -> R.raw.advanced_title_page
-            BUILTIN_RIBBON_ID -> R.raw.advanced_title_ribbon
             BUILTIN_MOON_ID -> R.raw.advanced_title_moon
             BUILTIN_SWORD_ID -> R.raw.advanced_title_sword
             else -> R.raw.advanced_title_lottie
