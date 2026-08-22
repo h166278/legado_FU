@@ -22,6 +22,9 @@ object AdvancedTitlePackageManager {
     const val BUILTIN_STAR_ID = "builtin_star"
     const val BUILTIN_PAGE_ID = "builtin_page"
     const val BUILTIN_INK_ID = "builtin_ink"
+    const val BUILTIN_RIBBON_ID = "builtin_ribbon"
+    const val BUILTIN_MOON_ID = "builtin_moon"
+    const val BUILTIN_SEAL_ID = "builtin_seal"
     const val MAX_JSON_BYTES = 2L * 1024L * 1024L
     private const val MAX_PACKAGES = 64
     private const val MANIFEST_FILE = "package.json"
@@ -103,18 +106,6 @@ object AdvancedTitlePackageManager {
         appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
     }
 
-    fun resetStyle(entry: Entry): Entry {
-        require(entry.isBuiltin) { "Only built-in template styles can be reset" }
-        synchronized(mutationLock) {
-            val styles = appCtx.getPrefString(PreferKey.advancedTitleBuiltinStyles)
-                ?.let { GSON.fromJsonObject<Map<String, BuiltinStyle>>(it).getOrNull() }
-                ?.toMutableMap() ?: return builtinEntry(entry.id)
-            styles.remove(entry.id)
-            appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
-            return builtinEntry(entry.id)
-        }
-    }
-
     @Volatile
     private var cachedId: String? = null
     @Volatile
@@ -135,6 +126,9 @@ object AdvancedTitlePackageManager {
         builtinEntry(BUILTIN_STAR_ID, R.string.advanced_title_builtin_star),
         builtinEntry(BUILTIN_PAGE_ID, R.string.advanced_title_builtin_page),
         builtinEntry(BUILTIN_INK_ID, R.string.advanced_title_builtin_ink),
+        builtinEntry(BUILTIN_RIBBON_ID, R.string.advanced_title_builtin_ribbon),
+        builtinEntry(BUILTIN_MOON_ID, R.string.advanced_title_builtin_moon),
+        builtinEntry(BUILTIN_SEAL_ID, R.string.advanced_title_builtin_seal),
     )
 
     private fun builtinEntry(id: String, nameRes: Int): Entry = Entry(
@@ -469,6 +463,9 @@ object AdvancedTitlePackageManager {
             BUILTIN_STAR_ID -> R.raw.advanced_title_star
             BUILTIN_PAGE_ID -> R.raw.advanced_title_page
             BUILTIN_INK_ID -> R.raw.advanced_title_ink
+            BUILTIN_RIBBON_ID -> R.raw.advanced_title_ribbon
+            BUILTIN_MOON_ID -> R.raw.advanced_title_moon
+            BUILTIN_SEAL_ID -> R.raw.advanced_title_seal
             else -> R.raw.advanced_title_lottie
         }
         return appCtx.resources.openRawResource(resource)
