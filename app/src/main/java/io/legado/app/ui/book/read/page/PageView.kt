@@ -414,7 +414,7 @@ class PageView(context: Context) : FrameLayout(context) {
         lottie.translationY = titleTranslationY(block.offsetY, height)
         lottie.setFontAssetDelegate(advancedTitleFontDelegate)
         val styleVersion = ChapterProvider.styleVersion
-        val titleWeight = AdvancedTitleConfig.fontWeight
+        val titleWeight = AdvancedTitleConfig.effectiveFontWeight()
         if (advancedTitleKey != block.json ||
             advancedTitleStyleVersion != styleVersion ||
             advancedTitleWeight != titleWeight
