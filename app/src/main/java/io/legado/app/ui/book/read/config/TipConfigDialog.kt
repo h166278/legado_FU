@@ -56,6 +56,7 @@ import io.legado.app.ui.design.components.compose.NgSwitchControl
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.widget.dialog.applyNgDialogWindow
+import io.legado.app.ui.widget.dialog.ngDialogMaxHeight
 import io.legado.app.utils.hexString
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
