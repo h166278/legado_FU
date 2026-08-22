@@ -63,6 +63,8 @@ class PageView(context: Context) : FrameLayout(context) {
     private var tvTimeBatteryP: BatteryView? = null
     private var isMainView = false
     private var advancedTitleKey: String? = null
+    private var advancedTitleStyleVersion = Long.MIN_VALUE
+    private var advancedTitleWeight = Int.MIN_VALUE
     var isScroll = false
 
     val headerHeight: Int
@@ -372,6 +374,8 @@ class PageView(context: Context) : FrameLayout(context) {
             lottie.visibility = View.GONE
             fallback.visibility = View.GONE
             advancedTitleKey = null
+            advancedTitleStyleVersion = Long.MIN_VALUE
+            advancedTitleWeight = Int.MIN_VALUE
         }
         if (ReadBookConfig.titleMode != AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
             hide()
@@ -409,14 +413,21 @@ class PageView(context: Context) : FrameLayout(context) {
         lottie.translationX = titleTranslationX(block.offsetX, width)
         lottie.translationY = titleTranslationY(block.offsetY, height)
         lottie.setFontAssetDelegate(advancedTitleFontDelegate)
-        if (advancedTitleKey != block.json) {
+        val styleVersion = ChapterProvider.styleVersion
+        val titleWeight = AdvancedTitleConfig.fontWeight
+        if (advancedTitleKey != block.json ||
+            advancedTitleStyleVersion != styleVersion ||
+            advancedTitleWeight != titleWeight
+        ) {
             lottie.cancelAnimation()
-            // 解析失败时降级为静态文本标题，避免阅读界面崩溃
+            // 重新解析时让 Lottie 通过字体代理读取最新的阅读字体。
             if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
                 showFallback()
                 return
             }
             advancedTitleKey = block.json
+            advancedTitleStyleVersion = styleVersion
+            advancedTitleWeight = titleWeight
         }
         lottie.repeatCount = LottieDrawable.INFINITE
         lottie.visibility = View.VISIBLE

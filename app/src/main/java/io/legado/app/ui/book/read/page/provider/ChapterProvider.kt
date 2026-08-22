@@ -129,6 +129,14 @@ object ChapterProvider {
     var typeface: Typeface? = Typeface.DEFAULT
         private set
 
+    /**
+     * Changes whenever the reader typeface or text style is rebuilt.
+     * Advanced Lottie titles use this to invalidate their parsed composition.
+     */
+    @JvmStatic
+    var styleVersion = 0L
+        private set
+
     @JvmStatic
     var titlePaint: TextPaint = TextPaint()
 
@@ -185,6 +193,7 @@ object ChapterProvider {
      */
     fun upStyle() {
         typeface = getTypeface(ReadBookConfig.textFont)
+        styleVersion++
         getPaints(typeface).let {
             titlePaint = it.first
             contentPaint = it.second
