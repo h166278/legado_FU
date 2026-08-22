@@ -10,4 +10,5 @@
 
 下方二维码为支付宝收款码，请确认收款对象后再决定是否支持。]]></string>
     <string name="sponsor_developer_qr_description">支付宝收款码</string>
+    <string name="sponsor_developer_alipay_hint">支付宝收款码，请使用支付宝扫一扫</string>
 </resources>

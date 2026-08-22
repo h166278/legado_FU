@@ -128,6 +128,12 @@ class AboutFragment : PreferenceFragmentCompat() {
             setLineSpacing(4 * density, 1f)
             setPadding(0, 0, 0, (16 * density).toInt())
         })
+        content.addView(TextView(requireContext()).apply {
+            text = getString(R.string.sponsor_developer_alipay_hint)
+            gravity = Gravity.CENTER_HORIZONTAL
+            textSize = 16f
+            setPadding(0, 0, 0, (8 * density).toInt())
+        })
         content.addView(ImageView(requireContext()).apply {
             setImageResource(R.drawable.sponsor_alipay)
             adjustViewBounds = true
