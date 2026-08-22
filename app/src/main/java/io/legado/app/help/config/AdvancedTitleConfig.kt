@@ -147,19 +147,6 @@ object AdvancedTitleConfig {
         return json.takeIf { hasRenderableLayers(it) }
     }
 
-    /** Remove Lottie text layers; Android renders the title text safely outside Lottie. */
-    fun stripTextLayers(json: String): String {
-        val root = JSONObject(json)
-        val layers = root.optJSONArray("layers") ?: return json
-        val kept = JSONArray()
-        for (index in 0 until layers.length()) {
-            val layer = layers.optJSONObject(index) ?: continue
-            if (layer.optInt("ty", -1) != 5) kept.put(layer)
-        }
-        root.put("layers", kept)
-        return root.toString()
-    }
-
     fun isValidLottieJson(json: String): Boolean {
         return runCatching {
             val obj = JSONObject(json)

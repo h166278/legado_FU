@@ -146,7 +146,7 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
             setFontAssetDelegate(AdvancedTitleFontAssetDelegate())
             // 预览解析失败不应导致管理页崩溃，降级为空白预览
             runCatching {
-                template?.let { setAnimationFromJson(AdvancedTitleConfig.stripTextLayers(it), entry.id) }
+                template?.let { setAnimationFromJson(it, entry.id) }
                 repeatCount = LottieDrawable.INFINITE
                 if (template != null) playAnimation()
             }

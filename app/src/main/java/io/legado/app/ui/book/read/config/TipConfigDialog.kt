@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -56,7 +54,6 @@ import io.legado.app.ui.design.components.compose.NgSwitchControl
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgTheme
 import io.legado.app.ui.widget.dialog.applyNgDialogWindow
-import io.legado.app.ui.widget.dialog.ngDialogMaxHeight
 import io.legado.app.utils.hexString
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
@@ -86,11 +83,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        applyNgDialogWindow(
-            marginDp = 20,
-            height = ngDialogMaxHeight(0.78f),
-            dimAmount = 0.4f,
-        )
+        applyNgDialogWindow(marginDp = 20, dimAmount = 0.4f)
         composeView.post { repositionAboveDrawer() }
     }
 
@@ -136,8 +129,19 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         externalRevision
         revision
 
+        LaunchedEffect(
+            section,
+            activePicker,
+            headerEnabled,
+            footerEnabled,
+            headerPosition,
+            footerPosition,
+            revision,
+        ) {
+            composeView.post { repositionAboveDrawer() }
+        }
+
         ReadConfigDialogSurface(
-            modifier = Modifier.verticalScroll(rememberScrollState()),
             contentPadding = PaddingValues(
                 start = 18.dp,
                 top = 16.dp,

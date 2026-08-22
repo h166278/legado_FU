@@ -409,17 +409,7 @@ class PageView(context: Context) : FrameLayout(context) {
             showFallback()
             return
         }
-        // Lottie only renders decorative layers; the native title is always visible above it.
-        val fallbackParams = fallback.layoutParams as ViewGroup.LayoutParams
-        fallbackParams.width = width
-        fallbackParams.height = height
-        fallback.layoutParams = fallbackParams
-        fallback.translationX = titleTranslationX(block.offsetX, width)
-        fallback.translationY = titleTranslationY(block.offsetY, height)
-        fallback.text = textPage.title
-        fallback.typeface = advancedTitleTypeface()
-        fallback.setTextColor(AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.resolvedTitleColor)
-        fallback.visibility = View.VISIBLE
+        fallback.visibility = View.GONE
         val params = lottie.layoutParams as ViewGroup.LayoutParams
         params.width = width
         params.height = height
@@ -441,7 +431,7 @@ class PageView(context: Context) : FrameLayout(context) {
             lottie.clearAnimation()
             lottie.setFontAssetDelegate(advancedTitleFontDelegate)
             // 重新解析时让 Lottie 通过字体代理读取最新的阅读字体。
-            if (!runCatching { lottie.setAnimationFromJson(AdvancedTitleConfig.stripTextLayers(block.json), null) }.isSuccess) {
+            if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
                 showFallback()
                 return
             }
