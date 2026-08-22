@@ -338,16 +338,6 @@ class FontSelectDialog : BaseComposeDialogFragment() {
         val result = arrayListOf<FileDoc>()
         val path = FileUtils.getPath(requireContext().externalFiles, "font")
         result += File(path).listFileDocs { it.name.matches(fontRegex) }
-        // 排版包内嵌字体：导入排版时随包安装到内部 filesDir/read_style_packages/<包>/ 下，
-        // 也列入字体列表，保证导入的排版能在设置中看到并选中其自带字体
-        File(appCtx.filesDir, io.legado.app.help.config.ReadStylePackageManager.PACKAGE_DIR)
-            .takeIf(File::isDirectory)
-            ?.listFiles()
-            ?.forEach { pkgDir ->
-                pkgDir.listFiles()
-                    ?.filter { it.isFile && it.name.matches(fontRegex) }
-                    ?.mapTo(result) { FileDoc.fromFile(it) }
-            }
         return result
     }
 
