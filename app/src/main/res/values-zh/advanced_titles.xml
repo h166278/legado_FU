@@ -6,6 +6,9 @@
     <string name="advanced_title_manage">高级标题管理</string>
     <string name="advanced_title_manage_summary">管理多个 Lottie 标题。</string>
     <string name="advanced_title_builtin">内置高级标题</string>
+    <string name="advanced_title_builtin_star">星点型高级标题</string>
+    <string name="advanced_title_builtin_page">书页型高级标题</string>
+    <string name="advanced_title_builtin_ink">水墨型高级标题</string>
     <string name="advanced_title_migrated">已迁移高级标题</string>
     <string name="advanced_title_unnamed">未命名高级标题</string>
     <string name="advanced_title_too_large">Lottie JSON 超过 2 MB 限制</string>

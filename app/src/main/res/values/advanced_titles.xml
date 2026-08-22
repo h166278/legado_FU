@@ -6,6 +6,9 @@
     <string name="advanced_title_manage">Advanced title management</string>
     <string name="advanced_title_manage_summary">Manage multiple Lottie titles.</string>
     <string name="advanced_title_builtin">Built-in advanced title</string>
+    <string name="advanced_title_builtin_star">Starry advanced title</string>
+    <string name="advanced_title_builtin_page">Book page advanced title</string>
+    <string name="advanced_title_builtin_ink">Ink wash advanced title</string>
     <string name="advanced_title_migrated">Migrated advanced title</string>
     <string name="advanced_title_unnamed">Unnamed advanced title</string>
     <string name="advanced_title_too_large">Lottie JSON exceeds the 2 MB limit</string>

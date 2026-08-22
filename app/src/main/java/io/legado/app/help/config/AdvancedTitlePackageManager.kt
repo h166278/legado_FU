@@ -19,6 +19,9 @@ import java.util.UUID
 object AdvancedTitlePackageManager {
 
     const val BUILTIN_ID = "builtin_default"
+    const val BUILTIN_STAR_ID = "builtin_star"
+    const val BUILTIN_PAGE_ID = "builtin_page"
+    const val BUILTIN_INK_ID = "builtin_ink"
     const val MAX_JSON_BYTES = 2L * 1024L * 1024L
     private const val MAX_PACKAGES = 64
     private const val MANIFEST_FILE = "package.json"
@@ -73,10 +76,22 @@ object AdvancedTitlePackageManager {
     private var builtinJsonCache: String? = null
     private val mutationLock = Any()
 
-    fun builtinEntry(): Entry = Entry(
+    fun builtinEntry(): Entry = builtinEntry(
+        BUILTIN_ID,
+        R.string.advanced_title_builtin
+    )
+
+    fun builtinEntries(): List<Entry> = listOf(
+        builtinEntry(),
+        builtinEntry(BUILTIN_STAR_ID, R.string.advanced_title_builtin_star),
+        builtinEntry(BUILTIN_PAGE_ID, R.string.advanced_title_builtin_page),
+        builtinEntry(BUILTIN_INK_ID, R.string.advanced_title_builtin_ink),
+    )
+
+    private fun builtinEntry(id: String, nameRes: Int): Entry = Entry(
         config = Config(
-            id = BUILTIN_ID,
-            name = appCtx.getString(R.string.advanced_title_builtin),
+            id = id,
+            name = appCtx.getString(nameRes),
             updatedAt = 0L,
             splitMode = AdvancedTitleConfig.SPLIT_DELIMITER,
             delimiter = " ",
@@ -85,6 +100,10 @@ object AdvancedTitlePackageManager {
         ),
         isBuiltin = true
     )
+
+    private fun isBuiltinId(id: String): Boolean = builtinEntries().any { it.id == id }
+
+    private fun builtinEntry(id: String): Entry = builtinEntries().first { it.id == id }
 
     fun activeId(): String = appCtx.getPrefString(PreferKey.advancedTitlePackage)
         ?.takeIf(::isValidId)
@@ -96,7 +115,7 @@ object AdvancedTitlePackageManager {
             AdvancedTitlePackageStorage.cleanupStaleStagingDirectories(rootDir)
             migrateLegacyIfNeeded()
             var local = loadLocalEntries()
-            val validIds = local.asSequence().map { it.id }.toSet() + BUILTIN_ID
+            val validIds = local.asSequence().map { it.id }.toSet() + builtinEntries().map { it.id }
             if (activeId() !in validIds) {
                 val recovery = legacyTemplate()
                     ?.takeIf { runCatching { validateJson(it) }.isSuccess }
@@ -108,7 +127,7 @@ object AdvancedTitlePackageManager {
                 if (recovery != null) local = loadLocalEntries()
                 invalidate()
             }
-            listOf(builtinEntry()) + local.sortedWith(
+            builtinEntries() + local.sortedWith(
                 compareByDescending<Entry> { it.updatedAt }.thenBy { it.name }
             )
         }
@@ -122,21 +141,21 @@ object AdvancedTitlePackageManager {
                 ?.let { return it }
         }
         val id = explicitId ?: BUILTIN_ID
-        return if (id == BUILTIN_ID) {
-            builtinJson()
+        return if (isBuiltinId(id)) {
+            builtinJson(id)
         } else {
             val file = lottieFile(localDir(id))
             readCached(id, file)
                 ?: legacyTemplate()?.takeIf {
                     runCatching { AdvancedTitleConfig.isValidLottieJson(it) }.getOrDefault(false)
                 }
-                ?: builtinJson()
+                ?: builtinJson(id)
         }
     }
 
     fun readTemplate(entry: Entry): String {
         return if (entry.isBuiltin) {
-            builtinJson()
+            builtinJson(entry.id)
         } else {
             val directory = requireNotNull(entry.directory) { "Missing advanced title directory" }
             readJsonFile(lottieFile(directory))
@@ -144,7 +163,7 @@ object AdvancedTitlePackageManager {
     }
 
     fun readTemplate(id: String): String {
-        if (id == BUILTIN_ID) return builtinJson()
+        if (isBuiltinId(id)) return builtinJson(id)
         require(isValidId(id)) { "Invalid advanced title id" }
         val parent = rootDir.apply { mkdirs() }.canonicalFile
         val directory = File(parent, id).canonicalFile
@@ -351,12 +370,20 @@ object AdvancedTitlePackageManager {
         }
     }
 
-    private fun builtinJson(): String {
-        builtinJsonCache?.let { return it }
-        return appCtx.resources.openRawResource(R.raw.advanced_title_lottie)
+    private fun builtinJson(id: String = BUILTIN_ID): String {
+        if (id == BUILTIN_ID) {
+            builtinJsonCache?.let { return it }
+        }
+        val resource = when (id) {
+            BUILTIN_STAR_ID -> R.raw.advanced_title_star
+            BUILTIN_PAGE_ID -> R.raw.advanced_title_page
+            BUILTIN_INK_ID -> R.raw.advanced_title_ink
+            else -> R.raw.advanced_title_lottie
+        }
+        return appCtx.resources.openRawResource(resource)
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
-            .also { builtinJsonCache = it }
+            .also { if (id == BUILTIN_ID) builtinJsonCache = it }
     }
 
     private fun readJsonFile(file: File): String {
