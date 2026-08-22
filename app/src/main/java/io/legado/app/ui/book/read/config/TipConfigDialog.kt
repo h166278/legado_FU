@@ -3,8 +3,12 @@ package io.legado.app.ui.book.read.config
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.View
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
@@ -174,11 +179,13 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     initialColor = initialColorFor(target),
                     onBack = { activePicker = null },
                     onColorChanged = { selected ->
-                        applySelectedColor(target, selected or AndroidColor.BLACK)
+                        applySelectedColor(target, selected or AndroidColor.BLACK)?.let {
+                            editingTemplate = it
+                        }
                         revision++
                     },
                     onReset = {
-                        resetSelectedColor(target)
+                        resetSelectedColor(target)?.let { editingTemplate = it }
                         revision++
                         activePicker = null
                     },
@@ -216,6 +223,20 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                             onColorEdit = { entry ->
                                 colorEditingTemplate = entry
                                 activePicker = ColorPickerTarget.ADVANCED_TITLE
+                            },
+                            onColorEnabledChanged = { entry, enabled ->
+                                colorEditingTemplate = entry
+                                if (enabled) {
+                                    applySelectedColor(
+                                        ColorPickerTarget.ADVANCED_TITLE,
+                                        entry.config.normalizedTextColorOrNull()
+                                            ?: AdvancedTitleConfig.effectiveTextColor()
+                                            ?: ReadBookConfig.resolvedTitleColor,
+                                    )
+                                } else {
+                                    resetSelectedColor(ColorPickerTarget.ADVANCED_TITLE)
+                                }
+                                revision++
                             },
                             onSave = { entry, weight, size, top, bottom ->
                                 val updated = AdvancedTitlePackageManager.addOrUpdate(
@@ -321,6 +342,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         onEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
         onApply: (AdvancedTitlePackageManager.Entry) -> Unit,
         onColorEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
+        onColorEnabledChanged: (AdvancedTitlePackageManager.Entry, Boolean) -> Unit,
         onSave: (AdvancedTitlePackageManager.Entry, Int, Int, Int, Int) -> Unit,
     ) {
         entries.forEach { entry ->
@@ -383,16 +405,6 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     stepSize = 10,
                     onValueChange = { size = it; onSave(entry, weight, it, top, bottom) },
                 )
-                Text(
-                    text = getString(R.string.advanced_title_text_color),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onColorEdit(entry) }
-                        .padding(vertical = 10.dp),
-                    color = Color(NgTheme.colors.primary),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
                 ReadConfigSliderRow(
                     title = getString(R.string.title_margin_top),
                     value = top,
@@ -405,7 +417,45 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     valueRange = 0..100,
                     onValueChange = { bottom = it; onSave(entry, weight, size, top, it) },
                 )
+                AdvancedTitleOptionalColorRow(
+                    title = getString(R.string.highlight_rule_use_text_color),
+                    color = config.normalizedTextColorOrNull(),
+                    onEnabledChanged = { onColorEnabledChanged(editing, it) },
+                    onClick = { onColorEdit(editing) },
+                )
             }
+        }
+    }
+
+    @Composable
+    private fun AdvancedTitleOptionalColorRow(
+        title: String,
+        color: Int?,
+        onEnabledChanged: (Boolean) -> Unit,
+        onClick: () -> Unit,
+    ) {
+        val contentColor = Color(NgTheme.colors.onSurface)
+        Row(
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, Modifier.weight(1f), contentColor, fontSize = 14.sp)
+            if (color != null) {
+                Box(
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(color))
+                        .border(0.7.dp, contentColor.copy(alpha = 0.18f), CircleShape)
+                        .clickable(onClick = onClick),
+                )
+            }
+            NgSwitchControl(
+                checked = color != null,
+                onCheckedChange = onEnabledChanged,
+                modifier = Modifier.size(width = 52.dp, height = 36.dp),
+            )
         }
     }
 
@@ -621,10 +671,18 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             ?: ReadBookConfig.resolvedTitleColor
     }
 
-    private fun applySelectedColor(target: ColorPickerTarget, color: Int) {
-        when (target) {
-            ColorPickerTarget.TIP -> ReadTipConfig.tipColor = color
-            ColorPickerTarget.DIVIDER -> ReadTipConfig.tipDividerColor = color
+    private fun applySelectedColor(
+        target: ColorPickerTarget,
+        color: Int,
+    ): AdvancedTitlePackageManager.Entry? = when (target) {
+            ColorPickerTarget.TIP -> {
+                ReadTipConfig.tipColor = color
+                null
+            }
+            ColorPickerTarget.DIVIDER -> {
+                ReadTipConfig.tipDividerColor = color
+                null
+            }
             ColorPickerTarget.ADVANCED_TITLE -> colorEditingTemplate?.let { entry ->
                 val config = entry.config
                 AdvancedTitlePackageManager.addOrUpdate(
@@ -643,15 +701,20 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     }
                 }
             }
+        }.also {
+            postEvent(EventBus.TIP_COLOR, "")
+            postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
         }
-        postEvent(EventBus.TIP_COLOR, "")
-        postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
-    }
 
-    private fun resetSelectedColor(target: ColorPickerTarget) {
-        when (target) {
-            ColorPickerTarget.TIP -> ReadTipConfig.tipColor = 0
-            ColorPickerTarget.DIVIDER -> ReadTipConfig.tipDividerColor = -1
+    private fun resetSelectedColor(target: ColorPickerTarget): AdvancedTitlePackageManager.Entry? = when (target) {
+            ColorPickerTarget.TIP -> {
+                ReadTipConfig.tipColor = 0
+                null
+            }
+            ColorPickerTarget.DIVIDER -> {
+                ReadTipConfig.tipDividerColor = -1
+                null
+            }
             ColorPickerTarget.ADVANCED_TITLE -> colorEditingTemplate?.let { entry ->
                 val config = entry.config
                 AdvancedTitlePackageManager.addOrUpdate(
@@ -670,9 +733,9 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     }
                 }
             }
+        }.also {
+            postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
         }
-        postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
-    }
 
     private fun currentTipValue(section: Int, position: Int): Int = ReadTipConfig.run {
         when (section) {
