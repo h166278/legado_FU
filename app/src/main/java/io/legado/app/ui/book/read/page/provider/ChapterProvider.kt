@@ -255,17 +255,12 @@ object ChapterProvider {
         val titleBaseTypeface = loadOptionalTypeface(ReadBookConfig.titleFont) ?: typeface
         val textFont = applyFontWeight(typeface, ReadBookConfig.textBold)
         val titleFont = applyFontWeight(titleBaseTypeface, ReadBookConfig.titleBold)
-        val textVariable = typeface.isVariable()
-        val titleVariable = titleBaseTypeface.isVariable()
 
         //标题
         val tPaint = TextPaint()
         tPaint.color = ReadBookConfig.resolvedTitleColor
         tPaint.letterSpacing = ReadBookConfig.letterSpacing
         tPaint.typeface = titleFont
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && titleVariable && ReadBookConfig.titleBold in 100..900 && ReadBookConfig.titleBold != 400) {
-            tPaint.setFontVariationSettings("'wght' ${ReadBookConfig.titleBold}")
-        }
         tPaint.textSize = with(ReadBookConfig) { textSize + titleSize }.toFloat().spToPx()
         tPaint.isAntiAlias = true
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q && AppConfig.optimizeRender) {
@@ -278,9 +273,6 @@ object ChapterProvider {
         cPaint.color = ReadBookConfig.textColor
         cPaint.letterSpacing = ReadBookConfig.letterSpacing
         cPaint.typeface = textFont
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && textVariable && ReadBookConfig.textBold in 100..900 && ReadBookConfig.textBold != 400) {
-            cPaint.setFontVariationSettings("'wght' ${ReadBookConfig.textBold}")
-        }
         cPaint.textSize = ReadBookConfig.textSize.toFloat().spToPx()
         cPaint.isAntiAlias = true
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q && AppConfig.optimizeRender) {
@@ -314,7 +306,7 @@ object ChapterProvider {
 
     private fun Typeface?.isVariable(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            this?.isSupportedAxes(Typeface.WEIGHT_AXIS) == true
+            this?.isSupportedAxes(intArrayOf(Typeface.WEIGHT_AXIS)) == true
 
     fun loadOptionalTypeface(fontPath: String): Typeface? = runCatching {
         when {
