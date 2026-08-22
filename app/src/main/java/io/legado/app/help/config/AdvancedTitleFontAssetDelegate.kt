@@ -42,8 +42,7 @@ internal class AdvancedTitleFontAssetDelegate(
      */
     private fun resolveWeight(fontFamily: String): Int {
         if (!fontFamily.startsWith(AdvancedTitleConfig.WEIGHTED_FONT_FAMILY)) return 400
-        val suffix = fontFamily.removePrefix(AdvancedTitleConfig.WEIGHTED_FONT_FAMILY)
-            .removePrefix("_")
+        val suffix = fontFamily.substringAfterLast('_')
         return suffix.toIntOrNull()?.coerceIn(100, 900) ?: preferredWeight()
     }
 
