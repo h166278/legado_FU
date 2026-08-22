@@ -21,6 +21,7 @@ import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
 import io.legado.app.R
 import io.legado.app.constant.EventBus
+import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AdvancedTitleNetworkImportPolicy
 import io.legado.app.help.config.AdvancedTitlePackageManager
@@ -133,6 +134,7 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
         template: String?,
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
+        setOnClickListener { showStyleEditor(entry) }
         gravity = Gravity.CENTER_VERTICAL
         setPadding(14.dpToPx(), 14.dpToPx(), 10.dpToPx(), 14.dpToPx())
         setBackgroundResource(R.drawable.advanced_title_card_background)
@@ -189,6 +191,68 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
             visibility = if (entry.isBuiltin) View.GONE else View.VISIBLE
             setOnClickListener { showEntryMenu(this, entry) }
         }.also { addView(it, LinearLayout.LayoutParams(40.dpToPx(), 48.dpToPx())) }
+    }
+
+    private fun showStyleEditor(entry: AdvancedTitlePackageManager.Entry) {
+        if (entry.isBuiltin) {
+            toastOnUi(getString(R.string.advanced_title_builtin_edit_hint))
+            return
+        }
+        val config = entry.config
+        val fields = listOf(
+            getString(R.string.advanced_title_font_weight) to (config.normalizedFontWeightOrNull()
+                ?: AdvancedTitleConfig.fontWeight).toString(),
+            getString(R.string.advanced_title_font_size) to (config.normalizedFontSizeScaleOrNull()
+                ?: AdvancedTitleConfig.fontSizeScale).toString(),
+            getString(R.string.advanced_title_top_spacing) to (config.normalizedTitleTopSpacingOrNull()
+                ?: 0).toString(),
+            getString(R.string.advanced_title_bottom_spacing) to (config.normalizedTitleBottomSpacingOrNull()
+                ?: 0).toString()
+        )
+        val inputs = fields.map { (label, value) ->
+            EditText(this).apply {
+                hint = label
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                setText(value)
+                selectAll()
+            }
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24.dpToPx(), 8.dpToPx(), 24.dpToPx(), 0)
+            inputs.forEach { addView(it, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )) }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.advanced_title_style_edit, entry.name))
+            .setView(content)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.confirm) { _, _ ->
+                runCatching {
+                    fun EditText.number(default: Int): Int = text.toString().toIntOrNull() ?: default
+                    val weight = inputs[0].number(AdvancedTitleConfig.fontWeight).coerceIn(100, 900)
+                    val scale = inputs[1].number(AdvancedTitleConfig.fontSizeScale).coerceIn(50, 200)
+                    val top = inputs[2].number(0).coerceIn(0, 200)
+                    val bottom = inputs[3].number(0).coerceIn(0, 200)
+                    AdvancedTitlePackageManager.addOrUpdate(
+                        name = entry.name,
+                        json = AdvancedTitlePackageManager.readTemplate(entry),
+                        oldEntry = entry,
+                        fontWeight = weight,
+                        fontSizeScale = scale,
+                        titleTopSpacing = top,
+                        titleBottomSpacing = bottom
+                    )
+                }.onSuccess {
+                    if (entry.id == AdvancedTitlePackageManager.activeId()) {
+                        AdvancedTitlePackageManager.apply(it)
+                        postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                    }
+                    refreshEntries()
+                }.onFailure { toastOnUi(it.localizedMessage ?: getString(R.string.error)) }
+            }
+            .show()
     }
 
     private fun applyEntry(entry: AdvancedTitlePackageManager.Entry) {
