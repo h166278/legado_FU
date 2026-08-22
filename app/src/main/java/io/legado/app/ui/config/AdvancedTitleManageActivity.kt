@@ -191,7 +191,7 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
             if (active) {
                 setImageResource(R.drawable.ng_ic_popup_selected)
                 imageTintList = android.content.res.ColorStateList.valueOf(
-                    ContextCompat.getColor(context, R.color.colorAccent)
+                    ThemeStore.primaryColor(this@AdvancedTitleManageActivity)
                 )
             } else {
                 visibility = View.INVISIBLE
