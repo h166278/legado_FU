@@ -35,7 +35,11 @@ object AdvancedTitlePackageManager {
         val splitMode: Int? = null,
         val delimiter: String? = null,
         val regex: String? = null,
-        val heightFactor: Int? = null
+        val heightFactor: Int? = null,
+        val fontWeight: Int? = null,
+        val fontSizeScale: Int? = null,
+        val titleTopSpacing: Int? = null,
+        val titleBottomSpacing: Int? = null
     ) {
         fun splitRuleOrNull(): AdvancedTitleConfig.SplitRule? {
             if (splitMode == null && delimiter == null && regex == null) return null
@@ -51,6 +55,10 @@ object AdvancedTitlePackageManager {
         }
 
         fun normalizedHeightFactorOrNull(): Int? = heightFactor?.coerceIn(30, 120)
+        fun normalizedFontWeightOrNull(): Int? = fontWeight?.coerceIn(100, 900)
+        fun normalizedFontSizeScaleOrNull(): Int? = fontSizeScale?.coerceIn(50, 200)
+        fun normalizedTitleTopSpacingOrNull(): Int? = titleTopSpacing?.coerceIn(0, 200)
+        fun normalizedTitleBottomSpacingOrNull(): Int? = titleBottomSpacing?.coerceIn(0, 200)
     }
 
     data class Entry(
@@ -108,6 +116,14 @@ object AdvancedTitlePackageManager {
     fun activeId(): String = appCtx.getPrefString(PreferKey.advancedTitlePackage)
         ?.takeIf(::isValidId)
         ?: BUILTIN_ID
+
+    fun activeConfig(): Config? {
+        val id = activeId()
+        if (isBuiltinId(id)) return builtinEntry(id).config
+        return runCatching {
+            verifyInstalledDirectory(localDir(id), expectedId = id)
+        }.getOrNull()
+    }
 
     suspend fun loadEntries(): List<Entry> = withContext(IO) {
         synchronized(mutationLock) {
@@ -179,7 +195,15 @@ object AdvancedTitlePackageManager {
         splitRule: AdvancedTitleConfig.SplitRule? = oldEntry?.config?.splitRuleOrNull()
             ?: AdvancedTitleConfig.globalRule,
         heightFactor: Int? = oldEntry?.config?.normalizedHeightFactorOrNull()
-            ?: AdvancedTitleConfig.heightFactor
+            ?: AdvancedTitleConfig.heightFactor,
+        fontWeight: Int? = oldEntry?.config?.normalizedFontWeightOrNull()
+            ?: AdvancedTitleConfig.fontWeight,
+        fontSizeScale: Int? = oldEntry?.config?.normalizedFontSizeScaleOrNull()
+            ?: AdvancedTitleConfig.fontSizeScale,
+        titleTopSpacing: Int? = oldEntry?.config?.normalizedTitleTopSpacingOrNull()
+            ?: 0,
+        titleBottomSpacing: Int? = oldEntry?.config?.normalizedTitleBottomSpacingOrNull()
+            ?: 0
     ): Entry =
         synchronized(mutationLock) {
         val normalizedName = normalizeName(name)
@@ -207,7 +231,11 @@ object AdvancedTitlePackageManager {
             splitMode = splitRule?.mode,
             delimiter = splitRule?.delimiter,
             regex = splitRule?.regex,
-            heightFactor = heightFactor?.coerceIn(30, 120)
+            heightFactor = heightFactor?.coerceIn(30, 120),
+            fontWeight = fontWeight?.coerceIn(100, 900),
+            fontSizeScale = fontSizeScale?.coerceIn(50, 200),
+            titleTopSpacing = titleTopSpacing?.coerceIn(0, 200),
+            titleBottomSpacing = titleBottomSpacing?.coerceIn(0, 200)
         )
         try {
             staging.mkdirs()
