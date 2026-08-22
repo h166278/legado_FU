@@ -5,6 +5,15 @@
     app:allowDividerBelow="false">
 
     <io.legado.app.lib.prefs.Preference
+        android:icon="@drawable/ic_code"
+        android:key="official_website"
+        android:summary="@string/official_website_summary"
+        android:title="@string/official_website"
+        app:allowDividerAbove="false"
+        app:allowDividerBelow="false"
+        app:iconSpaceReserved="false" />
+
+    <io.legado.app.lib.prefs.Preference
         android:icon="@drawable/ic_groups"
         android:key="contributors"
         android:summary="@string/contributors_summary_ng"

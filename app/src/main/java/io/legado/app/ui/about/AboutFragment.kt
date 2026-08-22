@@ -87,6 +87,7 @@ class AboutFragment : PreferenceFragmentCompat() {
 
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
+            "official_website" -> openUrl(R.string.official_website_url)
             "contributors" -> openUrl(R.string.contributors_url)
             "check_update" -> checkUpdate()
             "sponsor_developer" -> showSponsorDeveloper()
