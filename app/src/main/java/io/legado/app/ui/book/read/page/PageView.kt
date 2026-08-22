@@ -409,7 +409,7 @@ class PageView(context: Context) : FrameLayout(context) {
             showFallback()
             return
         }
-        // Lottie only renders decorative layers; keep title text in the safe native TextView.
+        // Lottie only renders decorative layers; the native title is always visible above it.
         val fallbackParams = fallback.layoutParams as ViewGroup.LayoutParams
         fallbackParams.width = width
         fallbackParams.height = height
