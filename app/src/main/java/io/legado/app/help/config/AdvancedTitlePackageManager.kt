@@ -320,6 +320,32 @@ object AdvancedTitlePackageManager {
 
     fun createBuiltinCopy(name: String): Entry = addOrUpdate(name, builtinJson())
 
+    fun resetStyle(entry: Entry): Entry {
+        if (entry.isBuiltin) {
+            synchronized(mutationLock) {
+                val styles = appCtx.getPrefString(PreferKey.advancedTitleBuiltinStyles)
+                    ?.let { GSON.fromJsonObject<Map<String, BuiltinStyle>>(it).getOrNull() }
+                    ?.toMutableMap()
+                if (styles != null) {
+                    styles.remove(entry.id)
+                    appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
+                }
+                invalidate()
+                return builtinEntry(entry.id)
+            }
+        }
+        return addOrUpdate(
+            name = entry.name,
+            json = readTemplate(entry),
+            oldEntry = entry,
+            fontWeight = 400,
+            fontSizeScale = 100,
+            titleTopSpacing = 0,
+            titleBottomSpacing = 0,
+            textColor = null,
+        )
+    }
+
     fun apply(entry: Entry) = synchronized(mutationLock) {
         val json = readTemplate(entry)
         validateJson(json)
