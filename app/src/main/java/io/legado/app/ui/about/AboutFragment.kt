@@ -117,7 +117,7 @@ class AboutFragment : PreferenceFragmentCompat() {
     private fun showSponsorDeveloper() {
         val density = resources.displayMetrics.density
         val padding = (20 * density).toInt()
-        val imageSize = (minOf(300, resources.displayMetrics.widthPixels / density * 0.78f) * density).toInt()
+        val imageSize = (minOf(300f, resources.displayMetrics.widthPixels / density * 0.78f) * density).toInt()
         val content = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(padding, 0, padding, padding)
