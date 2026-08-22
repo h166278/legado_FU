@@ -39,7 +39,8 @@ object AdvancedTitlePackageManager {
         val fontWeight: Int? = null,
         val fontSizeScale: Int? = null,
         val titleTopSpacing: Int? = null,
-        val titleBottomSpacing: Int? = null
+        val titleBottomSpacing: Int? = null,
+        val textColor: Int? = null
     ) {
         fun splitRuleOrNull(): AdvancedTitleConfig.SplitRule? {
             if (splitMode == null && delimiter == null && regex == null) return null
@@ -59,6 +60,7 @@ object AdvancedTitlePackageManager {
         fun normalizedFontSizeScaleOrNull(): Int? = fontSizeScale?.coerceIn(50, 200)
         fun normalizedTitleTopSpacingOrNull(): Int? = titleTopSpacing?.coerceIn(0, 200)
         fun normalizedTitleBottomSpacingOrNull(): Int? = titleBottomSpacing?.coerceIn(0, 200)
+        fun normalizedTextColorOrNull(): Int? = textColor
     }
 
     data class Entry(
@@ -71,8 +73,35 @@ object AdvancedTitlePackageManager {
         val updatedAt: Long get() = config.updatedAt
     }
 
+    private data class BuiltinStyle(
+        val fontWeight: Int? = null,
+        val fontSizeScale: Int? = null,
+        val titleTopSpacing: Int? = null,
+        val titleBottomSpacing: Int? = null,
+        val textColor: Int? = null
+    )
+
     val rootDir: File
         get() = appCtx.externalFiles.getFile("advancedTitlePackages")
+
+    private fun builtinStyle(id: String): BuiltinStyle? = appCtx
+        .getPrefString(PreferKey.advancedTitleBuiltinStyles)
+        ?.let { GSON.fromJsonObject<Map<String, BuiltinStyle>>(it).getOrNull() }
+        ?.get(id)
+
+    private fun saveBuiltinStyle(id: String, config: Config) {
+        val styles = appCtx.getPrefString(PreferKey.advancedTitleBuiltinStyles)
+            ?.let { GSON.fromJsonObject<Map<String, BuiltinStyle>>(it).getOrNull() }
+            ?.toMutableMap() ?: mutableMapOf()
+        styles[id] = BuiltinStyle(
+            fontWeight = config.normalizedFontWeightOrNull(),
+            fontSizeScale = config.normalizedFontSizeScaleOrNull(),
+            titleTopSpacing = config.normalizedTitleTopSpacingOrNull(),
+            titleBottomSpacing = config.normalizedTitleBottomSpacingOrNull(),
+            textColor = config.normalizedTextColorOrNull()
+        )
+        appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
+    }
 
     @Volatile
     private var cachedId: String? = null
@@ -105,7 +134,15 @@ object AdvancedTitlePackageManager {
             delimiter = " ",
             regex = AdvancedTitleConfig.DEFAULT_REGEX,
             heightFactor = AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
-        ),
+        ).let { base -> builtinStyle(id)?.let { style ->
+            base.copy(
+                fontWeight = style.fontWeight,
+                fontSizeScale = style.fontSizeScale,
+                titleTopSpacing = style.titleTopSpacing,
+                titleBottomSpacing = style.titleBottomSpacing,
+                textColor = style.textColor
+            )
+        } ?: base },
         isBuiltin = true
     )
 
@@ -203,12 +240,25 @@ object AdvancedTitlePackageManager {
         titleTopSpacing: Int? = oldEntry?.config?.normalizedTitleTopSpacingOrNull()
             ?: 0,
         titleBottomSpacing: Int? = oldEntry?.config?.normalizedTitleBottomSpacingOrNull()
-            ?: 0
+            ?: 0,
+        textColor: Int? = oldEntry?.config?.normalizedTextColorOrNull()
+            ?: AdvancedTitleConfig.textColor
     ): Entry =
         synchronized(mutationLock) {
         val normalizedName = normalizeName(name)
         validateJson(json)
-        val editableOld = oldEntry?.takeUnless { it.isBuiltin }
+        if (oldEntry?.isBuiltin == true) {
+            val config = oldEntry.config.copy(
+                fontWeight = fontWeight?.coerceIn(100, 900),
+                fontSizeScale = fontSizeScale?.coerceIn(50, 200),
+                titleTopSpacing = titleTopSpacing?.coerceIn(0, 200),
+                titleBottomSpacing = titleBottomSpacing?.coerceIn(0, 200),
+                textColor = textColor
+            )
+            saveBuiltinStyle(oldEntry.id, config)
+            return@synchronized Entry(config, isBuiltin = true)
+        }
+        val editableOld = oldEntry
         if (editableOld == null) {
             val packageCount = rootDir.listFiles().orEmpty().count {
                 it.isDirectory && !it.name.startsWith('.')
@@ -235,7 +285,8 @@ object AdvancedTitlePackageManager {
             fontWeight = fontWeight?.coerceIn(100, 900),
             fontSizeScale = fontSizeScale?.coerceIn(50, 200),
             titleTopSpacing = titleTopSpacing?.coerceIn(0, 200),
-            titleBottomSpacing = titleBottomSpacing?.coerceIn(0, 200)
+            titleBottomSpacing = titleBottomSpacing?.coerceIn(0, 200),
+            textColor = textColor
         )
         try {
             staging.mkdirs()
