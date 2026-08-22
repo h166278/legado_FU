@@ -21,10 +21,9 @@ object AdvancedTitlePackageManager {
     const val BUILTIN_ID = "builtin_default"
     const val BUILTIN_STAR_ID = "builtin_star"
     const val BUILTIN_PAGE_ID = "builtin_page"
-    const val BUILTIN_INK_ID = "builtin_ink"
     const val BUILTIN_RIBBON_ID = "builtin_ribbon"
     const val BUILTIN_MOON_ID = "builtin_moon"
-    const val BUILTIN_SEAL_ID = "builtin_seal"
+    const val BUILTIN_SWORD_ID = "builtin_sword"
     const val MAX_JSON_BYTES = 2L * 1024L * 1024L
     private const val MAX_PACKAGES = 64
     private const val MANIFEST_FILE = "package.json"
@@ -125,10 +124,9 @@ object AdvancedTitlePackageManager {
         builtinEntry(),
         builtinEntry(BUILTIN_STAR_ID, R.string.advanced_title_builtin_star),
         builtinEntry(BUILTIN_PAGE_ID, R.string.advanced_title_builtin_page),
-        builtinEntry(BUILTIN_INK_ID, R.string.advanced_title_builtin_ink),
         builtinEntry(BUILTIN_RIBBON_ID, R.string.advanced_title_builtin_ribbon),
         builtinEntry(BUILTIN_MOON_ID, R.string.advanced_title_builtin_moon),
-        builtinEntry(BUILTIN_SEAL_ID, R.string.advanced_title_builtin_seal),
+        builtinEntry(BUILTIN_SWORD_ID, R.string.advanced_title_builtin_sword),
     )
 
     private fun builtinEntry(id: String, nameRes: Int): Entry = Entry(
@@ -320,32 +318,6 @@ object AdvancedTitlePackageManager {
 
     fun createBuiltinCopy(name: String): Entry = addOrUpdate(name, builtinJson())
 
-    fun resetStyle(entry: Entry): Entry {
-        if (entry.isBuiltin) {
-            synchronized(mutationLock) {
-                val styles = appCtx.getPrefString(PreferKey.advancedTitleBuiltinStyles)
-                    ?.let { GSON.fromJsonObject<Map<String, BuiltinStyle>>(it).getOrNull() }
-                    ?.toMutableMap()
-                if (styles != null) {
-                    styles.remove(entry.id)
-                    appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
-                }
-                invalidate()
-                return builtinEntry(entry.id)
-            }
-        }
-        return addOrUpdate(
-            name = entry.name,
-            json = readTemplate(entry),
-            oldEntry = entry,
-            fontWeight = 400,
-            fontSizeScale = 100,
-            titleTopSpacing = 0,
-            titleBottomSpacing = 0,
-            textColor = null,
-        )
-    }
-
     fun apply(entry: Entry) = synchronized(mutationLock) {
         val json = readTemplate(entry)
         validateJson(json)
@@ -488,10 +460,9 @@ object AdvancedTitlePackageManager {
         val resource = when (id) {
             BUILTIN_STAR_ID -> R.raw.advanced_title_star
             BUILTIN_PAGE_ID -> R.raw.advanced_title_page
-            BUILTIN_INK_ID -> R.raw.advanced_title_ink
             BUILTIN_RIBBON_ID -> R.raw.advanced_title_ribbon
             BUILTIN_MOON_ID -> R.raw.advanced_title_moon
-            BUILTIN_SEAL_ID -> R.raw.advanced_title_seal
+            BUILTIN_SWORD_ID -> R.raw.advanced_title_sword
             else -> R.raw.advanced_title_lottie
         }
         return appCtx.resources.openRawResource(resource)
