@@ -293,9 +293,8 @@ object ChapterProvider {
         val baseTypeface = typeface ?: Typeface.DEFAULT
         // 保留文件字体的原始 Typeface；部分厂商系统在重新创建 400 字重时会回退到系统字体。
         if (resolvedWeight == 400) return baseTypeface
-        // 仅支持 wght 轴的可变字体走精确字重重建；静态字体统一走 fake bold，
-        // 否则部分厂商 ROM（如小米澎湃）会对静态字体回退到系统默认字体。
-        return if (baseTypeface.isVariable() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        // 使用公开的 Typeface API 设置字重；避免依赖不可用的隐藏字体轴 API。
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             Typeface.create(baseTypeface, resolvedWeight, false)
         } else if (resolvedWeight >= 700) {
             Typeface.create(baseTypeface, Typeface.BOLD)
@@ -304,9 +303,6 @@ object ChapterProvider {
         }
     }
 
-    private fun Typeface?.isVariable(): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            this?.isSupportedAxes(intArrayOf(Typeface.WEIGHT_AXIS)) == true
 
     fun loadOptionalTypeface(fontPath: String): Typeface? = runCatching {
         when {
