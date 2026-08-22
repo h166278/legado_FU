@@ -175,7 +175,11 @@ class CrashLogsDialog : BaseDialogFragment(R.layout.dialog_ng_recycler_view),
         }
 
         private fun readCrashBytes(fileDoc: FileDoc): ByteArray {
-            return fileDoc.asFile()?.readBytes() ?: fileDoc.readBytes()
+            val bytes = fileDoc.asFile()?.readBytes() ?: fileDoc.readBytes()
+            check(bytes.isNotEmpty()) {
+                "崩溃日志为空：${fileDoc.name}"
+            }
+            return bytes
         }
 
         fun readFile(fileDoc: FileDoc, success: (String) -> Unit) {

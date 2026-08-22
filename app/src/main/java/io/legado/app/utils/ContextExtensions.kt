@@ -29,6 +29,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
+import android.util.Log
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
@@ -347,17 +348,30 @@ private fun Context.setPrimaryClipSafely(text: String): Boolean {
 }
 
 fun Context.exportTextContent(text: String, filePrefix: String = "legado-log") {
+    var tempFile: File? = null
+    var targetFile: File? = null
     runCatching {
+        check(text.isNotBlank()) {
+            "导出内容为空"
+        }
         val dir = File(externalCacheDir ?: cacheDir, "share")
         dir.mkdirs()
-        val file = File(dir, "$filePrefix-${System.currentTimeMillis()}.txt")
-        file.writeText(text)
-        val uri = FileProvider.getUriForFile(this, AppConst.authority, file)
+        val fileName = "$filePrefix-${System.currentTimeMillis()}.txt"
+        targetFile = File(dir, fileName)
+        tempFile = File(dir, ".$fileName.tmp")
+        tempFile!!.writeText(text)
+        check(tempFile!!.length() > 0L) {
+            "导出文件为空"
+        }
+        check(tempFile!!.renameTo(targetFile!!)) {
+            "导出文件提交失败"
+        }
+        val uri = FileProvider.getUriForFile(this, AppConst.authority, targetFile!!)
         val intent = Intent(Intent.ACTION_SEND).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             type = "text/plain"
-            clipData = ClipData.newUri(contentResolver, file.name, uri)
+            clipData = ClipData.newUri(contentResolver, targetFile!!.name, uri)
             putExtra(Intent.EXTRA_STREAM, uri)
         }
         val chooser = Intent.createChooser(intent, getString(R.string.share)).apply {
@@ -365,7 +379,10 @@ fun Context.exportTextContent(text: String, filePrefix: String = "legado-log") {
         }
         startActivity(chooser)
         longToastOnUi(R.string.export_content_started)
-    }.onFailure {
+    }.onFailure { error ->
+        tempFile?.delete()
+        targetFile?.takeIf { it.length() == 0L }?.delete()
+        Log.e("TextExport", "导出文本失败", error)
         longToastOnUi(R.string.export_failed)
     }
 }
