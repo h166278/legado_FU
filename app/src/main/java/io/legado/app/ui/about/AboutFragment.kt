@@ -4,7 +4,13 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.annotation.StringRes
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
@@ -83,6 +89,7 @@ class AboutFragment : PreferenceFragmentCompat() {
         when (preference.key) {
             "contributors" -> openUrl(R.string.contributors_url)
             "check_update" -> checkUpdate()
+            "sponsor_developer" -> showSponsorDeveloper()
             "mail" -> requireContext().sendMail(getString(R.string.email))
             "license" -> showMdFile(getString(R.string.license), "LICENSE.md")
             "disclaimer" -> showMdFile(getString(R.string.disclaimer), "disclaimer.md")
@@ -105,6 +112,35 @@ class AboutFragment : PreferenceFragmentCompat() {
     private fun showMdFile(title: String, fileName: String) {
         val mdText = String(requireContext().assets.open(fileName).readBytes())
         showDialogFragment(TextDialog(title, mdText, TextDialog.Mode.MD))
+    }
+
+    private fun showSponsorDeveloper() {
+        val density = resources.displayMetrics.density
+        val padding = (20 * density).toInt()
+        val imageSize = (minOf(300, resources.displayMetrics.widthPixels / density * 0.78f) * density).toInt()
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, 0, padding, padding)
+        }
+        content.addView(TextView(requireContext()).apply {
+            text = getString(R.string.sponsor_developer_notice)
+            setTextColor(primaryColor)
+            setPadding(0, 0, 0, (12 * density).toInt())
+        })
+        content.addView(ImageView(requireContext()).apply {
+            setImageResource(R.drawable.sponsor_alipay)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = getString(R.string.sponsor_developer_qr_description)
+            layoutParams = LinearLayout.LayoutParams(imageSize, imageSize).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+        })
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.sponsor_developer)
+            .setView(ScrollView(requireContext()).apply { addView(content) })
+            .setPositiveButton(R.string.dialog_cancel, null)
+            .show()
     }
 
     /**
