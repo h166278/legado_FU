@@ -91,6 +91,9 @@ object AdvancedTitleConfig {
     fun effectiveFontSizeScale(): Int = AdvancedTitlePackageManager.activeConfig()
         ?.normalizedFontSizeScaleOrNull() ?: fontSizeScale
 
+    fun effectiveTextColor(): Int? = AdvancedTitlePackageManager.activeConfig()
+        ?.normalizedTextColorOrNull() ?: textColor
+
     fun effectiveTitleTopSpacing(fallback: Int): Int = AdvancedTitlePackageManager.activeConfig()
         ?.normalizedTitleTopSpacingOrNull() ?: fallback
 
@@ -131,7 +134,7 @@ object AdvancedTitleConfig {
         raw?.let {
             applyCompatibleTextStyle(
                 replaceVariables(it, book, title),
-                textColor,
+                effectiveTextColor(),
                 effectiveFontWeight(),
                 effectiveFontSizeScale(),
                 io.legado.app.help.config.ReadBookConfig.textFont
