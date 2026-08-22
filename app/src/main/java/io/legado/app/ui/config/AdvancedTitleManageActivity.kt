@@ -194,10 +194,6 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
     }
 
     private fun showStyleEditor(entry: AdvancedTitlePackageManager.Entry) {
-        if (entry.isBuiltin) {
-            toastOnUi(getString(R.string.advanced_title_builtin_edit_hint))
-            return
-        }
         val config = entry.config
         val fields = listOf(
             getString(R.string.advanced_title_font_weight) to (config.normalizedFontWeightOrNull()
@@ -207,7 +203,9 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
             getString(R.string.advanced_title_top_spacing) to (config.normalizedTitleTopSpacingOrNull()
                 ?: 0).toString(),
             getString(R.string.advanced_title_bottom_spacing) to (config.normalizedTitleBottomSpacingOrNull()
-                ?: 0).toString()
+                ?: 0).toString(),
+            getString(R.string.advanced_title_text_color) to (config.normalizedTextColorOrNull()
+                ?: AdvancedTitleConfig.textColor ?: 0).toString()
         )
         val inputs = fields.map { (label, value) ->
             EditText(this).apply {
