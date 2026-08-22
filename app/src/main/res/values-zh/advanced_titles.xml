@@ -30,4 +30,8 @@
     <string name="advanced_title_import_network">网络导入</string>
     <string name="advanced_title_builtin_copy">内置高级标题副本</string>
     <string name="advanced_title_network_url">HTTPS JSON 地址</string>
+    <string name="advanced_title_style_edit">编辑模板样式：%1$s</string>
+    <string name="advanced_title_top_spacing">上边距</string>
+    <string name="advanced_title_bottom_spacing">下边距</string>
+    <string name="advanced_title_builtin_edit_hint">内置模板不能直接编辑，请先复制为新模板</string>
 </resources>
