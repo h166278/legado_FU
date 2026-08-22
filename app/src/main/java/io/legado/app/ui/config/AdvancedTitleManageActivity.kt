@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
@@ -134,7 +135,13 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
         template: String?,
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        setOnClickListener { showStyleEditor(entry) }
+        setOnClickListener {
+            if (entry.id == AdvancedTitlePackageManager.activeId()) {
+                showStyleEditor(entry)
+            } else {
+                applyEntry(entry)
+            }
+        }
         gravity = Gravity.CENTER_VERTICAL
         setPadding(14.dpToPx(), 14.dpToPx(), 10.dpToPx(), 14.dpToPx())
         setBackgroundResource(R.drawable.advanced_title_card_background)
@@ -176,12 +183,25 @@ class AdvancedTitleManageActivity : AppCompatActivity() {
                 setPadding(0, 6.dpToPx(), 0, 0)
             })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        Button(context).apply {
+        ImageView(context).apply {
             val active = entry.id == AdvancedTitlePackageManager.activeId()
-            text = getString(if (active) R.string.advanced_title_applied else R.string.advanced_title_apply)
-            isEnabled = !active
-            setOnClickListener { applyEntry(entry) }
-        }.also { addView(it) }
+            contentDescription = getString(
+                if (active) R.string.advanced_title_applied else R.string.advanced_title_apply
+            )
+            if (active) {
+                setImageResource(R.drawable.ng_ic_popup_selected)
+                imageTintList = android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(context, R.color.colorAccent)
+                )
+            } else {
+                visibility = View.INVISIBLE
+            }
+            setOnClickListener {
+                if (active) showStyleEditor(entry)
+            }
+        }.also {
+            addView(it, LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx()))
+        }
         TextView(context).apply {
             text = "⋮"
             textSize = 28f

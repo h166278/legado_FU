@@ -134,7 +134,7 @@ object AdvancedTitleConfig {
         raw?.let {
             val configuredTextColor = effectiveTextColor()
             val renderTextColor = configuredTextColor
-                ?: ReadBookConfig.resolvedTitleColor.takeIf { ReadBookConfig.isNightTheme }
+                ?: ReadBookConfig.textColor
             applyCompatibleTextStyle(
                 replaceVariables(it, book, title),
                 renderTextColor,

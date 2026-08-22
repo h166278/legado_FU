@@ -123,8 +123,6 @@ object AdvancedTitlePackageManager {
         builtinEntry(),
         builtinEntry(BUILTIN_STAR_ID, R.string.advanced_title_builtin_star),
         builtinEntry(BUILTIN_PAGE_ID, R.string.advanced_title_builtin_page),
-        builtinEntry(BUILTIN_MOON_ID, R.string.advanced_title_builtin_moon),
-        builtinEntry(BUILTIN_SWORD_ID, R.string.advanced_title_builtin_sword),
     )
 
     private fun builtinEntry(id: String, nameRes: Int): Entry = Entry(
@@ -152,9 +150,12 @@ object AdvancedTitlePackageManager {
 
     private fun builtinEntry(id: String): Entry = builtinEntries().first { it.id == id }
 
-    fun activeId(): String = appCtx.getPrefString(PreferKey.advancedTitlePackage)
-        ?.takeIf(::isValidId)
-        ?: BUILTIN_ID
+    fun activeId(): String {
+        val id = appCtx.getPrefString(PreferKey.advancedTitlePackage)
+            ?.takeIf(::isValidId)
+            ?: BUILTIN_ID
+        return if (id == BUILTIN_MOON_ID || id == BUILTIN_SWORD_ID) BUILTIN_ID else id
+    }
 
     fun activeConfig(): Config? {
         val id = activeId()
@@ -189,8 +190,12 @@ object AdvancedTitlePackageManager {
     }
 
     fun currentTemplate(): String? {
-        val explicitId = appCtx.getPrefString(PreferKey.advancedTitlePackage)
+        val storedId = appCtx.getPrefString(PreferKey.advancedTitlePackage)
             ?.takeIf(::isValidId)
+        if (storedId == BUILTIN_MOON_ID || storedId == BUILTIN_SWORD_ID) {
+            return builtinJson(BUILTIN_ID)
+        }
+        val explicitId = storedId
         if (explicitId == null) {
             legacyTemplate()?.takeIf { runCatching { AdvancedTitleConfig.isValidLottieJson(it) }.getOrDefault(false) }
                 ?.let { return it }
