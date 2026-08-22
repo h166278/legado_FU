@@ -65,6 +65,8 @@ class PageView(context: Context) : FrameLayout(context) {
     private var advancedTitleKey: String? = null
     private var advancedTitleStyleVersion = Long.MIN_VALUE
     private var advancedTitleWeight = Int.MIN_VALUE
+    private var advancedTitleFontPath: String? = null
+    private var advancedTitleTypeface: Typeface? = null
     var isScroll = false
 
     val headerHeight: Int
@@ -376,6 +378,8 @@ class PageView(context: Context) : FrameLayout(context) {
             advancedTitleKey = null
             advancedTitleStyleVersion = Long.MIN_VALUE
             advancedTitleWeight = Int.MIN_VALUE
+            advancedTitleFontPath = null
+            advancedTitleTypeface = null
         }
         if (ReadBookConfig.titleMode != AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
             hide()
@@ -415,11 +419,17 @@ class PageView(context: Context) : FrameLayout(context) {
         lottie.setFontAssetDelegate(advancedTitleFontDelegate)
         val styleVersion = ChapterProvider.styleVersion
         val titleWeight = AdvancedTitleConfig.effectiveFontWeight()
+        val fontPath = ReadBookConfig.textFont
+        val currentTypeface = ChapterProvider.typeface
         if (advancedTitleKey != block.json ||
             advancedTitleStyleVersion != styleVersion ||
-            advancedTitleWeight != titleWeight
+            advancedTitleWeight != titleWeight ||
+            advancedTitleFontPath != fontPath ||
+            advancedTitleTypeface !== currentTypeface
         ) {
             lottie.cancelAnimation()
+            lottie.clearAnimation()
+            lottie.setFontAssetDelegate(advancedTitleFontDelegate)
             // 重新解析时让 Lottie 通过字体代理读取最新的阅读字体。
             if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
                 showFallback()
@@ -428,6 +438,8 @@ class PageView(context: Context) : FrameLayout(context) {
             advancedTitleKey = block.json
             advancedTitleStyleVersion = styleVersion
             advancedTitleWeight = titleWeight
+            advancedTitleFontPath = fontPath
+            advancedTitleTypeface = currentTypeface
         }
         lottie.repeatCount = LottieDrawable.INFINITE
         lottie.visibility = View.VISIBLE
@@ -448,11 +460,11 @@ class PageView(context: Context) : FrameLayout(context) {
 
     private val advancedTitleFontDelegate = AdvancedTitleFontAssetDelegate(
         preferredTypeface = { ChapterProvider.typeface },
-        preferredWeight = { AdvancedTitleConfig.fontWeight },
+        preferredWeight = { AdvancedTitleConfig.effectiveFontWeight() },
     )
 
     private fun advancedTitleTypeface(): Typeface {
-        val weight = AdvancedTitleConfig.fontWeight
+        val weight = AdvancedTitleConfig.effectiveFontWeight()
         val base = ChapterProvider.typeface ?: Typeface.DEFAULT
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             Typeface.create(base, weight, false)
