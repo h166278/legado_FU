@@ -124,8 +124,9 @@ class AboutFragment : PreferenceFragmentCompat() {
         }
         content.addView(TextView(requireContext()).apply {
             text = getString(R.string.sponsor_developer_notice)
-            setTextColor(primaryColor)
-            setPadding(0, 0, 0, (12 * density).toInt())
+            textSize = 15f
+            setLineSpacing(4 * density, 1f)
+            setPadding(0, 0, 0, (16 * density).toInt())
         })
         content.addView(ImageView(requireContext()).apply {
             setImageResource(R.drawable.sponsor_alipay)
