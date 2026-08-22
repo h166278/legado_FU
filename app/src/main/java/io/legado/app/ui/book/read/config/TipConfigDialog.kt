@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -233,10 +235,20 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                                         entry.config.normalizedTextColorOrNull()
                                             ?: AdvancedTitleConfig.effectiveTextColor()
                                             ?: ReadBookConfig.resolvedTitleColor,
-                                    )
+                                    )?.let { editingTemplate = it }
                                 } else {
                                     resetSelectedColor(ColorPickerTarget.ADVANCED_TITLE)
+                                        ?.let { editingTemplate = it }
                                 }
+                                revision++
+                            },
+                            onReset = { entry ->
+                                val updated = AdvancedTitlePackageManager.resetStyle(entry)
+                                if (entry.id == AdvancedTitlePackageManager.activeId()) {
+                                    AdvancedTitlePackageManager.apply(updated)
+                                    postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                                }
+                                editingTemplate = updated
                                 revision++
                             },
                             onSave = { entry, weight, size, top, bottom ->
@@ -340,12 +352,24 @@ class TipConfigDialog : BaseComposeDialogFragment() {
     private fun AdvancedTitleTemplates(
         entries: List<AdvancedTitlePackageManager.Entry>,
         editing: AdvancedTitlePackageManager.Entry?,
-        onEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
+        onEdit: (AdvancedTitlePackageManager.Entry?) -> Unit,
         onApply: (AdvancedTitlePackageManager.Entry) -> Unit,
         onColorEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
         onColorEnabledChanged: (AdvancedTitlePackageManager.Entry, Boolean) -> Unit,
+        onReset: (AdvancedTitlePackageManager.Entry) -> Unit,
         onSave: (AdvancedTitlePackageManager.Entry, Int, Int, Int, Int) -> Unit,
     ) {
+        editing?.let { entry ->
+            AdvancedTitleStyleEditor(
+                entry = entry,
+                onBack = { onEdit(null) },
+                onColorEdit = onColorEdit,
+                onColorEnabledChanged = onColorEnabledChanged,
+                onReset = onReset,
+                onSave = onSave,
+            )
+            return
+        }
         entries.forEach { entry ->
             val active = entry.id == AdvancedTitlePackageManager.activeId()
             Row(
@@ -363,69 +387,130 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = getString(if (active) R.string.advanced_title_applied else R.string.advanced_title_source_builtin),
+                        text = when {
+                            active -> getString(R.string.advanced_title_applied)
+                            entry.config.normalizedFontWeightOrNull() != null ||
+                                entry.config.normalizedFontSizeScaleOrNull() != null ||
+                                entry.config.normalizedTitleTopSpacingOrNull() != null ||
+                                entry.config.normalizedTitleBottomSpacingOrNull() != null ||
+                                entry.config.normalizedTextColorOrNull() != null ->
+                                getString(R.string.advanced_title_adjusted)
+                            else -> getString(R.string.advanced_title_source_builtin)
+                        },
                         color = Color(NgTheme.colors.onSurfaceVariant),
                         fontSize = 12.sp,
                     )
                 }
                 Text(
-                    text = getString(if (active) R.string.advanced_title_applied else R.string.advanced_title_apply),
+                    text = getString(R.string.advanced_title_adjust),
                     modifier = Modifier
-                        .clickable(enabled = !active) { onApply(entry) }
+                        .clickable { onEdit(entry) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     color = Color(NgTheme.colors.primary),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
+                if (!active) {
+                    Text(
+                        text = getString(R.string.advanced_title_apply),
+                        modifier = Modifier
+                            .clickable { onApply(entry) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = Color(NgTheme.colors.primary),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
-            if (editing?.id == entry.id) {
-                val config = editing.config
-                var weight by remember(entry.id) {
-                    mutableIntStateOf(config.normalizedFontWeightOrNull() ?: 400)
-                }
-                var size by remember(entry.id) {
-                    mutableIntStateOf(config.normalizedFontSizeScaleOrNull() ?: 100)
-                }
-                var top by remember(entry.id) {
-                    mutableIntStateOf(config.normalizedTitleTopSpacingOrNull() ?: 0)
-                }
-                var bottom by remember(entry.id) {
-                    mutableIntStateOf(config.normalizedTitleBottomSpacingOrNull() ?: 0)
-                }
-                ReadConfigSliderRow(
-                    title = getString(R.string.advanced_title_font_weight),
-                    value = weight,
-                    valueRange = 100..900,
-                    stepSize = 100,
-                    onValueChange = { weight = it; onSave(entry, it, size, top, bottom) },
-                )
-                ReadConfigSliderRow(
-                    title = getString(R.string.advanced_title_font_size),
-                    value = size,
-                    valueRange = 50..200,
-                    stepSize = 10,
-                    onValueChange = { size = it; onSave(entry, weight, it, top, bottom) },
-                )
-                ReadConfigSliderRow(
-                    title = getString(R.string.title_margin_top),
-                    value = top,
-                    valueRange = 0..100,
-                    onValueChange = { top = it; onSave(entry, weight, size, it, bottom) },
-                )
-                ReadConfigSliderRow(
-                    title = getString(R.string.title_margin_bottom),
-                    value = bottom,
-                    valueRange = 0..100,
-                    onValueChange = { bottom = it; onSave(entry, weight, size, top, it) },
-                )
-                AdvancedTitleOptionalColorRow(
-                    title = getString(R.string.highlight_rule_use_text_color),
-                    color = config.normalizedTextColorOrNull(),
-                    onEnabledChanged = { onColorEnabledChanged(editing, it) },
-                    onClick = { onColorEdit(editing) },
+        }
+    }
+
+    @Composable
+    private fun AdvancedTitleStyleEditor(
+        entry: AdvancedTitlePackageManager.Entry,
+        onBack: () -> Unit,
+        onColorEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
+        onColorEnabledChanged: (AdvancedTitlePackageManager.Entry, Boolean) -> Unit,
+        onReset: (AdvancedTitlePackageManager.Entry) -> Unit,
+        onSave: (AdvancedTitlePackageManager.Entry, Int, Int, Int, Int) -> Unit,
+    ) {
+        val config = entry.config
+        var showResetConfirmation by remember(entry.id) { mutableStateOf(false) }
+        var weight by remember(entry.id, config.updatedAt) { mutableIntStateOf(config.normalizedFontWeightOrNull() ?: 400) }
+        var size by remember(entry.id, config.updatedAt) { mutableIntStateOf(config.normalizedFontSizeScaleOrNull() ?: 100) }
+        var top by remember(entry.id, config.updatedAt) { mutableIntStateOf(config.normalizedTitleTopSpacingOrNull() ?: 0) }
+        var bottom by remember(entry.id, config.updatedAt) { mutableIntStateOf(config.normalizedTitleBottomSpacingOrNull() ?: 0) }
+        Row(
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_arrow_back),
+                contentDescription = getString(R.string.back),
+                modifier = Modifier.size(28.dp).clickable(onClick = onBack),
+                tint = Color(NgTheme.colors.onSurface),
+            )
+            Text(
+                text = getString(R.string.advanced_title_style_edit, entry.name),
+                modifier = Modifier.weight(1f).padding(start = 10.dp),
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            if (entry.isBuiltin) {
+                Text(
+                    text = getString(R.string.restore_default),
+                    modifier = Modifier
+                        .clickable { showResetConfirmation = true }
+                        .padding(vertical = 8.dp),
+                    color = Color(NgTheme.colors.primary),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
+        if (showResetConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showResetConfirmation = false },
+                title = { Text(getString(R.string.restore_default)) },
+                text = { Text(getString(R.string.advanced_title_reset_confirmation, entry.name)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showResetConfirmation = false
+                        onReset(entry)
+                    }) { Text(getString(R.string.restore_default)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetConfirmation = false }) {
+                        Text(getString(R.string.cancel))
+                    }
+                },
+            )
+        }
+        ReadConfigSliderRow(
+            title = getString(R.string.advanced_title_font_weight), value = weight,
+            valueRange = 100..900, stepSize = 100,
+            onValueChange = { weight = it; onSave(entry, it, size, top, bottom) },
+        )
+        ReadConfigSliderRow(
+            title = getString(R.string.advanced_title_font_size), value = size,
+            valueRange = 50..200, stepSize = 10,
+            onValueChange = { size = it; onSave(entry, weight, it, top, bottom) },
+        )
+        ReadConfigSliderRow(
+            title = getString(R.string.title_margin_top), value = top, valueRange = 0..100,
+            onValueChange = { top = it; onSave(entry, weight, size, it, bottom) },
+        )
+        ReadConfigSliderRow(
+            title = getString(R.string.title_margin_bottom), value = bottom, valueRange = 0..100,
+            onValueChange = { bottom = it; onSave(entry, weight, size, top, it) },
+        )
+        AdvancedTitleOptionalColorRow(
+            title = getString(R.string.highlight_rule_use_text_color),
+            color = config.normalizedTextColorOrNull(),
+            onEnabledChanged = { onColorEnabledChanged(entry, it) },
+            onClick = { onColorEdit(entry) },
+        )
     }
 
     @Composable

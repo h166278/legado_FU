@@ -14,6 +14,7 @@
     <string name="advanced_title_too_large">Lottie JSON exceeds the 2 MB limit</string>
     <string name="advanced_title_package_limit">Up to 64 advanced titles can be stored</string>
     <string name="advanced_title_apply">Apply</string>
+    <string name="advanced_title_adjust">Adjust</string>
     <string name="advanced_title_current">Current</string>
     <string name="advanced_title_source_builtin">Built-in</string>
     <string name="advanced_title_source_local">Local</string>
@@ -24,6 +25,7 @@
     <string name="advanced_title_text_color">Text color</string>
     <string name="advanced_title_add">Add</string>
     <string name="advanced_title_applied">Applied</string>
+    <string name="advanced_title_adjusted">Adjusted</string>
     <string name="advanced_title_current_source">Current · %1$s</string>
     <string name="advanced_title_create_builtin">Create from built-in template</string>
     <string name="advanced_title_import_file">Import from file</string>
@@ -34,4 +36,5 @@
     <string name="advanced_title_top_spacing">Top spacing</string>
     <string name="advanced_title_bottom_spacing">Bottom spacing</string>
     <string name="advanced_title_builtin_edit_hint">Copy the built-in template before editing it</string>
+    <string name="advanced_title_reset_confirmation">Restore the default style for “%1$s”? This clears custom weight, size, spacing, and text color.</string>
 </resources>

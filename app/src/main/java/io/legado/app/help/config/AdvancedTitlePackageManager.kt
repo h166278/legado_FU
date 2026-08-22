@@ -103,6 +103,18 @@ object AdvancedTitlePackageManager {
         appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
     }
 
+    fun resetStyle(entry: Entry): Entry {
+        require(entry.isBuiltin) { "Only built-in template styles can be reset" }
+        synchronized(mutationLock) {
+            val styles = appCtx.getPrefString(PreferKey.advancedTitleBuiltinStyles)
+                ?.let { GSON.fromJsonObject<Map<String, BuiltinStyle>>(it).getOrNull() }
+                ?.toMutableMap() ?: return builtinEntry(entry.id)
+            styles.remove(entry.id)
+            appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
+            return builtinEntry(entry.id)
+        }
+    }
+
     @Volatile
     private var cachedId: String? = null
     @Volatile
