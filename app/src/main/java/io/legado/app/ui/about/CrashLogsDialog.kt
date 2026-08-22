@@ -77,7 +77,11 @@ class CrashLogsDialog : BaseDialogFragment(R.layout.dialog_ng_recycler_view),
                 }
                 viewModel.readFiles(files) {
                     if (lifecycleScope.isActive) {
-                        requireContext().exportTextContent(it, filePrefix = "legado-crash-log")
+                        if (it.isBlank()) {
+                            requireContext().toastOnUi(R.string.export_content_empty)
+                        } else {
+                            requireContext().exportTextContent(it, filePrefix = "legado-crash-log")
+                        }
                     }
                 }
             }
@@ -170,9 +174,13 @@ class CrashLogsDialog : BaseDialogFragment(R.layout.dialog_ng_recycler_view),
             }
         }
 
+        private fun readCrashBytes(fileDoc: FileDoc): ByteArray {
+            return fileDoc.asFile()?.readBytes() ?: fileDoc.readBytes()
+        }
+
         fun readFile(fileDoc: FileDoc, success: (String) -> Unit) {
             execute {
-                String(fileDoc.readBytes())
+                String(readCrashBytes(fileDoc))
             }.onSuccess {
                 success.invoke(it)
             }.onError {
@@ -185,7 +193,7 @@ class CrashLogsDialog : BaseDialogFragment(R.layout.dialog_ng_recycler_view),
                 fileDocs.joinToString("\n\n") { fileDoc ->
                     buildString {
                         append("// ===== ").append(fileDoc.name).append(" =====\n")
-                        append(String(fileDoc.readBytes()))
+                        append(String(readCrashBytes(fileDoc)))
                     }
                 }
             }.onSuccess {
