@@ -133,7 +133,8 @@ object AdvancedTitleConfig {
                 replaceVariables(it, book, title),
                 textColor,
                 effectiveFontWeight(),
-                effectiveFontSizeScale()
+                effectiveFontSizeScale(),
+                io.legado.app.help.config.ReadBookConfig.textFont
             )
         }
     }.getOrNull()
@@ -246,12 +247,14 @@ object AdvancedTitleConfig {
         color: Int?,
         fontWeight: Int,
         fontSizeScale: Int = 100,
+        fontPath: String = "",
     ): String {
-        if (color == null && fontWeight == 400 && fontSizeScale == 100) return source
+        if (color == null && fontWeight == 400 && fontSizeScale == 100 && fontPath.isBlank()) return source
         return runCatching {
             val root = JSONObject(source)
             val layers = root.optJSONArray("layers") ?: return source
-            val weightedFont = if (fontWeight == 400) null else weightedFontFamily(fontWeight)
+            val fontIdentity = fontIdentity(fontPath)
+            val weightedFont = weightedFontFamily(fontIdentity, fontWeight)
             var hasCompatibleLayer = false
             for (index in 0 until layers.length()) {
                 val layer = layers.optJSONObject(index) ?: continue
@@ -290,7 +293,15 @@ object AdvancedTitleConfig {
     }
 
     /** 把字重数值编码进字体名，使 JSON 内容随字重变化（用于触发动画重载与字体缓存刷新） */
-    fun weightedFontFamily(weight: Int): String = "${WEIGHTED_FONT_FAMILY}_$weight"
+    fun weightedFontFamily(weight: Int): String = weightedFontFamily("default", weight)
+
+    fun weightedFontFamily(fontIdentity: String, weight: Int): String =
+        "${WEIGHTED_FONT_FAMILY}_${fontIdentity}_$weight"
+
+    private fun fontIdentity(fontPath: String): String {
+        val value = fontPath.ifBlank { "default" }
+        return value.hashCode().toUInt().toString(16)
+    }
 
     private fun Int.toLottieColor() = JSONArray().apply {
         put(((this@toLottieColor ushr 16) and 0xff) / 255.0)
