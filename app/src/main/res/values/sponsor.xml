@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sponsor_developer">自愿赞助开发者</string>
+    <string name="sponsor_developer_summary">完全自愿，不影响软件使用</string>
+    <string name="sponsor_developer_notice"><![CDATA[感谢你对软件维护工作的支持。
+
+本入口仅用于自愿支持开发者，付款完全自愿，不影响软件正常使用，也不会解锁额外功能。
+
+请明确知悉：这不是公益捐赠，不是爱心募捐，也不是面向公众的筹款。相关款项仅用于个人开发、服务器和软件维护，不用于任何公益项目。
+
+下方二维码为支付宝收款码，请确认收款对象后再决定是否支持。]]></string>
+    <string name="sponsor_developer_qr_description">支付宝收款码</string>
+</resources>
