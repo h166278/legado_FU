@@ -65,7 +65,9 @@ data class TextPage(
         val offsetY: Float,
         val width: Float,
         val height: Float,
-        val json: String
+        val json: String,
+        val chapterNumber: String,
+        val chapterTitle: String,
     )
 
     @JvmField
