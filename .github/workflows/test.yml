@@ -132,6 +132,7 @@ jobs:
             UPDATED_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"%s" --reverse 2>/dev/null \
               | grep -vE '^(Merge|Sync upstream)$' \
               | grep -vE '^$' \
+              | awk '!seen[$0]++' \
               | while IFS= read -r subject; do translate_subject "$subject"; done || true)
           else
             echo "DEBUG: invalid commit range, fallback to last commit"
