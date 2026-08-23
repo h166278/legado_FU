@@ -12,6 +12,17 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import kotlinx.coroutines.CoroutineScope
 
+private fun String.deduplicateReleaseNotes(): String {
+    val seen = LinkedHashSet<String>()
+    return lineSequence()
+        .map { it.trimEnd() }
+        .filter { line ->
+            val key = line.trim()
+            key.isEmpty() || seen.add(key)
+        }
+        .joinToString("\n")
+}
+
 @Keep
 @Suppress("unused")
 object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
@@ -57,7 +68,7 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
                 ?.let {
                     return@async AppUpdate.UpdateInfo(
                         it.versionName,
-                        it.note,
+                        it.note.deduplicateReleaseNotes(),
                         it.downloadUrl,
                         it.name
                     )
