@@ -56,7 +56,8 @@ jobs:
             CHANNEL="beta"
             PUBLISH="true"
             PRERELEASE="true"
-            TAG_NAME="beta"
+            # 每次测试构建使用独立标签，保留历史预发行版。
+            TAG_NAME="beta-${GITHUB_RUN_NUMBER}"
           fi
 
           if [[ "$CHANNEL" == "release" ]]; then
@@ -80,26 +81,50 @@ jobs:
 
           translate_subject() {
             local subject="$1"
+            local detail="$subject"
+            local category="更新"
+
             case "$subject" in
-              "feat: refine advanced title labels and color controls")
-                echo "* 功能：优化高级标题标签和颜色控制" ;;
-              "fix: import advanced title color switch control")
-                echo "* 修复：导入高级标题颜色开关控件" ;;
               feat:*|feature:*)
-                echo "* 功能：新增功能和使用体验优化" ;;
+                category="功能"
+                detail="${subject#*: }" ;;
               fix:*|bugfix:*)
-                echo "* 修复：问题修复和稳定性改进" ;;
+                category="修复"
+                detail="${subject#*: }" ;;
               refactor:*)
-                echo "* 重构：优化代码结构" ;;
+                category="重构"
+                detail="${subject#*: }" ;;
               perf:*)
-                echo "* 性能：优化运行效率" ;;
+                category="优化"
+                detail="${subject#*: }" ;;
               docs:*)
-                echo "* 文档：更新说明文档" ;;
+                category="文档"
+                detail="${subject#*: }" ;;
               chore:*|build:*|ci:*)
-                echo "* 构建：更新项目配置" ;;
-              *)
-                echo "* 优化：改进功能并修复问题" ;;
+                category="构建"
+                detail="${subject#*: }" ;;
+              修复*|修正*|解决*)
+                category="修复"
+                detail=$(printf '%s' "$subject" | sed -E 's/^(修复|修正|解决)[：:[:space:]]*//') ;;
+              优化*|改进*|调整*)
+                category="优化"
+                detail=$(printf '%s' "$subject" | sed -E 's/^(优化|改进|调整)[：:[:space:]]*//') ;;
+              新增*|增加*|支持*|恢复*)
+                category="功能"
+                detail=$(printf '%s' "$subject" | sed -E 's/^(新增|增加|支持|恢复)[：:[:space:]]*//') ;;
+              重构*)
+                category="重构"
+                detail=$(printf '%s' "$subject" | sed -E 's/^重构[：:[:space:]]*//') ;;
+              构建*|编译*|依赖*)
+                category="构建"
+                detail=$(printf '%s' "$subject" | sed -E 's/^(构建|编译|依赖)[：:[:space:]]*//') ;;
+              文档*|说明*)
+                category="文档"
+                detail=$(printf '%s' "$subject" | sed -E 's/^(文档|说明)[：:[:space:]]*//') ;;
             esac
+
+            detail=$(printf '%s' "$detail" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')
+            echo "* $category：$detail"
           }
 
           UPDATED_CONTENT=""
@@ -263,23 +288,6 @@ jobs:
         run: |
           mv */*.apk .
           rm -rf */
-
-      - name: Delete Beta Release
-        if: needs.prepare.outputs.channel == 'beta'
-        run: |
-          if gh release view beta &>/dev/null; then
-            gh release delete beta -y
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Create or update beta tag
-        if: needs.prepare.outputs.channel == 'beta'
-        uses: richardsimko/update-tag@v1
-        with:
-          tag_name: beta
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
