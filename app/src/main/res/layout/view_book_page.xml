@@ -93,6 +93,28 @@
         app:lottie_renderMode="hardware" />
 
     <TextView
+        android:id="@+id/advanced_title_number"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/content_text_view"
+        app:layout_constraintStart_toStartOf="@id/content_text_view"
+        app:layout_constraintTop_toTopOf="@id/content_text_view" />
+
+    <TextView
+        android:id="@+id/advanced_title_text"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/content_text_view"
+        app:layout_constraintStart_toStartOf="@id/content_text_view"
+        app:layout_constraintTop_toTopOf="@id/content_text_view" />
+
+    <TextView
         android:id="@+id/advanced_title_fallback"
         android:layout_width="0dp"
         android:layout_height="48dp"
