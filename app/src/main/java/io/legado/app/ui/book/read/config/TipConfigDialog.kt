@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -351,32 +350,37 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onEdit(entry) }
-                    .padding(vertical = 8.dp),
+                    .heightIn(min = 52.dp)
+                    .clickable { onApply(entry) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = entry.name,
-                        color = Color(NgTheme.colors.onSurface),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = getString(if (active) R.string.advanced_title_applied else R.string.advanced_title_source_builtin),
-                        color = Color(NgTheme.colors.onSurfaceVariant),
-                        fontSize = 12.sp,
-                    )
-                }
-                Text(
-                    text = getString(if (active) R.string.advanced_title_applied else R.string.advanced_title_apply),
-                    modifier = Modifier
-                        .clickable(enabled = !active) { onApply(entry) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = Color(NgTheme.colors.primary),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
+                Icon(
+                    painter = painterResource(R.drawable.ic_interface_setting),
+                    contentDescription = null,
+                    tint = Color(NgTheme.colors.onSurface),
+                    modifier = Modifier.size(24.dp),
                 )
+                Text(
+                    text = entry.name,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                    color = Color(NgTheme.colors.onSurface),
+                    fontSize = 16.sp,
+                )
+                if (active) {
+                    Icon(
+                        painter = painterResource(R.drawable.ng_ic_popup_selected),
+                        contentDescription = getString(R.string.advanced_title_applied),
+                        tint = Color(NgTheme.colors.primary),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable { onEdit(entry) },
+                    )
+                } else {
+                    Spacer(Modifier.size(24.dp))
+                }
             }
             if (editing?.id == entry.id) {
                 val config = editing.config
