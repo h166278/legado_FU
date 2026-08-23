@@ -135,12 +135,14 @@ object AdvancedTitleConfig {
             val configuredTextColor = effectiveTextColor()
             val renderTextColor = configuredTextColor
                 ?: ReadBookConfig.textColor
-            applyCompatibleTextStyle(
-                replaceVariables(it, book, title),
-                renderTextColor,
-                effectiveFontWeight(),
-                effectiveFontSizeScale(),
-                io.legado.app.help.config.ReadBookConfig.textFont
+            hideLottieTextLayers(
+                applyCompatibleTextStyle(
+                    replaceVariables(it, book, title),
+                    renderTextColor,
+                    effectiveFontWeight(),
+                    effectiveFontSizeScale(),
+                    io.legado.app.help.config.ReadBookConfig.textFont,
+                )
             )
         }
     }.getOrNull()
@@ -247,6 +249,21 @@ object AdvancedTitleConfig {
                 .replace("{{${entry.key}}}", replacement)
         }
     }
+
+    private fun hideLottieTextLayers(source: String): String = runCatching {
+        val root = JSONObject(source)
+        root.optJSONArray("layers")?.let { layers ->
+            for (index in 0 until layers.length()) {
+                val layer = layers.optJSONObject(index) ?: continue
+                if (layer.optString("nm") !in COMPATIBLE_TEXT_LAYERS) continue
+                layer.optJSONObject("ks")?.put("o", JSONObject().apply {
+                    put("a", 0)
+                    put("k", 0)
+                })
+            }
+        }
+        root.toString()
+    }.getOrDefault(source)
 
     internal fun applyCompatibleTextStyle(
         source: String,
