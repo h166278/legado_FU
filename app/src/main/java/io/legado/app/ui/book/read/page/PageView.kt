@@ -7,6 +7,7 @@ import android.graphics.drawable.LayerDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.util.TypedValue
 import android.widget.FrameLayout
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
@@ -375,6 +376,8 @@ class PageView(context: Context) : FrameLayout(context) {
             lottie.cancelAnimation()
             lottie.visibility = View.GONE
             fallback.visibility = View.GONE
+            binding.advancedTitleNumber.visibility = View.GONE
+            binding.advancedTitleText.visibility = View.GONE
             advancedTitleKey = null
             advancedTitleStyleVersion = Long.MIN_VALUE
             advancedTitleWeight = Int.MIN_VALUE
@@ -391,9 +394,35 @@ class PageView(context: Context) : FrameLayout(context) {
         }
         val width = block.width.toInt().coerceAtLeast(1)
         val height = block.height.toInt().coerceAtLeast(1)
+        fun showAndroidTitle() {
+            val color = AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.resolvedTitleColor
+            val typeface = ChapterProvider.typeface ?: Typeface.DEFAULT
+            val weight = AdvancedTitleConfig.effectiveFontWeight()
+            val scale = AdvancedTitleConfig.effectiveFontSizeScale() / 100f
+            val number = binding.advancedTitleNumber
+            val title = binding.advancedTitleText
+            listOf(number, title).forEach { view ->
+                view.layoutParams = view.layoutParams.apply {
+                    this.width = width
+                    this.height = height
+                }
+                view.translationX = titleTranslationX(block.offsetX, width)
+                view.translationY = titleTranslationY(block.offsetY, height) +
+                    if (view === number) height * 0.08f else height * 0.28f
+                view.setTextColor(color)
+                view.typeface = typeface
+                view.setTextSize(TypedValue.COMPLEX_UNIT_PX, ReadBookConfig.textSize * scale)
+                view.paint.isFakeBoldText = weight > 400
+                view.visibility = View.VISIBLE
+            }
+            number.text = block.chapterNumber
+            title.text = block.chapterTitle
+        }
         fun showFallback() {
             lottie.cancelAnimation()
             lottie.visibility = View.GONE
+            binding.advancedTitleNumber.visibility = View.GONE
+            binding.advancedTitleText.visibility = View.GONE
             val params = fallback.layoutParams as ViewGroup.LayoutParams
             params.width = width
             params.height = height
@@ -405,11 +434,13 @@ class PageView(context: Context) : FrameLayout(context) {
             fallback.setTextColor(AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.resolvedTitleColor)
             fallback.visibility = View.VISIBLE
         }
+        showAndroidTitle()
+        fallback.visibility = View.GONE
         if (isScroll) {
-            showFallback()
+            lottie.cancelAnimation()
+            lottie.visibility = View.GONE
             return
         }
-        fallback.visibility = View.GONE
         val params = lottie.layoutParams as ViewGroup.LayoutParams
         params.width = width
         params.height = height
@@ -432,7 +463,12 @@ class PageView(context: Context) : FrameLayout(context) {
             lottie.setFontAssetDelegate(advancedTitleFontDelegate)
             // 重新解析时让 Lottie 通过字体代理读取最新的阅读字体。
             if (!runCatching { lottie.setAnimationFromJson(block.json, null) }.isSuccess) {
-                showFallback()
+                lottie.visibility = View.GONE
+                advancedTitleKey = block.json
+                advancedTitleStyleVersion = styleVersion
+                advancedTitleWeight = titleWeight
+                advancedTitleFontPath = fontPath
+                advancedTitleTypeface = currentTypeface
                 return
             }
             advancedTitleKey = block.json
