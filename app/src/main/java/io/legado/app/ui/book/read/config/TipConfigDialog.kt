@@ -117,11 +117,15 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         var titleTop by remember { mutableIntStateOf(ReadBookConfig.titleTopSpacing) }
         var titleBottom by remember { mutableIntStateOf(ReadBookConfig.titleBottomSpacing) }
         var templateEntries by remember { mutableStateOf<List<AdvancedTitlePackageManager.Entry>>(emptyList()) }
+        var appliedTemplateId by remember {
+            mutableStateOf(AdvancedTitlePackageManager.activeId())
+        }
         var editingTemplate by remember { mutableStateOf<AdvancedTitlePackageManager.Entry?>(null) }
         var revision by remember { mutableIntStateOf(0) }
         LaunchedEffect(titleMode, revision) {
             if (titleMode == AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
                 templateEntries = AdvancedTitlePackageManager.loadEntries()
+                appliedTemplateId = AdvancedTitlePackageManager.activeId()
             }
         }
         var activePicker by remember { mutableStateOf<ColorPickerTarget?>(null) }
@@ -213,10 +217,12 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     if (titleMode == AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
                         AdvancedTitleTemplates(
                             entries = templateEntries,
+                            appliedId = appliedTemplateId,
                             editing = editingTemplate,
                             onEdit = { editingTemplate = it },
                             onApply = { entry ->
                                 AdvancedTitlePackageManager.apply(entry)
+                                appliedTemplateId = entry.id
                                 revision++
                                 postEvent(EventBus.UP_CONFIG, arrayListOf(5))
                             },
@@ -338,6 +344,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
     @Composable
     private fun AdvancedTitleTemplates(
         entries: List<AdvancedTitlePackageManager.Entry>,
+        appliedId: String,
         editing: AdvancedTitlePackageManager.Entry?,
         onEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
         onApply: (AdvancedTitlePackageManager.Entry) -> Unit,
@@ -346,7 +353,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         onSave: (AdvancedTitlePackageManager.Entry, Int, Int, Int, Int) -> Unit,
     ) {
         entries.forEach { entry ->
-            val active = entry.id == AdvancedTitlePackageManager.activeId()
+            val active = entry.id == appliedId
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -355,17 +362,9 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_interface_setting),
-                    contentDescription = null,
-                    tint = Color(NgTheme.colors.onSurface),
-                    modifier = Modifier.size(24.dp),
-                )
                 Text(
                     text = entry.name,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp),
+                    modifier = Modifier.weight(1f),
                     color = Color(NgTheme.colors.onSurface),
                     fontSize = 16.sp,
                 )
