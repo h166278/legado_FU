@@ -76,9 +76,9 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          name: legado_FU_${{ env.VERSION }}
+          name: legado_fu_${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
           generate_release_notes: true
           draft: false
           prerelease: false
-          files: ${{ github.workspace }}/apk/legado_FU_*.apk
+          files: ${{ github.workspace }}/apk/legado_fu_*.apk

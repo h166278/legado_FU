@@ -114,7 +114,7 @@ jobs:
                 category="优化"
                 detail=$(printf '%s' "$subject" | sed -E 's/^(优化|改进|调整)[：:[:space:]]*//') ;;
               新增*|增加*|支持*|恢复*)
-                category="功能"
+                category="新增"
                 detail=$(printf '%s' "$subject" | sed -E 's/^(新增|增加|支持|恢复)[：:[:space:]]*//') ;;
               重构*)
                 category="重构"
@@ -128,22 +128,46 @@ jobs:
             esac
 
             detail=$(printf '%s' "$detail" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')
-            echo "* $category：$detail"
+            echo "$category|$detail"
           }
 
           UPDATED_CONTENT=""
           if git rev-parse "$COMMIT_RANGE" >/dev/null 2>&1; then
-            UPDATED_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"%s" --reverse 2>/dev/null \
+            RAW_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"%s" --reverse 2>/dev/null \
               | grep -vE '^(Merge|Sync upstream)$' \
               | grep -vE '^$' \
               | awk '!seen[$0]++' \
               | while IFS= read -r subject; do translate_subject "$subject"; done || true)
+            UPDATED_CONTENT=$(printf '%s\n' "$RAW_CONTENT" | awk -F'|' '
+              BEGIN { count = 0 }
+              NF >= 2 {
+                category = $1
+                detail = $2
+                if (!(category in seenCategory)) {
+                  seenCategory[category] = 1
+                  order[++count] = category
+                }
+                key = category SUBSEP detail
+                if (!(key in seenItem)) {
+                  seenItem[key] = 1
+                  items[category] = items[category] "\n- " detail
+                }
+              }
+              END {
+                for (i = 1; i <= count; i++) {
+                  category = order[i]
+                  print "### " category
+                  print items[category]
+                  print ""
+                }
+              }')
           else
             echo "DEBUG: invalid commit range, fallback to last commit"
           fi
 
           if [ -z "$UPDATED_CONTENT" ]; then
-            UPDATED_CONTENT=$(translate_subject "$(git log -1 --pretty=format:"%s")")
+            FALLBACK_CONTENT=$(translate_subject "$(git log -1 --pretty=format:"%s")")
+            UPDATED_CONTENT=$(printf '%s\n' "$FALLBACK_CONTENT" | awk -F'|' 'NF >= 2 { print "### " $1; print "- " $2 }')
           fi
 
           CONTENT_JSON=$(echo "$UPDATED_CONTENT" | jq -Rs . 2>/dev/null || echo "\"Error generating update content\"")
@@ -226,7 +250,7 @@ jobs:
           echo "修改APK文件名"
           mkdir -p ${{ github.workspace }}/apk/
           for file in `ls ${{ github.workspace }}/app/build/outputs/apk/*/*/*.apk`; do
-            mv "$file" ${{ github.workspace }}/apk/legado_FU_${{ env.VERSIONL }}_$typeName.apk
+            mv "$file" ${{ github.workspace }}/apk/legado_fu_${{ env.VERSIONL }}_$typeName.apk
           done
           echo "移动mapping文件"
           mkdir -p ${{ github.workspace }}/mapping/
@@ -297,7 +321,7 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          name: legado_FU_${{ env.VERSION }}
+          name: legado_fu_${{ env.VERSION }}
           tag_name: ${{ needs.prepare.outputs.tag_name }}
           body: |
             ### 更新内容
