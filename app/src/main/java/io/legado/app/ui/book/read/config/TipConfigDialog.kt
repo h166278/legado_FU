@@ -364,9 +364,9 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 52.dp)
+                    .height(56.dp)
                     .clickable { onApply(entry) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -375,26 +375,33 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     color = Color(NgTheme.colors.onSurface),
                     fontSize = 16.sp,
                 )
-                if (active) {
-                    IconButton(
-                        onClick = { onEdit(entry) },
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_edit),
-                            contentDescription = getString(R.string.edit),
-                            tint = Color(NgTheme.colors.onSurface),
-                            modifier = Modifier.size(22.dp),
-                        )
+                Box(
+                    modifier = Modifier.width(64.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    if (active) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { onEdit(entry) },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_edit),
+                                    contentDescription = getString(R.string.edit),
+                                    tint = Color(NgTheme.colors.onSurface),
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                            Icon(
+                                painter = painterResource(R.drawable.ng_ic_popup_selected),
+                                contentDescription = getString(R.string.advanced_title_applied),
+                                tint = Color(NgTheme.colors.primary),
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.size(64.dp))
                     }
-                    Icon(
-                        painter = painterResource(R.drawable.ng_ic_popup_selected),
-                        contentDescription = getString(R.string.advanced_title_applied),
-                        tint = Color(NgTheme.colors.primary),
-                        modifier = Modifier.size(24.dp),
-                    )
-                } else {
-                    Spacer(Modifier.size(64.dp))
                 }
             }
         }
