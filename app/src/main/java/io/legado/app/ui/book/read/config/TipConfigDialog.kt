@@ -364,7 +364,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(48.dp)
                     .clickable { onApply(entry) }
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
