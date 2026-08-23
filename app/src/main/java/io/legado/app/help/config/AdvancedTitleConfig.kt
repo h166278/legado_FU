@@ -4,6 +4,7 @@ import io.legado.app.R
 import com.airbnb.lottie.LottieCompositionFactory
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
+import io.legado.app.ui.book.read.ReadDrawerStyle
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefInt
@@ -249,11 +250,31 @@ object AdvancedTitleConfig {
         root.optJSONArray("layers")?.let { layers ->
             for (index in 0 until layers.length()) {
                 val layer = layers.optJSONObject(index) ?: continue
-                if (layer.optString("nm") != "chapter_title") continue
-                layer.optJSONObject("ks")?.put("o", JSONObject().apply {
-                    put("a", 0)
-                    put("k", 0)
-                })
+                when (layer.optString("nm")) {
+                    "chapter_number" -> {
+                        // 三个内置模板统一使用菱形模板的章节号位置，颜色跟随正文主题色。
+                        layer.optJSONObject("ks")?.put("p", JSONObject().apply {
+                            put("a", 0)
+                            put("k", JSONArray().apply {
+                                put(360)
+                                put(58)
+                                put(0)
+                            })
+                        })
+                        layer.optJSONObject("t")?.optJSONObject("d")
+                            ?.optJSONArray("k")?.let { keyframes ->
+                                for (frameIndex in 0 until keyframes.length()) {
+                                    keyframes.optJSONObject(frameIndex)
+                                        ?.optJSONObject("s")
+                                        ?.put("fc", ReadDrawerStyle.indicatorColor(appCtx).toLottieColor())
+                                }
+                            }
+                    }
+                    "chapter_title" -> layer.optJSONObject("ks")?.put("o", JSONObject().apply {
+                        put("a", 0)
+                        put("k", 0)
+                    })
+                }
             }
         }
         root.toString()
