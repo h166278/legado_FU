@@ -412,15 +412,18 @@ class PageView(context: Context) : FrameLayout(context) {
                 this.width = width
                 this.height = textHeight
             }
-            title.translationX = titleTranslationX(block.offsetX, width)
-            title.translationY = titleTranslationY(block.offsetY, height) +
-                templateY / AdvancedTitleConfig.TEMPLATE_HEIGHT * height - textHeight / 2f
             title.gravity = Gravity.CENTER
             title.setTextColor(color)
             title.typeface = typeface
             title.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize)
             title.letterSpacing = AdvancedTitleConfig.TITLE_LETTER_SPACING
             title.paint.isFakeBoldText = weight > 400
+            val metrics = title.paint.fontMetrics
+            val baselineInView = (textHeight - metrics.descent - metrics.ascent) / 2f
+            val targetBaseline = titleTranslationY(block.offsetY, height) +
+                templateY / AdvancedTitleConfig.TEMPLATE_HEIGHT * height
+            title.translationX = titleTranslationX(block.offsetX, width)
+            title.translationY = targetBaseline - baselineInView
             title.text = block.chapterTitle
             title.visibility = View.VISIBLE
             binding.advancedTitleNumber.visibility = View.GONE
