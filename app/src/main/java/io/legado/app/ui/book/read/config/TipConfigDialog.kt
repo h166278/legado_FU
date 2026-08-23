@@ -140,6 +140,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             headerPosition,
             footerPosition,
             revision,
+            editingTemplate,
         ) {
             composeView.post { repositionAboveDrawer() }
         }
