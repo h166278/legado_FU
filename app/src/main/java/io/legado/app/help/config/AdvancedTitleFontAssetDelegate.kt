@@ -46,21 +46,16 @@ internal class AdvancedTitleFontAssetDelegate(
         return suffix.toIntOrNull()?.coerceIn(100, 900) ?: preferredWeight()
     }
 
-    private fun weighted(typeface: Typeface, weight: Int): Typeface {
+    private fun weighted(typeface: Typeface, weight: Int): Typeface =
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            // Static fonts may silently return the original face for numeric weights.
-            // Use the platform's bold face as a visible fallback when no weight axis exists.
-            val numeric = Typeface.create(typeface, weight, false)
-            if (weight >= 700 && !supportsWeightAxis(typeface)) {
-                return Typeface.create(typeface, Typeface.BOLD)
+            // Numeric weights are not reliable for static fonts on every Android build.
+            // Keep fine-grained weights where available and use a visible bold fallback.
+            if (weight >= 700) {
+                Typeface.create(typeface, Typeface.BOLD)
+            } else {
+                Typeface.create(typeface, weight, false)
             }
-            return numeric
+        } else {
+            Typeface.create(typeface, if (weight >= 700) Typeface.BOLD else Typeface.NORMAL)
         }
-        return Typeface.create(typeface, if (weight >= 700) Typeface.BOLD else Typeface.NORMAL)
-    }
-
-    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.P)
-    private fun supportsWeightAxis(typeface: Typeface): Boolean = runCatching {
-        typeface.isSupportedAxes(intArrayOf(Typeface.WEIGHT_AXIS))
-    }.getOrDefault(false)
 }
