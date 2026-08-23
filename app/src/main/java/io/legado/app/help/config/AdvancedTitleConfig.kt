@@ -35,6 +35,7 @@ object AdvancedTitleConfig {
     const val TITLE_SIZE = 48f
     const val TITLE_Y = 124f
     const val TITLE_LETTER_SPACING = 0.01f
+    const val TITLE_FONT_ASCENT_RATIO = 0.75f
     const val ORNAMENT_X = 360f
     const val ORNAMENT_Y = 180f
 

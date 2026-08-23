@@ -420,8 +420,11 @@ class PageView(context: Context) : FrameLayout(context) {
             title.paint.isFakeBoldText = weight > 400
             val metrics = title.paint.fontMetrics
             val baselineInView = (textHeight - metrics.descent - metrics.ascent) / 2f
-            val targetBaseline = titleTranslationY(block.offsetY, height) +
-                templateY / AdvancedTitleConfig.TEMPLATE_HEIGHT * height
+            val templateTitleBottom = templateY +
+                templateSize * (1f - AdvancedTitleConfig.TITLE_FONT_ASCENT_RATIO)
+            val targetTextBottom = titleTranslationY(block.offsetY, height) +
+                templateTitleBottom / AdvancedTitleConfig.TEMPLATE_HEIGHT * height
+            val targetBaseline = targetTextBottom - metrics.descent
             title.translationX = titleTranslationX(block.offsetX, width)
             title.translationY = targetBaseline - baselineInView
             title.text = block.chapterTitle
