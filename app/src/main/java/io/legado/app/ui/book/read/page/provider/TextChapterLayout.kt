@@ -975,13 +975,7 @@ class TextChapterLayout(
             AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR.toFloat()
         val titleScale = ((ReadBookConfig.textSize + ReadBookConfig.titleSize * 1.25f) /
             ReadBookConfig.textSize.coerceAtLeast(1)).coerceIn(0.6f, 2.5f)
-        val ratio = runCatching {
-            JSONObject(json).let { root ->
-                val width = root.optDouble("w", 720.0).toFloat()
-                val height = root.optDouble("h", 112.0).toFloat()
-                if (width > 0f && height > 0f) height / width else 112f / 720f
-            }
-        }.getOrDefault(112f / 720f)
+        val ratio = AdvancedTitleConfig.TEMPLATE_HEIGHT / AdvancedTitleConfig.TEMPLATE_WIDTH
         val requestedWidth = (visibleWidth.toFloat() * 0.86f * titleScale * heightScale)
             .coerceIn(1f, visibleWidth.toFloat())
         val requestedHeight = requestedWidth * ratio

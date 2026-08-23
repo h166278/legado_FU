@@ -23,6 +23,17 @@ object AdvancedTitleConfig {
     const val SPLIT_REGEX = 1
     const val LOTTIE_BLOCK_ROLE = "advanced_title_lottie"
     const val DEFAULT_HEIGHT_FACTOR = 55
+
+    // Keep title geometry aligned with the diamond template while using star typography.
+    const val TEMPLATE_WIDTH = 720f
+    const val TEMPLATE_HEIGHT = 210f
+    const val CHAPTER_NUMBER_Y = 58f
+    const val CHAPTER_NUMBER_SIZE = 27
+    const val CHAPTER_NUMBER_TRACKING = 70
+    const val TITLE_SIZE = 47f
+    const val TITLE_Y = 124f
+    const val TITLE_LETTER_SPACING = 0.12f
+
     private const val BOOK_RULE_KEY = "advancedTitleRule"
 
     data class SplitRule(
@@ -257,7 +268,7 @@ object AdvancedTitleConfig {
                             put("a", 0)
                             put("k", JSONArray().apply {
                                 put(360)
-                                put(58)
+                                put(CHAPTER_NUMBER_Y)
                                 put(0)
                             })
                         })
@@ -265,8 +276,12 @@ object AdvancedTitleConfig {
                             ?.optJSONArray("k")?.let { keyframes ->
                                 for (frameIndex in 0 until keyframes.length()) {
                                     keyframes.optJSONObject(frameIndex)
-                                        ?.optJSONObject("s")
-                                        ?.put("fc", ReadDrawerStyle.indicatorColor(appCtx).toLottieColor())
+                                        ?.optJSONObject("s")?.apply {
+                                            // Star template typography for compact chapter numbering.
+                                            put("s", CHAPTER_NUMBER_SIZE)
+                                            put("tr", CHAPTER_NUMBER_TRACKING)
+                                            put("fc", ReadDrawerStyle.indicatorColor(appCtx).toLottieColor())
+                                        }
                                 }
                             }
                     }
