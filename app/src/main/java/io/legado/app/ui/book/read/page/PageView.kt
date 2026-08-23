@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.drawable.LayerDrawable
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -369,6 +370,21 @@ class PageView(context: Context) : FrameLayout(context) {
         binding.contentTextView.setContent(textPage)
     }
 
+    private fun advancedTitleTextStyle(json: String): Pair<Float, Float> = runCatching {
+        val root = org.json.JSONObject(json)
+        val layer = root.optJSONArray("layers")?.let { layers ->
+            (0 until layers.length()).asSequence()
+                .mapNotNull { layers.optJSONObject(it) }
+                .firstOrNull { it.optString("nm") == "chapter_title" }
+        } ?: return 47f to 128f
+        val style = layer.optJSONObject("t")?.optJSONObject("d")
+            ?.optJSONArray("k")?.optJSONObject(0)?.optJSONObject("s")
+        val size = style?.optDouble("s", 47.0)?.toFloat() ?: 47f
+        val y = layer.optJSONObject("ks")?.optJSONObject("p")
+            ?.optJSONArray("k")?.optDouble(1, 128.0)?.toFloat() ?: 128f
+        size to y
+    }.getOrDefault(47f to 128f)
+
     private fun upAdvancedTitle(textPage: TextPage) {
         val lottie = binding.advancedTitleLottie
         val fallback = binding.advancedTitleFallback
@@ -399,24 +415,26 @@ class PageView(context: Context) : FrameLayout(context) {
             val typeface = ChapterProvider.typeface ?: Typeface.DEFAULT
             val weight = AdvancedTitleConfig.effectiveFontWeight()
             val scale = AdvancedTitleConfig.effectiveFontSizeScale() / 100f
-            val number = binding.advancedTitleNumber
             val title = binding.advancedTitleText
-            listOf(number, title).forEach { view ->
-                view.layoutParams = view.layoutParams.apply {
-                    this.width = width
-                    this.height = height
-                }
-                view.translationX = titleTranslationX(block.offsetX, width)
-                view.translationY = titleTranslationY(block.offsetY, height) +
-                    if (view === number) height * 0.08f else height * 0.28f
-                view.setTextColor(color)
-                view.typeface = typeface
-                view.setTextSize(TypedValue.COMPLEX_UNIT_PX, ReadBookConfig.textSize * scale)
-                view.paint.isFakeBoldText = weight > 400
-                view.visibility = View.VISIBLE
+            val (templateSize, templateY) = advancedTitleTextStyle(block.json)
+            val canvasScale = width / 720f
+            val textSize = templateSize * canvasScale * scale
+            val textHeight = (textSize * 1.35f).toInt().coerceAtLeast(1)
+            title.layoutParams = title.layoutParams.apply {
+                this.width = width
+                this.height = textHeight
             }
-            number.text = block.chapterNumber
+            title.translationX = titleTranslationX(block.offsetX, width)
+            title.translationY = titleTranslationY(block.offsetY, height) +
+                templateY / 250f * height - textHeight / 2f
+            title.gravity = Gravity.CENTER
+            title.setTextColor(color)
+            title.typeface = typeface
+            title.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize)
+            title.paint.isFakeBoldText = weight > 400
             title.text = block.chapterTitle
+            title.visibility = View.VISIBLE
+            binding.advancedTitleNumber.visibility = View.GONE
         }
         fun showFallback() {
             lottie.cancelAnimation()
