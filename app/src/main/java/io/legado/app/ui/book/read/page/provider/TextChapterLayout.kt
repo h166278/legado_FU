@@ -956,7 +956,9 @@ class TextChapterLayout(
             offsetY = paddingTop + startY,
             width = layout.blockWidth,
             height = layout.blockHeight,
-            json = json
+            json = json,
+            chapterNumber = AdvancedTitleConfig.split(title, book).s1,
+            chapterTitle = AdvancedTitleConfig.split(title, book).s2,
         )
         durY = startY + layout.requiredHeight
         pendingTextPage.height = maxOf(pendingTextPage.height, durY)
