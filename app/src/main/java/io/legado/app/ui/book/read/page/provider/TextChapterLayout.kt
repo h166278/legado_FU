@@ -21,7 +21,6 @@ import io.legado.app.help.book.getBookSource
 import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
-import org.json.JSONObject
 import io.legado.app.help.config.ReadHighlightRule
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ImageProvider

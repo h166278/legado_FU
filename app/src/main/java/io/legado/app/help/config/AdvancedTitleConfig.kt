@@ -24,15 +24,19 @@ object AdvancedTitleConfig {
     const val LOTTIE_BLOCK_ROLE = "advanced_title_lottie"
     const val DEFAULT_HEIGHT_FACTOR = 55
 
-    // Keep title geometry aligned with the diamond template while using star typography.
+    // Rimchars built-in advanced title geometry and typography.
     const val TEMPLATE_WIDTH = 720f
     const val TEMPLATE_HEIGHT = 210f
+    const val CHAPTER_NUMBER_X = 360f
     const val CHAPTER_NUMBER_Y = 58f
-    const val CHAPTER_NUMBER_SIZE = 27
-    const val CHAPTER_NUMBER_TRACKING = 70
-    const val TITLE_SIZE = 47f
+    const val CHAPTER_NUMBER_SIZE = 28
+    const val CHAPTER_NUMBER_TRACKING = 90
+    const val TITLE_X = 360f
+    const val TITLE_SIZE = 48f
     const val TITLE_Y = 124f
-    const val TITLE_LETTER_SPACING = 0.12f
+    const val TITLE_LETTER_SPACING = 0.01f
+    const val ORNAMENT_X = 360f
+    const val ORNAMENT_Y = 180f
 
     private const val BOOK_RULE_KEY = "advancedTitleRule"
 
@@ -257,27 +261,21 @@ object AdvancedTitleConfig {
     }
 
     private fun hideLottieChapterTitle(source: String): String = runCatching {
-        val root = JSONObject(source)
+        val root = JSONObject(source).apply {
+            put("w", TEMPLATE_WIDTH)
+            put("h", TEMPLATE_HEIGHT)
+        }
         root.optJSONArray("layers")?.let { layers ->
             for (index in 0 until layers.length()) {
                 val layer = layers.optJSONObject(index) ?: continue
                 when (layer.optString("nm")) {
                     "chapter_number" -> {
-                        // 三个内置模板统一使用菱形模板的章节号位置，颜色跟随正文主题色。
-                        layer.optJSONObject("ks")?.put("p", JSONObject().apply {
-                            put("a", 0)
-                            put("k", JSONArray().apply {
-                                put(360)
-                                put(CHAPTER_NUMBER_Y)
-                                put(0)
-                            })
-                        })
+                        layer.setLottiePosition(CHAPTER_NUMBER_X, CHAPTER_NUMBER_Y)
                         layer.optJSONObject("t")?.optJSONObject("d")
                             ?.optJSONArray("k")?.let { keyframes ->
                                 for (frameIndex in 0 until keyframes.length()) {
                                     keyframes.optJSONObject(frameIndex)
                                         ?.optJSONObject("s")?.apply {
-                                            // Star template typography for compact chapter numbering.
                                             put("s", CHAPTER_NUMBER_SIZE)
                                             put("tr", CHAPTER_NUMBER_TRACKING)
                                             put("fc", ReadDrawerStyle.indicatorColor(appCtx).toLottieColor())
@@ -285,15 +283,31 @@ object AdvancedTitleConfig {
                                 }
                             }
                     }
-                    "chapter_title" -> layer.optJSONObject("ks")?.put("o", JSONObject().apply {
-                        put("a", 0)
-                        put("k", 0)
-                    })
+                    "chapter_title" -> {
+                        layer.setLottiePosition(TITLE_X, TITLE_Y)
+                        layer.optJSONObject("ks")?.put("o", JSONObject().apply {
+                            put("a", 0)
+                            put("k", 0)
+                        })
+                    }
+                    "ornament", "star_ornament", "page_ornament" ->
+                        layer.setLottiePosition(ORNAMENT_X, ORNAMENT_Y)
                 }
             }
         }
         root.toString()
     }.getOrDefault(source)
+
+    private fun JSONObject.setLottiePosition(x: Float, y: Float) {
+        optJSONObject("ks")?.put("p", JSONObject().apply {
+            put("a", 0)
+            put("k", JSONArray().apply {
+                put(x)
+                put(y)
+                put(0)
+            })
+        })
+    }
 
     internal fun applyCompatibleTextStyle(
         source: String,
