@@ -183,7 +183,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                     },
                     onColorEnabledChanged = { entry, enabled ->
                         colorEditingTemplate = entry
-                        if (enabled) {
+                        val updated = if (enabled) {
                             applySelectedColor(
                                 ColorPickerTarget.ADVANCED_TITLE,
                                 entry.config.normalizedTextColorOrNull()
@@ -193,6 +193,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                         } else {
                             resetSelectedColor(ColorPickerTarget.ADVANCED_TITLE)
                         }
+                        updated?.let { editingTemplate = it }
                         revision++
                     },
                     onSave = { entry, weight, size, top, bottom ->
