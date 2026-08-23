@@ -52,12 +52,16 @@ jobs:
             PUBLISH="true"
             PRERELEASE="false"
             TAG_NAME="${{ steps.set-ver.outputs.version }}"
-          elif [[ "$REF_NAME" == beta-* || "$REF_NAME" == main ]]; then
+          elif [[ "$REF_NAME" == beta-* ]]; then
             CHANNEL="beta"
             PUBLISH="true"
             PRERELEASE="true"
-            # 每次测试构建使用独立标签，保留历史预发行版。
             TAG_NAME="beta-${GITHUB_RUN_NUMBER}"
+          elif [[ "$REF_NAME" == main ]]; then
+            CHANNEL="release"
+            PUBLISH="true"
+            PRERELEASE="false"
+            TAG_NAME="${{ steps.set-ver.outputs.version }}"
           fi
 
           if [[ "$CHANNEL" == "release" ]]; then
