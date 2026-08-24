@@ -156,7 +156,8 @@ object AdvancedTitleConfig {
             }
         raw?.let {
             hideLottieChapterTitle(
-                replaceVariables(it, book, title)
+                replaceVariables(it, book, title),
+                effectiveTextColor() ?: ReadBookConfig.textColor,
             )
         }
     }.getOrNull()
@@ -264,7 +265,7 @@ object AdvancedTitleConfig {
         }
     }
 
-    private fun hideLottieChapterTitle(source: String): String = runCatching {
+    private fun hideLottieChapterTitle(source: String, titleColor: Int): String = runCatching {
         val root = JSONObject(source).apply {
             put("w", TEMPLATE_WIDTH)
             put("h", TEMPLATE_HEIGHT)
@@ -282,7 +283,7 @@ object AdvancedTitleConfig {
                                         ?.optJSONObject("s")?.apply {
                                             put("s", CHAPTER_NUMBER_SIZE)
                                             put("tr", CHAPTER_NUMBER_TRACKING)
-                                            put("fc", ReadDrawerStyle.indicatorColor(appCtx).toLottieColor())
+                                            put("fc", titleColor.toLottieColor())
                                         }
                                 }
                             }
