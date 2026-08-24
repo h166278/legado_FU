@@ -41,7 +41,8 @@ object AdvancedTitlePackageManager {
         val fontSizeScale: Int? = null,
         val titleTopSpacing: Int? = null,
         val titleBottomSpacing: Int? = null,
-        val textColor: Int? = null
+        val textColor: Int? = null,
+        val followThemeColor: Boolean = false
     ) {
         fun splitRuleOrNull(): AdvancedTitleConfig.SplitRule? {
             if (splitMode == null && delimiter == null && regex == null) return null
@@ -79,7 +80,8 @@ object AdvancedTitlePackageManager {
         val fontSizeScale: Int? = null,
         val titleTopSpacing: Int? = null,
         val titleBottomSpacing: Int? = null,
-        val textColor: Int? = null
+        val textColor: Int? = null,
+        val followThemeColor: Boolean = false
     )
 
     val rootDir: File
@@ -99,7 +101,8 @@ object AdvancedTitlePackageManager {
             fontSizeScale = config.normalizedFontSizeScaleOrNull(),
             titleTopSpacing = config.normalizedTitleTopSpacingOrNull(),
             titleBottomSpacing = config.normalizedTitleBottomSpacingOrNull(),
-            textColor = config.normalizedTextColorOrNull()
+            textColor = config.normalizedTextColorOrNull(),
+            followThemeColor = config.followThemeColor
         )
         appCtx.putPrefString(PreferKey.advancedTitleBuiltinStyles, GSON.toJson(styles))
     }
@@ -140,7 +143,8 @@ object AdvancedTitlePackageManager {
                 fontSizeScale = style.fontSizeScale,
                 titleTopSpacing = style.titleTopSpacing,
                 titleBottomSpacing = style.titleBottomSpacing,
-                textColor = style.textColor
+                textColor = style.textColor,
+                followThemeColor = style.followThemeColor
             )
         } ?: base },
         isBuiltin = true
@@ -249,7 +253,8 @@ object AdvancedTitlePackageManager {
         titleBottomSpacing: Int? = oldEntry?.config?.normalizedTitleBottomSpacingOrNull()
             ?: 0,
         textColor: Int? = oldEntry?.config?.normalizedTextColorOrNull()
-            ?: AdvancedTitleConfig.textColor
+            ?: AdvancedTitleConfig.textColor,
+        followThemeColor: Boolean = oldEntry?.config?.followThemeColor ?: false
     ): Entry =
         synchronized(mutationLock) {
         val normalizedName = normalizeName(name)
@@ -260,7 +265,8 @@ object AdvancedTitlePackageManager {
                 fontSizeScale = fontSizeScale?.coerceIn(50, 200),
                 titleTopSpacing = titleTopSpacing?.coerceIn(0, 200),
                 titleBottomSpacing = titleBottomSpacing?.coerceIn(0, 200),
-                textColor = textColor
+                textColor = if (followThemeColor) null else textColor,
+                followThemeColor = followThemeColor
             )
             saveBuiltinStyle(oldEntry.id, config)
             return@synchronized Entry(config, isBuiltin = true)
@@ -293,7 +299,8 @@ object AdvancedTitlePackageManager {
             fontSizeScale = fontSizeScale?.coerceIn(50, 200),
             titleTopSpacing = titleTopSpacing?.coerceIn(0, 200),
             titleBottomSpacing = titleBottomSpacing?.coerceIn(0, 200),
-            textColor = textColor
+            textColor = if (followThemeColor) null else textColor,
+            followThemeColor = followThemeColor
         )
         try {
             staging.mkdirs()

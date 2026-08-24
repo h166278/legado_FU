@@ -102,14 +102,20 @@ object AdvancedTitleConfig {
             appCtx.putPrefInt(PreferKey.advancedTitleTextColor, value ?: Int.MIN_VALUE)
         }
 
+    fun effectiveFollowThemeColor(): Boolean = AdvancedTitlePackageManager.activeConfig()
+        ?.followThemeColor == true
+
+    fun effectiveTextColor(): Int? = if (effectiveFollowThemeColor()) {
+        ReadDrawerStyle.indicatorColor(appCtx)
+    } else {
+        AdvancedTitlePackageManager.activeConfig()?.normalizedTextColorOrNull() ?: textColor
+    }
+
     fun effectiveFontWeight(): Int = AdvancedTitlePackageManager.activeConfig()
         ?.normalizedFontWeightOrNull() ?: fontWeight
 
     fun effectiveFontSizeScale(): Int = AdvancedTitlePackageManager.activeConfig()
         ?.normalizedFontSizeScaleOrNull() ?: fontSizeScale
-
-    fun effectiveTextColor(): Int? = AdvancedTitlePackageManager.activeConfig()
-        ?.normalizedTextColorOrNull() ?: textColor
 
     fun effectiveTitleTopSpacing(fallback: Int): Int = AdvancedTitlePackageManager.activeConfig()
         ?.normalizedTitleTopSpacingOrNull() ?: fallback
@@ -149,9 +155,6 @@ object AdvancedTitleConfig {
                 runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
             }
         raw?.let {
-            val configuredTextColor = effectiveTextColor()
-            val renderTextColor = configuredTextColor
-                ?: ReadBookConfig.textColor
             hideLottieChapterTitle(
                 replaceVariables(it, book, title)
             )

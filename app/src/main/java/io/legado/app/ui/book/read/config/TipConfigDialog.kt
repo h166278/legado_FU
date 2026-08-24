@@ -182,14 +182,36 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                         colorEditingTemplate = it
                         activePicker = ColorPickerTarget.ADVANCED_TITLE
                     },
+                    onFollowThemeColorChanged = { entry, enabled ->
+                        val updated = AdvancedTitlePackageManager.addOrUpdate(
+                            name = entry.name,
+                            json = AdvancedTitlePackageManager.readTemplate(entry),
+                            oldEntry = entry,
+                            textColor = if (enabled) null else entry.config.normalizedTextColorOrNull(),
+                            followThemeColor = enabled,
+                        )
+                        if (entry.id == AdvancedTitlePackageManager.activeId()) {
+                            AdvancedTitlePackageManager.apply(updated)
+                            postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                        }
+                        editingTemplate = updated
+                        revision++
+                    },
                     onColorEnabledChanged = { entry, enabled ->
                         colorEditingTemplate = entry
                         val updated = if (enabled) {
+                            val base = AdvancedTitlePackageManager.addOrUpdate(
+                                name = entry.name,
+                                json = AdvancedTitlePackageManager.readTemplate(entry),
+                                oldEntry = entry,
+                                followThemeColor = false,
+                            )
+                            colorEditingTemplate = base
                             applySelectedColor(
                                 ColorPickerTarget.ADVANCED_TITLE,
                                 entry.config.normalizedTextColorOrNull()
                                     ?: AdvancedTitleConfig.effectiveTextColor()
-                                    ?: ReadBookConfig.resolvedTitleColor,
+                                    ?: ReadBookConfig.textColor,
                             )
                         } else {
                             resetSelectedColor(ColorPickerTarget.ADVANCED_TITLE)
@@ -413,6 +435,7 @@ class TipConfigDialog : BaseComposeDialogFragment() {
         entry: AdvancedTitlePackageManager.Entry,
         onBack: () -> Unit,
         onColorEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
+        onFollowThemeColorChanged: (AdvancedTitlePackageManager.Entry, Boolean) -> Unit,
         onColorEnabledChanged: (AdvancedTitlePackageManager.Entry, Boolean) -> Unit,
         onSave: (AdvancedTitlePackageManager.Entry, Int, Int, Int, Int) -> Unit,
     ) {
@@ -478,12 +501,36 @@ class TipConfigDialog : BaseComposeDialogFragment() {
             valueRange = 0..100,
             onValueChange = { bottom = it; onSave(entry, weight, size, top, it) },
         )
+        AdvancedTitleSwitchRow(
+            title = "跟随阅读主题",
+            checked = config.followThemeColor,
+            onCheckedChange = { onFollowThemeColorChanged(entry, it) },
+        )
         AdvancedTitleOptionalColorRow(
             title = getString(R.string.highlight_rule_use_text_color),
             color = config.normalizedTextColorOrNull(),
             onEnabledChanged = { onColorEnabledChanged(entry, it) },
             onClick = { onColorEdit(entry) },
         )
+    }
+
+    @Composable
+    private fun AdvancedTitleSwitchRow(
+        title: String,
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, Modifier.weight(1f), Color(NgTheme.colors.onSurface), fontSize = 14.sp)
+            NgSwitchControl(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier.size(width = 52.dp, height = 36.dp),
+            )
+        }
     }
 
     @Composable

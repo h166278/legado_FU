@@ -399,7 +399,7 @@ class PageView(context: Context) : FrameLayout(context) {
         val width = block.width.toInt().coerceAtLeast(1)
         val height = block.height.toInt().coerceAtLeast(1)
         fun showAndroidTitle() {
-            val color = AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.resolvedTitleColor
+            val color = AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.textColor
             val typeface = ChapterProvider.typeface ?: Typeface.DEFAULT
             val weight = AdvancedTitleConfig.effectiveFontWeight()
             val scale = AdvancedTitleConfig.effectiveFontSizeScale() / 100f
@@ -444,7 +444,7 @@ class PageView(context: Context) : FrameLayout(context) {
             fallback.translationY = titleTranslationY(block.offsetY, height)
             fallback.text = textPage.title
             fallback.typeface = advancedTitleTypeface()
-            fallback.setTextColor(AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.resolvedTitleColor)
+            fallback.setTextColor(AdvancedTitleConfig.effectiveTextColor() ?: ReadBookConfig.textColor)
             fallback.visibility = View.VISIBLE
         }
         showAndroidTitle()
