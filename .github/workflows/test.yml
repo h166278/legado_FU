@@ -84,51 +84,11 @@ jobs:
           echo "DEBUG: COMMIT_RANGE=$COMMIT_RANGE"
 
           translate_subject() {
-            local subject="$1"
-            local detail="$subject"
-            local category="更新"
-
-            case "$subject" in
-              feat:*|feature:*)
-                category="功能"
-                detail="${subject#*: }" ;;
-              fix:*|bugfix:*)
-                category="修复"
-                detail="${subject#*: }" ;;
-              refactor:*)
-                category="重构"
-                detail="${subject#*: }" ;;
-              perf:*)
-                category="优化"
-                detail="${subject#*: }" ;;
-              docs:*)
-                category="文档"
-                detail="${subject#*: }" ;;
-              chore:*|build:*|ci:*)
-                category="构建"
-                detail="${subject#*: }" ;;
-              修复*|修正*|解决*)
-                category="修复"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(修复|修正|解决)[：:[:space:]]*//') ;;
-              优化*|改进*|调整*)
-                category="优化"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(优化|改进|调整)[：:[:space:]]*//') ;;
-              新增*|增加*|支持*|恢复*)
-                category="新增"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(新增|增加|支持|恢复)[：:[:space:]]*//') ;;
-              重构*)
-                category="重构"
-                detail=$(printf '%s' "$subject" | sed -E 's/^重构[：:[:space:]]*//') ;;
-              构建*|编译*|依赖*)
-                category="构建"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(构建|编译|依赖)[：:[:space:]]*//') ;;
-              文档*|说明*)
-                category="文档"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(文档|说明)[：:[:space:]]*//') ;;
-            esac
-
+            local detail="$1"
+            detail=$(printf '%s' "$detail" | sed -E 's/^(feat|feature|fix|bugfix|refactor|perf|docs|chore|build|ci)[：:[:space:]]*//I')
+            detail=$(printf '%s' "$detail" | sed -E 's/^(修复|修正|解决|优化|改进|调整|新增|增加|支持|恢复|重构|构建|编译|依赖|文档|说明)[：:[:space:]]*//')
             detail=$(printf '%s' "$detail" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')
-            echo "$category|$detail"
+            printf '%s\n' "$detail"
           }
 
           UPDATED_CONTENT=""
@@ -138,28 +98,17 @@ jobs:
               | grep -vE '^$' \
               | awk '!seen[$0]++' \
               | while IFS= read -r subject; do translate_subject "$subject"; done || true)
-            UPDATED_CONTENT=$(printf '%s\n' "$RAW_CONTENT" | awk -F'|' '
-              BEGIN { count = 0 }
-              NF >= 2 {
-                category = $1
-                detail = $2
-                if (!(category in seenCategory)) {
-                  seenCategory[category] = 1
-                  order[++count] = category
-                }
-                key = category SUBSEP detail
-                if (!(key in seenItem)) {
-                  seenItem[key] = 1
-                  items[category] = items[category] "\n- " detail
+            UPDATED_CONTENT=$(printf '%s\n' "$RAW_CONTENT" | awk '
+              NF {
+                detail = $0
+                if (!(detail in seen)) {
+                  seen[detail] = 1
+                  items = items "\n- " detail
                 }
               }
               END {
-                for (i = 1; i <= count; i++) {
-                  category = order[i]
-                  print "### " category
-                  print items[category]
-                  print ""
-                }
+                print "### 更新"
+                print items
               }')
           else
             echo "DEBUG: invalid commit range, fallback to last commit"
@@ -167,7 +116,7 @@ jobs:
 
           if [ -z "$UPDATED_CONTENT" ]; then
             FALLBACK_CONTENT=$(translate_subject "$(git log -1 --pretty=format:"%s")")
-            UPDATED_CONTENT=$(printf '%s\n' "$FALLBACK_CONTENT" | awk -F'|' 'NF >= 2 { print "### " $1; print "- " $2 }')
+            UPDATED_CONTENT=$(printf '### 更新\n- %s\n' "$FALLBACK_CONTENT")
           fi
 
           CONTENT_JSON=$(echo "$UPDATED_CONTENT" | jq -Rs . 2>/dev/null || echo "\"Error generating update content\"")
