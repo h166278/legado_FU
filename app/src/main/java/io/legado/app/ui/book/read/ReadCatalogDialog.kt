@@ -71,8 +71,6 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -616,9 +614,6 @@ private fun CatalogTabDock(
                     .background(
                         if (selected) accentColor.copy(alpha = 0.86f) else Color.Transparent
                     )
-                    .semantics {
-                        role = Role.Tab
-                    }
                     .clickable { onTabSelected(tab) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -755,9 +750,6 @@ private fun CatalogSummaryRow(
                 modifier = Modifier
                     .height(40.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .semantics {
-                        role = Role.Button
-                    }
                     .clickable(onClick = onSort),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -945,9 +937,6 @@ private fun CatalogChapterRow(
                     Modifier
                 }
             )
-            .semantics {
-                role = Role.Button
-            }
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = if (chapterTag == null) Arrangement.Center else Arrangement.Top,
