@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
@@ -412,7 +413,9 @@ class TipConfigDialog : BaseComposeDialogFragment() {
                                     painter = painterResource(R.drawable.ic_edit),
                                     contentDescription = getString(R.string.edit),
                                     tint = Color(NgTheme.colors.onSurface),
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .offset(x = (-2).dp),
                                 )
                             }
                             Icon(
