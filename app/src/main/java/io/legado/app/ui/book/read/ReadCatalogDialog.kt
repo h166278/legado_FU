@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -70,6 +71,8 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -584,7 +587,7 @@ private fun CatalogTabDock(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .height(40.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(13.dp))
             .background(dockColor),
         verticalAlignment = Alignment.CenterVertically,
@@ -613,6 +616,9 @@ private fun CatalogTabDock(
                     .background(
                         if (selected) accentColor.copy(alpha = 0.86f) else Color.Transparent
                     )
+                    .semantics {
+                        role = Role.Tab
+                    }
                     .clickable { onTabSelected(tab) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -650,7 +656,7 @@ private fun CatalogSearchField(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .height(40.dp)
+            .height(48.dp)
             .padding(bottom = 4.dp)
             .clip(RoundedCornerShape(13.dp))
             .background(dockColor)
@@ -683,7 +689,7 @@ private fun CatalogSearchField(
         )
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(44.dp)
                 .clip(CircleShape)
                 .clickable {
                     keyboard?.hide()
@@ -747,8 +753,11 @@ private fun CatalogSummaryRow(
         if (selectedTab == CatalogTab.Chapters) {
             Row(
                 modifier = Modifier
-                    .height(28.dp)
+                    .height(40.dp)
                     .clip(RoundedCornerShape(12.dp))
+                    .semantics {
+                        role = Role.Button
+                    }
                     .clickable(onClick = onSort),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -910,6 +919,7 @@ private fun CatalogChapterRow(
 ) {
     val cardColor = catalogCardColor()
     val currentChapterColor = Color(NgTheme.colors.secondary)
+    val currentContainerColor = Color(NgTheme.colors.selectedContainer)
     val wordCount = if (cached && AppConfig.tocCountWords) {
         item.chapter.wordCount?.takeIf { it.isNotBlank() }
     } else {
@@ -923,7 +933,21 @@ private fun CatalogChapterRow(
             .fillMaxWidth()
             .heightIn(min = 58.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(cardColor)
+            .background(if (current) currentContainerColor else cardColor)
+            .then(
+                if (current) {
+                    Modifier.border(
+                        width = 1.dp,
+                        color = currentChapterColor.copy(alpha = 0.22f),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .semantics {
+                role = Role.Button
+            }
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = if (chapterTag == null) Arrangement.Center else Arrangement.Top,
