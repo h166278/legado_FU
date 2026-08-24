@@ -110,9 +110,9 @@ jobs:
               修复*|修正*|解决*)
                 category="修复"
                 detail=$(printf '%s' "$subject" | sed -E 's/^(修复|修正|解决)[：:[:space:]]*//') ;;
-              优化*|改进*|调整*)
+              优化*|改进*|调整*|微调*)
                 category="优化"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(优化|改进|调整)[：:[:space:]]*//') ;;
+                detail=$(printf '%s' "$subject" | sed -E 's/^(优化|改进|调整|微调)[：:[:space:]]*//') ;;
               新增*|增加*|支持*|恢复*)
                 category="新增"
                 detail=$(printf '%s' "$subject" | sed -E 's/^(新增|增加|支持|恢复)[：:[:space:]]*//') ;;
@@ -126,6 +126,18 @@ jobs:
                 category="文档"
                 detail=$(printf '%s' "$subject" | sed -E 's/^(文档|说明)[：:[:space:]]*//') ;;
             esac
+
+            # 未明确分类但表达改进意图的提交，归入优化；更新继续作为兜底分类。
+            if [[ "$category" == "更新" && "$subject" == *遵循* ||
+                "$category" == "更新" && "$subject" == *统一* ||
+                "$category" == "更新" && "$subject" == *适配* ||
+                "$category" == "更新" && "$subject" == *兼容* ||
+                "$category" == "更新" && "$subject" == *完善* ||
+                "$category" == "更新" && "$subject" == *细化* ||
+                "$category" == "更新" && "$subject" == *改良* ||
+                "$category" == "更新" && "$subject" == *调整* ]]; then
+              category="优化"
+            fi
 
             detail=$(printf '%s' "$detail" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')
             echo "$category|$detail"

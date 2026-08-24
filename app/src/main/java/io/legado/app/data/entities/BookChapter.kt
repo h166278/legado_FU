@@ -180,7 +180,7 @@ data class BookChapter(
     private fun Int.toChineseChapterNumber(): String {
         if (this !in 1..99999) return toString()
         val digits = charArrayOf('零', '一', '二', '三', '四', '五', '六', '七', '八', '九')
-        if (this < 10) return digits[this]
+        if (this < 10) return digits[this].toString()
         if (this < 20) return "十${if (this % 10 == 0) "" else digits[this % 10]}"
         if (this < 100) return "${digits[this / 10]}十${if (this % 10 == 0) "" else digits[this % 10]}"
         if (this < 1000) {
