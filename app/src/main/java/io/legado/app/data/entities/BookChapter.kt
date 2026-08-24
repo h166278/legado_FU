@@ -165,7 +165,37 @@ data class BookChapter(
                 }
             }
         }
-        return displayTitle
+        return normalizeNumberedChapterTitle(displayTitle)
+    }
+
+    private fun normalizeNumberedChapterTitle(value: String): String {
+        val match = Regex("^\\s*(\\d{1,5})\\s*[.、:：,，]\\s*(.+)$").matchEntire(value)
+            ?: return value
+        val number = match.groupValues[1].toIntOrNull() ?: return value
+        val chapterTitle = match.groupValues[2].trim()
+        if (chapterTitle.isEmpty()) return value
+        return "第${number.toChineseChapterNumber()}章 $chapterTitle"
+    }
+
+    private fun Int.toChineseChapterNumber(): String {
+        if (this !in 1..99999) return toString()
+        val digits = charArrayOf('零', '一', '二', '三', '四', '五', '六', '七', '八', '九')
+        if (this < 10) return digits[this]
+        if (this < 20) return "十${if (this % 10 == 0) "" else digits[this % 10]}"
+        if (this < 100) return "${digits[this / 10]}十${if (this % 10 == 0) "" else digits[this % 10]}"
+        if (this < 1000) {
+            val hundreds = this / 100
+            val remainder = this % 100
+            return "${digits[hundreds]}百${if (remainder == 0) "" else if (remainder < 10) "零${digits[remainder]}" else remainder.toChineseChapterNumber()}"
+        }
+        if (this < 10000) {
+            val thousands = this / 1000
+            val remainder = this % 1000
+            return "${digits[thousands]}千${if (remainder == 0) "" else if (remainder < 100) "零${remainder.toChineseChapterNumber()}" else remainder.toChineseChapterNumber()}"
+        }
+        val tenThousands = this / 10000
+        val remainder = this % 10000
+        return "${tenThousands.toChineseChapterNumber()}万${if (remainder == 0) "" else if (remainder < 1000) "零${remainder.toChineseChapterNumber()}" else remainder.toChineseChapterNumber()}"
     }
 
     fun getAbsoluteURL(): String {

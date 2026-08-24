@@ -366,7 +366,7 @@ class ExportBookService : BaseService() {
                 // 不导出vip标识
                 chapter.apply { isVip = false },
                 exportContent ?: if (chapter.isVolume) "" else "null",
-                includeTitle = config.includeChapterName,
+                includeTitle = false,
                 useReplace = useReplace,
                 chineseConvert = false,
                 reSegment = false
@@ -378,10 +378,25 @@ class ExportBookService : BaseService() {
                     filterInteractiveImages = config.filterInteractiveImages,
                 )
             }
+        val chapterTitle = if (config.includeChapterName) {
+            chapter.getDisplayTitle(
+                contentProcessor.getTitleReplaceRules(),
+                useReplace = useReplace,
+                chineseConvert = false,
+                replaceBook = book.toReplaceBook(),
+            )
+        } else {
+            ""
+        }
+        val exportedText = if (chapterTitle.isNotBlank()) {
+            "${chapterTitle}\n$content1"
+        } else {
+            content1
+        }
         if (config.exportPictures && !config.plainText) {
             //txt导出图片文件
             val srcList = arrayListOf<SrcData>()
-            content1.split("\n").forEachIndexed { index, text ->
+            exportedText.split("\n").forEachIndexed { index, text ->
                 val matcher = AppPattern.imgPattern.matcher(text)
                 while (matcher.find()) {
                     matcher.group(1)?.let {
@@ -390,9 +405,9 @@ class ExportBookService : BaseService() {
                     }
                 }
             }
-            return Pair("\n\n$content1", srcList)
+            return Pair("\n\n$exportedText", srcList)
         } else {
-            return Pair("\n\n$content1", null)
+            return Pair("\n\n$exportedText", null)
         }
     }
 
