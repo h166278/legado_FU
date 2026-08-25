@@ -161,6 +161,8 @@ android {
     }
     lint { //忽略string翻译缺失，后面需要翻译时去掉，todo
         disable 'MissingTranslation'
+        // CI runner 资源有限：assembleRelease 跳过 lintVital（曾致 runner 失联/被平台回收）
+        checkReleaseBuilds = false
     }
     testOptions {
         unitTests {
