@@ -72,7 +72,7 @@ gsyvideoplayer = "11.3.0"
 webkit = "1.14.0"
 #noinspection GradleDependency
 activity = "1.11.0"
-composeBom = "2024.12.01"
+composeBom = "2026.08.00"
 reorderable = "3.1.0"
 #noinspection GradleDependency
 lifecycle = "2.9.4"
