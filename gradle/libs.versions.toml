@@ -69,7 +69,7 @@ soundtouchJni = "1.1.1"
 gsyvideoplayer = "11.3.0"
 
 #noinspection GradleDependency
-webkit = "1.14.0"
+webkit = "1.17.0"
 #noinspection GradleDependency
 activity = "1.11.0"
 composeBom = "2024.12.01"
