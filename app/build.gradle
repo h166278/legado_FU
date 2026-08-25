@@ -161,6 +161,9 @@ android {
     }
     lint { //忽略string翻译缺失，后面需要翻译时去掉，todo
         disable 'MissingTranslation'
+        // CI runner 内存有限(约7G可用)：release 构建跳过 lintVital 全量分析，
+        // 避免与 R8/Kotlin daemon 抢内存导致 runner 失联。需要体检时手动跑 gradlew lint。
+        checkReleaseBuilds = false
     }
     testOptions {
         unitTests {
