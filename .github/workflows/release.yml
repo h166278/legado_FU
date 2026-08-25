@@ -74,7 +74,7 @@ jobs:
           path: ${{ github.workspace }}/apk/*.apk
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: legado_fu_${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
