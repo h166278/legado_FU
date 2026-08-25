@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,7 +61,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.foundation.border
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -403,30 +403,32 @@ private fun ReadCatalogPanel(
                 .padding(top = 8.dp),
         ) {
             CatalogDragHandle(mutedColor = mutedColor)
-            if (searchVisible) {
-                CatalogSearchField(
-                    query = query,
-                    hint = if (selectedTab == CatalogTab.Chapters) {
-                        stringResource(R.string.read_catalog_search_chapters)
-                    } else {
-                        stringResource(R.string.read_catalog_search_bookmarks)
-                    },
-                    contentColor = contentColor,
-                    mutedColor = mutedColor,
-                    accentColor = accentColor,
-                    dockColor = dockColor,
-                    onQueryChange = { query = it },
-                    onClose = {
-                        query = ""
-                        searchVisible = false
-                    },
-                )
-            } else {
-                CatalogTopActions(
-                    contentColor = contentColor,
-                    dockColor = dockColor,
-                    onSearch = { searchVisible = true },
-                )
+            Column(modifier = Modifier.animateContentSize()) {
+                if (searchVisible) {
+                    CatalogSearchField(
+                        query = query,
+                        hint = if (selectedTab == CatalogTab.Chapters) {
+                            stringResource(R.string.read_catalog_search_chapters)
+                        } else {
+                            stringResource(R.string.read_catalog_search_bookmarks)
+                        },
+                        contentColor = contentColor,
+                        mutedColor = mutedColor,
+                        accentColor = accentColor,
+                        dockColor = dockColor,
+                        onQueryChange = { query = it },
+                        onClose = {
+                            query = ""
+                            searchVisible = false
+                        },
+                    )
+                } else {
+                    CatalogTopActions(
+                        contentColor = contentColor,
+                        dockColor = dockColor,
+                        onSearch = { searchVisible = true },
+                    )
+                }
             }
             Spacer(Modifier.height(4.dp))
             CatalogTabDock(
@@ -540,13 +542,13 @@ private fun CatalogTopActions(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .height(48.dp)
             .padding(horizontal = 20.dp),
     ) {
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .size(40.dp)
+                .size(44.dp)
                 .clickable(onClick = onSearch),
             contentAlignment = Alignment.Center,
         ) {
@@ -726,7 +728,7 @@ private fun CatalogSummaryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(28.dp)
+            .heightIn(min = 40.dp)
             .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -871,12 +873,12 @@ private fun CatalogChapterList(
                 .fillMaxSize()
                 .background(catalogListBackgroundColor(mutedColor)),
             contentPadding = PaddingValues(
-                start = 12.dp,
+                start = 8.dp,
                 top = 6.dp,
-                end = 12.dp,
+                end = 8.dp,
                 bottom = 20.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             items(count = itemCount, key = { it }) { position ->
                 val pageIndex = position / CATALOG_PAGE_SIZE
@@ -909,9 +911,9 @@ private fun CatalogChapterRow(
     mutedColor: Color,
     onClick: () -> Unit,
 ) {
-    val cardColor = catalogCardColor()
     val currentChapterColor = Color(NgTheme.colors.secondary)
     val currentContainerColor = Color(NgTheme.colors.selectedContainer)
+    val outlineColor = Color(NgTheme.colors.outlineVariant)
     val wordCount = if (cached && AppConfig.tocCountWords) {
         item.chapter.wordCount?.takeIf { it.isNotBlank() }
     } else {
@@ -920,38 +922,58 @@ private fun CatalogChapterRow(
     val chapterTag = item.chapter.tag
         ?.takeIf { it.isNotBlank() }
         ?.let(::formatCatalogChapterTag)
+    if (item.chapter.isVolume) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, bottom = 2.dp),
+        ) {
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = outlineColor.copy(alpha = 0.45f),
+            )
+            Text(
+                text = item.displayTitle,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp),
+                color = contentColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        return
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 58.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (current) currentContainerColor else cardColor)
+            .clip(RoundedCornerShape(10.dp))
             .then(
                 if (current) {
-                    Modifier.border(
-                        width = 1.dp,
-                        color = currentChapterColor.copy(alpha = 0.22f),
-                        shape = RoundedCornerShape(12.dp),
-                    )
+                    Modifier.background(currentContainerColor)
                 } else {
                     Modifier
                 }
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalArrangement = if (chapterTag == null) Arrangement.Center else Arrangement.Top,
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (current) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(16.dp)
+                        .clip(CircleShape)
+                        .background(currentChapterColor),
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 text = item.displayTitle,
                 modifier = Modifier.weight(1f),
                 color = if (current) currentChapterColor else contentColor,
-                fontSize = if (item.chapter.isVolume) 16.sp else 15.sp,
-                fontWeight = if (item.chapter.isVolume) {
-                    FontWeight.SemiBold
-                } else {
-                    FontWeight.Normal
-                },
+                fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -978,6 +1000,7 @@ private fun CatalogChapterRow(
             Spacer(Modifier.height(3.dp))
             Text(
                 text = chapterTag,
+                modifier = Modifier.padding(start = if (current) 11.dp else 0.dp),
                 color = mutedColor.copy(alpha = 0.78f),
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -989,26 +1012,24 @@ private fun CatalogChapterRow(
 
 @Composable
 private fun CatalogChapterPlaceholder(mutedColor: Color) {
-    val cardColor = catalogCardColor()
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(58.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(cardColor)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .heightIn(min = 44.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.58f)
+                .weight(1f)
                 .height(14.dp)
                 .clip(CircleShape)
                 .background(mutedColor.copy(alpha = 0.08f)),
         )
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.width(12.dp))
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.42f)
+                .width(36.dp)
                 .height(10.dp)
                 .clip(CircleShape)
                 .background(mutedColor.copy(alpha = 0.05f)),
