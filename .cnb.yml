@@ -1,0 +1,169 @@
+# ===================================================================
+# legado_FU · CNB（cnb.cool）云原生构建配置
+# 作用：push 到 main 或页面手动触发时，自动编译签名 APK 并发布 Release
+#
+# 前置条件（一次性配置）：
+#   1. 仓库设置 → 环境变量，添加 4 个变量（值与 GitHub Secrets 完全相同，
+#      建议勾选"加密"）：
+#        RELEASE_KEY_STORE       keystore 文件的 base64 内容
+#        RELEASE_KEY_ALIAS       签名别名
+#        RELEASE_KEY_PASSWORD    key 密码
+#        RELEASE_STORE_PASSWORD  keystore 密码
+#   2. 手动触发：仓库页面 → 构建/流水线 → 选择 web_trigger 事件运行
+#      （等同 GitHub Actions 的 Run workflow 按钮）
+#
+# 免费额度：160 核时/月；8 核 × 约 20 分钟/次 ≈ 每月 40~50 次构建
+# ===================================================================
+
+main:
+  # ---------- push 到 main 自动构建 ----------
+  push:
+    - runner:
+        tags: cnb:arch:amd64        # x86 节点，安卓工具链兼容性最好
+        cpus: 8                     # 默认 8 核，内存配比足够 legado 编译
+      docker:
+        # Ubuntu 24.04 + OpenJDK 21 + Android SDK 35/36（环境最新）
+        image: mobiledevops/android-sdk-image:latest
+        # 若 Gradle wrapper 与 JDK21 不兼容报错，改用 JDK17 镜像：
+        # image: mingc/android-build-box:latest
+        volumes:
+          # Gradle 缓存卷，二次构建提速明显（依赖不用重新下载）
+          - main:/root/.gradle:copy-on-write
+      stages:
+        - name: 环境信息
+          script: |
+            java -version
+            echo "ANDROID_HOME=$ANDROID_HOME"
+
+        - name: 生成版本号
+          # 版本格式与 GitHub Actions release.yml 一致：3.年.月日时（北京时间）
+          script: echo "##[set-output version=$(date -d '8 hour' -u +3.%y.%m%d%H)]"
+          exports:
+            version: VERSION
+
+        - name: 写入签名配置
+          script: |
+            set -e
+            if [ -z "$RELEASE_KEY_STORE" ] || [ -z "$RELEASE_KEY_ALIAS" ] || \
+               [ -z "$RELEASE_KEY_PASSWORD" ] || [ -z "$RELEASE_STORE_PASSWORD" ]; then
+              echo "缺少签名环境变量：请在 仓库设置→环境变量 配置 4 个 RELEASE_KEY_* 变量"
+              exit 1
+            fi
+            printf '\n' >> gradle.properties
+            {
+              echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
+              echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
+              echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
+              echo "RELEASE_STORE_FILE=./key.jks"
+            } >> gradle.properties
+            echo "$RELEASE_KEY_STORE" | base64 -d > app/key.jks
+            sed "/def version/c def version = \"$VERSION\"" app/build.gradle -i
+            echo "本次版本号: $VERSION"
+
+        - name: Gradle 编译
+          script: |
+            chmod +x gradlew
+            ./gradlew assembleAppRelease --build-cache --parallel
+
+        - name: 收集 APK
+          script: |
+            mkdir -p apk
+            cp -rf app/build/outputs/apk/*/*/*.apk apk/
+            ls -lh apk/
+            sha256sum apk/*.apk
+
+        - name: 生成 Release 参数
+          script: |
+            cat > release_opts.yml <<EOF
+            tag: $VERSION
+            title: legado_fu_$VERSION
+            description: CNB 云构建 $VERSION
+            EOF
+
+        - name: 发布 Release
+          type: git:release
+          optionsFrom:
+            - ./release_opts.yml
+
+        - name: 上传 APK 到 Release
+          image: cnbcool/attachments:latest
+          settings:
+            type: UPLOAD
+            tag: $VERSION
+            attachments:
+              - ./apk/*.apk
+
+  # ---------- 页面手动触发（等同 Run workflow） ----------
+  web_trigger:
+    - runner:
+        tags: cnb:arch:amd64
+        cpus: 8
+      docker:
+        image: mobiledevops/android-sdk-image:latest
+        volumes:
+          - main:/root/.gradle:copy-on-write
+      stages:
+        - name: 环境信息
+          script: |
+            java -version
+            echo "ANDROID_HOME=$ANDROID_HOME"
+
+        - name: 生成版本号
+          script: echo "##[set-output version=$(date -d '8 hour' -u +3.%y.%m%d%H)]"
+          exports:
+            version: VERSION
+
+        - name: 写入签名配置
+          script: |
+            set -e
+            if [ -z "$RELEASE_KEY_STORE" ] || [ -z "$RELEASE_KEY_ALIAS" ] || \
+               [ -z "$RELEASE_KEY_PASSWORD" ] || [ -z "$RELEASE_STORE_PASSWORD" ]; then
+              echo "缺少签名环境变量：请在 仓库设置→环境变量 配置 4 个 RELEASE_KEY_* 变量"
+              exit 1
+            fi
+            printf '\n' >> gradle.properties
+            {
+              echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
+              echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
+              echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
+              echo "RELEASE_STORE_FILE=./key.jks"
+            } >> gradle.properties
+            echo "$RELEASE_KEY_STORE" | base64 -d > app/key.jks
+            sed "/def version/c def version = \"$VERSION\"" app/build.gradle -i
+            echo "本次版本号: $VERSION"
+
+        - name: Gradle 编译
+          script: |
+            chmod +x gradlew
+            ./gradlew assembleAppRelease --build-cache --parallel
+
+        - name: 收集 APK
+          script: |
+            mkdir -p apk
+            cp -rf app/build/outputs/apk/*/*/*.apk apk/
+            ls -lh apk/
+            sha256sum apk/*.apk
+
+        - name: 生成 Release 参数
+          script: |
+            cat > release_opts.yml <<EOF
+            tag: $VERSION
+            title: legado_fu_$VERSION
+            description: CNB 云构建（手动触发）$VERSION
+            EOF
+
+        - name: 发布 Release
+          type: git:release
+          optionsFrom:
+            - ./release_opts.yml
+
+        - name: 上传 APK 到 Release
+          image: cnbcool/attachments:latest
+          settings:
+            type: UPLOAD
+            tag: $VERSION
+            attachments:
+              - ./apk/*.apk
+          # 注：附件插件官方事件列表未列 web_trigger，若此步报错，
+          # Release 本身已创建成功，可到 Release 页面手动补传 APK，
+          # 或改用 push 触发（push 路径完全受支持）。
