@@ -186,43 +186,22 @@ private fun TocTopBar(
             contentDescription = stringResource(R.string.back),
             onClick = { onEvent(TocUiEvent.Back) },
         )
-        if (state.searchExpanded) {
-            NgSearchBar(
-                query = state.query,
-                onQueryChange = { onEvent(TocUiEvent.QueryChange(it)) },
-                hint = stringResource(R.string.search),
-                variant = NgSearchBarVariant.TOOLBAR,
-                onSearch = {},
-                modifier = Modifier.weight(1f),
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            TocTab(
+                title = stringResource(R.string.chapter_list),
+                selected = state.selectedTab == TOC_TAB_CHAPTERS,
+                onClick = { onEvent(TocUiEvent.TabChange(TOC_TAB_CHAPTERS)) },
             )
-            TocToolbarIcon(
-                iconRes = R.drawable.ic_baseline_close,
-                contentDescription = stringResource(R.string.close),
-                onClick = { onEvent(TocUiEvent.SearchExpandedChange(false)) },
+            TocTab(
+                title = stringResource(R.string.bookmark),
+                selected = state.selectedTab == TOC_TAB_BOOKMARKS,
+                onClick = { onEvent(TocUiEvent.TabChange(TOC_TAB_BOOKMARKS)) },
             )
-        } else {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                TocTab(
-                    title = stringResource(R.string.chapter_list),
-                    selected = state.selectedTab == TOC_TAB_CHAPTERS,
-                    onClick = { onEvent(TocUiEvent.TabChange(TOC_TAB_CHAPTERS)) },
-                )
-                TocTab(
-                    title = stringResource(R.string.bookmark),
-                    selected = state.selectedTab == TOC_TAB_BOOKMARKS,
-                    onClick = { onEvent(TocUiEvent.TabChange(TOC_TAB_BOOKMARKS)) },
-                )
-            }
-            TocToolbarIcon(
-                iconRes = R.drawable.ic_search,
-                contentDescription = stringResource(R.string.search),
-                onClick = { onEvent(TocUiEvent.SearchExpandedChange(true)) },
-            )
-            TocMoreMenu(state = state, onEvent = onEvent)
         }
+        TocMoreMenu(state = state, onEvent = onEvent)
     }
 }
 
@@ -380,6 +359,10 @@ private fun TocChapterPage(
         }
     }
     Column(Modifier.fillMaxSize()) {
+        TocChapterActionBar(
+            state = state,
+            onEvent = onEvent,
+        )
         Box(modifier = Modifier.weight(1f)) {
             LazyColumn(
                 state = listState,
@@ -431,6 +414,79 @@ private fun TocChapterPage(
     }
 }
 
+@Composable
+private fun TocChapterActionBar(
+    state: TocUiState,
+    onEvent: (TocUiEvent) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (state.searchExpanded) {
+            NgSearchBar(
+                query = state.query,
+                onQueryChange = { onEvent(TocUiEvent.QueryChange(it)) },
+                hint = stringResource(R.string.search),
+                variant = NgSearchBarVariant.STANDARD,
+                onSearch = {},
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            TocActionButton(
+                modifier = Modifier.weight(1f),
+                iconRes = R.drawable.ic_search,
+                text = stringResource(R.string.search),
+                onClick = { onEvent(TocUiEvent.SearchExpandedChange(true)) },
+            )
+        }
+        TocActionButton(
+            modifier = Modifier.weight(1f),
+            iconRes = R.drawable.ic_catalog_sort_descending,
+            text = stringResource(R.string.reverse_toc),
+            onClick = {
+                onEvent(TocUiEvent.Menu(TocMenuAction.ReverseToc))
+            },
+        )
+    }
+}
+
+@Composable
+private fun TocActionButton(
+    modifier: Modifier,
+    iconRes: Int,
+    text: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(colorResource(R.color.ng_surface_card))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = text,
+            modifier = Modifier.size(20.dp),
+            tint = Color(NgTheme.colors.onSurface),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            color = colorResource(R.color.primaryText),
+            fontSize = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TocChapterRow(
@@ -442,15 +498,28 @@ private fun TocChapterRow(
     onLongClick: () -> Unit,
 ) {
     val chapter = item.chapter
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (chapter.isVolume) colorResource(R.color.btn_bg_press)
-                else Color.Transparent,
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(if (current) 3.dp else 0.dp)
+                .fillMaxHeight()
+                .background(Color(NgTheme.colors.primary)),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .background(
+                when {
+                    chapter.isVolume -> colorResource(R.color.btn_bg_press)
+                    current -> Color(NgTheme.colors.primary).copy(alpha = 0.08f)
+                    else -> Color.Transparent
+                },
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(12.dp),
+            .padding(vertical = 10.dp, horizontal = 12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -523,8 +592,9 @@ private fun TocChapterRow(
             }
         }
     }
+    }
     HorizontalDivider(
-        thickness = 0.6.dp,
+        thickness = 1.dp,
         color = colorResource(R.color.bg_divider_line),
     )
 }
