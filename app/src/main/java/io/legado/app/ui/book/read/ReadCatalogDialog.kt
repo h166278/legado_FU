@@ -44,6 +44,8 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -347,6 +349,8 @@ private fun ReadCatalogPanel(
     var searchVisible by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var descending by remember { mutableStateOf(false) }
+    var tocCollapsed by remember { mutableStateOf(false) }
+    var menuVisible by remember { mutableStateOf(false) }
     var visibleChapterCount by remember(chapterCount) { mutableStateOf(chapterCount) }
     val contentColor = Color(NgTheme.colors.onSurface)
     val mutedColor = Color(NgTheme.colors.onSurfaceVariant)
@@ -438,7 +442,6 @@ private fun ReadCatalogPanel(
                         } else {
                             filteredBookmarks.size
                         },
-                        descending = descending,
                         searchVisible = searchVisible,
                         query = query,
                         contentColor = contentColor,
@@ -447,7 +450,19 @@ private fun ReadCatalogPanel(
                         dockColor = dockColor,
                         onQueryChange = { query = it },
                         onSearchToggle = { searchVisible = !searchVisible },
-                        onSort = { descending = !descending },
+                        onMore = { menuVisible = true },
+                        menuVisible = menuVisible,
+                        tocExpanded = !tocCollapsed,
+                        descending = descending,
+                        onDismissMenu = { menuVisible = false },
+                        onToggleCollapsed = {
+                            tocCollapsed = !tocCollapsed
+                            menuVisible = false
+                        },
+                        onToggleSort = {
+                            descending = !descending
+                            menuVisible = false
+                        },
                     )
                     if (loading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -699,7 +714,13 @@ private fun CatalogSummaryRow(
     dockColor: Color,
     onQueryChange: (String) -> Unit,
     onSearchToggle: () -> Unit,
-    onSort: () -> Unit,
+    onMore: () -> Unit,
+    menuVisible: Boolean,
+    tocExpanded: Boolean,
+    descending: Boolean,
+    onDismissMenu: () -> Unit,
+    onToggleCollapsed: () -> Unit,
+    onToggleSort: () -> Unit,
 ) {
     val currentChapterNumber = if (chapterCount > 0) {
         (currentChapterIndex + 1).coerceIn(1, chapterCount)
@@ -754,20 +775,25 @@ private fun CatalogSummaryRow(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            CatalogIconAction(
-                icon = null,
-                painter = painterResource(
-                    if (descending) R.drawable.ic_catalog_sort_descending
-                    else R.drawable.ic_catalog_sort_ascending,
-                ),
-                contentDescription = stringResource(
-                    if (descending) R.string.read_catalog_descending
-                    else R.string.read_catalog_ascending,
-                ),
-                contentColor = contentColor,
-                dockColor = dockColor,
-                onClick = onSort,
-            )
+            Box {
+                CatalogIconAction(
+                    icon = null,
+                    painter = painterResource(R.drawable.ic_more_horiz),
+                    contentDescription = stringResource(R.string.more),
+                    contentColor = contentColor,
+                    dockColor = dockColor,
+                    onClick = onMore,
+                )
+                if (menuVisible) {
+                    CatalogMoreMenu(
+                        expanded = tocExpanded,
+                        descending = descending,
+                        onDismiss = onDismissMenu,
+                        onToggleCollapsed = onToggleCollapsed,
+                        onToggleSort = onToggleSort,
+                    )
+                }
+            }
         }
     }
 }
@@ -794,6 +820,57 @@ private fun CatalogIconAction(
         } else if (painter != null) {
             Icon(painter, contentDescription, Modifier.size(20.dp), contentColor)
         }
+    }
+}
+
+@Composable
+private fun CatalogMoreMenu(
+    expanded: Boolean,
+    descending: Boolean,
+    onDismiss: () -> Unit,
+    onToggleCollapsed: () -> Unit,
+    onToggleSort: () -> Unit,
+) {
+    DropdownMenu(
+        expanded = true,
+        onDismissRequest = onDismiss,
+    ) {
+        DropdownMenuItem(
+            text = { Text(if (expanded) stringResource(R.string.collapse_toc) else stringResource(R.string.expand_toc)) },
+            onClick = onToggleCollapsed,
+            leadingIcon = {
+                Icon(
+                    painterResource(
+                        if (expanded) R.drawable.ic_catalog_collapse
+                        else R.drawable.ic_catalog_expand,
+                    ),
+                    contentDescription = null,
+                )
+            },
+        )
+        DropdownMenuItem(
+            text = {
+                Text(if (descending) "正向排序" else "逆向排序")
+            },
+            onClick = onToggleSort,
+            leadingIcon = {
+                Icon(
+                    painterResource(
+                        if (descending) R.drawable.ic_catalog_sort_ascending
+                        else R.drawable.ic_catalog_sort_descending,
+                    ),
+                    contentDescription = null,
+                )
+            },
+        )
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.toc_style)) },
+            onClick = onDismiss,
+            leadingIcon = {
+                Icon(painterResource(R.drawable.ic_catalog_style), contentDescription = null)
+            },
+        )
     }
 }
 
