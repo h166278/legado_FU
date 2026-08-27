@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
@@ -357,21 +359,21 @@ private fun tocMenuItems(state: TocUiState): List<NgExpandableActionMenuItem> = 
             add(
                 TocMenuAction.ToggleCollapsedToc.item(
                     if (state.tocCollapsed) R.string.expand_toc else R.string.collapse_toc,
-                    R.drawable.ic_catalog_sort_descending,
+                    if (state.tocCollapsed) R.drawable.ic_catalog_expand else R.drawable.ic_catalog_collapse,
                 ),
             )
         }
         add(
             TocMenuAction.ReverseToc.item(
                 if (state.tocReversed) R.string.forward_toc else R.string.reverse_toc,
-                R.drawable.ic_catalog_sort_descending,
+                if (state.tocReversed) R.drawable.ic_catalog_sort_ascending else R.drawable.ic_catalog_sort_descending,
                 dividerBefore = isNotEmpty(),
             ),
         )
         add(
             TocMenuAction.TocStyle.item(
                 R.string.toc_style,
-                R.drawable.ic_cfg_about,
+                R.drawable.ic_catalog_style,
             ),
         )
         if (state.isLocalTxt) {
@@ -555,6 +557,8 @@ private fun TocStyleDialog(
     var draft by remember(style) { mutableStateOf(style) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.widthIn(min = 320.dp, max = 520.dp),
         title = { Text(stringResource(R.string.toc_style)) },
         text = {
             Column {
