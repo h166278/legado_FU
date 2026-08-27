@@ -2,6 +2,7 @@ package io.legado.app.ui.book.toc
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -471,6 +472,31 @@ private fun TocChapterPage(
                 variant = NgLazyListFastScrollerVariant.TRACK,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
+            TocChapterFloatingActions(
+                atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
+                onCurrent = {
+                    if (chapters.isNotEmpty()) {
+                        scope.launch {
+                            val currentIndex = chapters.indexOfLast {
+                                it.chapter.index < (state.book?.durChapterIndex ?: -1)
+                            }.coerceAtLeast(0)
+                            listState.animateScrollToItem(currentIndex)
+                        }
+                    }
+                },
+                onTopOrBottom = {
+                    if (chapters.isNotEmpty()) scope.launch {
+                        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+                            listState.animateScrollToItem(chapters.lastIndex)
+                        } else {
+                            listState.animateScrollToItem(0)
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp),
+            )
         }
         TocChapterBottomBar(
             book = state.book,
@@ -482,14 +508,6 @@ private fun TocChapterPage(
                         }.coerceAtLeast(0)
                         listState.scrollToItem(currentIndex)
                     }
-                }
-            },
-            onTop = {
-                if (chapters.isNotEmpty()) scope.launch { listState.scrollToItem(0) }
-            },
-            onBottom = {
-                if (chapters.isNotEmpty()) {
-                    scope.launch { listState.scrollToItem(chapters.lastIndex) }
                 }
             },
         )
@@ -739,11 +757,55 @@ private fun TocChapterRow(
 }
 
 @Composable
+private fun TocChapterFloatingActions(
+    atTop: Boolean,
+    onCurrent: () -> Unit,
+    onTopOrBottom: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TocFloatingIcon(
+            iconRes = R.drawable.ic_gps_fixed,
+            contentDescription = "定位当前章节",
+            onClick = onCurrent,
+        )
+        TocFloatingIcon(
+            iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_up,
+            contentDescription = if (atTop) "滚动到底部" else "滚动到顶部",
+            onClick = onTopOrBottom,
+        )
+    }
+}
+
+@Composable
+private fun TocFloatingIcon(
+    iconRes: Int,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(52.dp)
+            .background(colorResource(R.color.primaryText), CircleShape),
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(28.dp),
+            tint = colorResource(R.color.ng_surface_card),
+        )
+    }
+}
+
+@Composable
 private fun TocChapterBottomBar(
     book: Book?,
     onCurrent: () -> Unit,
-    onTop: () -> Unit,
-    onBottom: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
