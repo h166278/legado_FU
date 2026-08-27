@@ -829,6 +829,36 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.tocCountWords, value)
         }
 
+    var tocShowOriginalIndex: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.tocShowOriginalIndex)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.tocShowOriginalIndex, value)
+        }
+
+    var tocTitleMaxLines: Int
+        get() = appCtx.getPrefInt(PreferKey.tocTitleMaxLines, 1)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.tocTitleMaxLines, value)
+        }
+
+    var tocLooseSpacing: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.tocLooseSpacing)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.tocLooseSpacing, value)
+        }
+
+    var tocInfoDisplay: Int
+        get() = appCtx.getPrefInt(PreferKey.tocInfoDisplay)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.tocInfoDisplay, value)
+        }
+
+    var tocInfoBelowTitle: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.tocInfoBelowTitle)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.tocInfoBelowTitle, value)
+        }
+
     var enableReadRecord: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.enableReadRecord, true)
         set(value) {

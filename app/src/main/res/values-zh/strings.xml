@@ -1601,7 +1601,10 @@
     <string name="show">显示</string>
     <string name="hide">隐藏</string>
     <string name="hide_when_status_bar_show">状态栏显示时隐藏</string>
-    <string name="reverse_toc">反转目录</string>
+    <string name="reverse_toc">反向排序</string>
+    <string name="expand_toc">展开目录</string>
+    <string name="collapse_toc">折叠目录</string>
+    <string name="toc_style">目录样式</string>
     <string name="show_discovery">显示发现</string>
     <string name="style">样式</string>
     <string name="export_file_name">导出文件名</string>

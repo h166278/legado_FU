@@ -64,6 +64,13 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
         TocUiState(
             useReplace = AppConfig.tocUiUseReplace,
             loadWordCount = AppConfig.tocCountWords,
+            tocStyle = TocStyle(
+                showOriginalIndex = AppConfig.tocShowOriginalIndex,
+                titleMaxLines = AppConfig.tocTitleMaxLines,
+                looseSpacing = AppConfig.tocLooseSpacing,
+                infoDisplay = AppConfig.tocInfoDisplay,
+                infoBelowTitle = AppConfig.tocInfoBelowTitle,
+            ),
         ),
     )
     private var fullChapterList: List<BookChapter> = emptyList()
@@ -116,6 +123,7 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
             }
             is TocUiEvent.QueryChange -> changeQuery(event.query)
             is TocUiEvent.Menu -> handleMenuAction(event.action)
+            is TocUiEvent.TocStyleChange -> updateTocStyle(event.style)
             is TocUiEvent.ChapterClick -> openChapter(event.chapter)
             is TocUiEvent.ChapterLongClick -> longToastOnUi(event.title)
             is TocUiEvent.BookmarkClick -> openBookmark(event.bookmark)
@@ -242,6 +250,15 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
         }
     }
 
+    private fun updateTocStyle(style: TocStyle) {
+        AppConfig.tocShowOriginalIndex = style.showOriginalIndex
+        AppConfig.tocTitleMaxLines = style.titleMaxLines
+        AppConfig.tocLooseSpacing = style.looseSpacing
+        AppConfig.tocInfoDisplay = style.infoDisplay
+        AppConfig.tocInfoBelowTitle = style.infoBelowTitle
+        uiState = uiState.copy(tocStyle = style)
+    }
+
     private fun handleMenuAction(action: TocMenuAction) {
         when (action) {
             TocMenuAction.TocRegex -> showDialogFragment(
@@ -249,6 +266,10 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
             )
             TocMenuAction.SplitLongChapter -> toggleSplitLongChapter()
             TocMenuAction.ReverseToc -> reverseToc()
+            TocMenuAction.ToggleCollapsedToc -> {
+                uiState = uiState.copy(tocCollapsed = !uiState.tocCollapsed)
+            }
+            TocMenuAction.TocStyle -> Unit
             TocMenuAction.UseReplace -> {
                 AppConfig.tocUiUseReplace = !AppConfig.tocUiUseReplace
                 uiState = uiState.copy(useReplace = AppConfig.tocUiUseReplace)
