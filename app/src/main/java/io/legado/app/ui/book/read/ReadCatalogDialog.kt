@@ -77,6 +77,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -744,29 +745,54 @@ private fun CatalogSummaryRow(
                     onClose = onSearchToggle,
                 )
             } else {
-                CatalogCompactAction(
+                CatalogIconAction(
                     icon = Icons.Rounded.Search,
-                    label = stringResource(R.string.search),
+                    contentDescription = stringResource(R.string.search),
                     contentColor = contentColor,
                     dockColor = dockColor,
                     onClick = onSearchToggle,
                 )
             }
             Spacer(Modifier.width(8.dp))
-            CatalogCompactAction(
+            CatalogIconAction(
                 icon = null,
                 painter = painterResource(
                     if (descending) R.drawable.ic_catalog_sort_descending
-                    else R.drawable.ic_catalog_sort_ascending
+                    else R.drawable.ic_catalog_sort_ascending,
                 ),
-                label = stringResource(
+                contentDescription = stringResource(
                     if (descending) R.string.read_catalog_descending
-                    else R.string.read_catalog_ascending
+                    else R.string.read_catalog_ascending,
                 ),
                 contentColor = contentColor,
                 dockColor = dockColor,
                 onClick = onSort,
             )
+        }
+    }
+}
+
+@Composable
+private fun CatalogIconAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    painter: androidx.compose.ui.graphics.painter.Painter? = null,
+    contentDescription: String,
+    contentColor: Color,
+    dockColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(dockColor)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription, Modifier.size(20.dp), contentColor)
+        } else if (painter != null) {
+            Icon(painter, contentDescription, Modifier.size(20.dp), contentColor)
         }
     }
 }
