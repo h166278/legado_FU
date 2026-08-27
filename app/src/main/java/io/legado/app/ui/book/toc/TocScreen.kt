@@ -839,33 +839,7 @@ private fun TocChapterBottomBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            TocBottomIcon(
-                iconRes = R.drawable.ic_arrow_drop_up,
-                contentDescription = stringResource(R.string.go_to_top),
-                onClick = onTop,
-            )
-            TocBottomIcon(
-                iconRes = R.drawable.ic_arrow_drop_down,
-                contentDescription = stringResource(R.string.go_to_bottom),
-                onClick = onBottom,
-            )
         }
-    }
-}
-
-@Composable
-private fun TocBottomIcon(
-    iconRes: Int,
-    contentDescription: String,
-    onClick: () -> Unit,
-) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(36.dp),
-            tint = colorResource(R.color.primaryText),
-        )
     }
 }
 
