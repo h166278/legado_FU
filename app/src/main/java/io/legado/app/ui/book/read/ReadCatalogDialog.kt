@@ -974,8 +974,8 @@ private fun CatalogChapterRow(
     mutedColor: Color,
     onClick: () -> Unit,
 ) {
-    val currentChapterColor = Color(NgTheme.colors.secondary)
-    val currentContainerColor = Color(NgTheme.colors.selectedContainer)
+    val currentChapterColor = Color(NgTheme.colors.primary)
+    val currentContainerColor = currentChapterColor.copy(alpha = 0.08f)
     val outlineColor = Color(NgTheme.colors.outlineVariant)
     val wordCount = if (cached && AppConfig.tocCountWords) {
         item.chapter.wordCount?.takeIf { it.isNotBlank() }
@@ -1007,30 +1007,30 @@ private fun CatalogChapterRow(
         }
         return
     }
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 44.dp)
             .then(
-                if (current) {
-                    Modifier.background(currentContainerColor)
-                } else {
-                    Modifier
-                }
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+                if (current) Modifier.background(currentContainerColor) else Modifier,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (current) {
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .height(16.dp)
-                        .clip(CircleShape)
-                        .background(currentChapterColor),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
+        if (current) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(currentChapterColor),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = item.displayTitle,
                 modifier = Modifier.weight(1f),
@@ -1062,7 +1062,7 @@ private fun CatalogChapterRow(
             Spacer(Modifier.height(3.dp))
             Text(
                 text = chapterTag,
-                modifier = Modifier.padding(start = if (current) 11.dp else 0.dp),
+                modifier = Modifier,
                 color = mutedColor.copy(alpha = 0.78f),
                 fontSize = 12.sp,
                 maxLines = 1,
