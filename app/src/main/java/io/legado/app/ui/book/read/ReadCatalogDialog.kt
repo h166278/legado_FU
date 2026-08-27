@@ -938,28 +938,83 @@ private fun CatalogStyleDialog(
     var positionOpen by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("目录样式", fontSize = 24.sp, fontWeight = FontWeight.Bold) },
+        modifier = Modifier.fillMaxWidth(0.88f),
+        title = {
+            Text("目录样式", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        },
         text = {
             Column {
-                Text("调整目录的标题、统计信息和显示密度。")
-                Text("标题", modifier = Modifier.padding(top = 20.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(NgTheme.colors.surfaceContainerLow)).padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("显示原始章节序号"); Text("按书籍原始章节顺序显示序号", fontSize = 13.sp) }; Switch(draft.showOriginalIndex, { draft = draft.copy(showOriginalIndex = it) }) }
-                    Text("标题最大行数", modifier = Modifier.padding(top = 18.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) { Text("控制长标题在目录中最多显示几行", Modifier.weight(1f), fontSize = 13.sp); OutlinedButton({ draft = draft.copy(titleMaxLines = (draft.titleMaxLines - 1).coerceAtLeast(1)) }) { Text("−") }; Text(draft.titleMaxLines.toString(), Modifier.padding(horizontal = 14.dp)); OutlinedButton({ draft = draft.copy(titleMaxLines = (draft.titleMaxLines + 1).coerceAtMost(3)) }) { Text("+") } }
+                Text(
+                    "调整目录的标题、统计信息和显示密度。",
+                    color = Color(NgTheme.colors.onSurfaceVariant),
+                    fontSize = 14.sp,
+                )
+                Text("标题", modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.SemiBold)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(NgTheme.colors.surfaceContainerLow))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("显示原始章节序号")
+                            Text("按书籍原始章节顺序显示序号", fontSize = 12.sp, color = Color(NgTheme.colors.onSurfaceVariant))
+                        }
+                        Switch(checked = draft.showOriginalIndex, onCheckedChange = { draft = draft.copy(showOriginalIndex = it) })
+                    }
+                    Text("标题最大行数", modifier = Modifier.padding(top = 12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("控制长标题在目录中最多显示几行", Modifier.weight(1f), fontSize = 12.sp, color = Color(NgTheme.colors.onSurfaceVariant))
+                        OutlinedButton(
+                            onClick = { draft = draft.copy(titleMaxLines = (draft.titleMaxLines - 1).coerceAtLeast(1)) },
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                        ) { Text("−") }
+                        Text(draft.titleMaxLines.toString(), modifier = Modifier.padding(horizontal = 12.dp))
+                        OutlinedButton(
+                            onClick = { draft = draft.copy(titleMaxLines = (draft.titleMaxLines + 1).coerceAtMost(3)) },
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                        ) { Text("+") }
+                    }
                     CatalogStyleChoice("排列密度", "调整目录项的垂直留白", if (draft.looseSpacing) "宽松模式" else "紧凑模式", { densityOpen = true })
-                    DropdownMenu(densityOpen, { densityOpen = false }) { DropdownMenuItem({ Text("紧凑模式") }, { draft = draft.copy(looseSpacing = false); densityOpen = false }); DropdownMenuItem({ Text("宽松模式") }, { draft = draft.copy(looseSpacing = true); densityOpen = false }) }
+                    DropdownMenu(densityOpen, { densityOpen = false }) {
+                        DropdownMenuItem({ Text("紧凑模式") }, { draft = draft.copy(looseSpacing = false); densityOpen = false })
+                        DropdownMenuItem({ Text("宽松模式") }, { draft = draft.copy(looseSpacing = true); densityOpen = false })
+                    }
                 }
-                Text("信息", modifier = Modifier.padding(top = 20.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(NgTheme.colors.surfaceContainerLow)).padding(18.dp)) {
+                Text("信息", modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.SemiBold)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(NgTheme.colors.surfaceContainerLow))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
                     CatalogStyleChoice("信息显示", "选择标题旁展示的章节信息", catalogInfoLabel(draft.infoDisplay), { infoOpen = true })
-                    DropdownMenu(infoOpen, { infoOpen = false }) { listOf(CATALOG_INFO_NONE to "不显示", CATALOG_INFO_WORD_COUNT to "字数", CATALOG_INFO_PAGE to "页码", CATALOG_INFO_PERCENT to "百分比", CATALOG_INFO_WORD_COUNT_AND_PAGE to "字数和页码").forEach { (v, t) -> DropdownMenuItem({ Text(t) }, { draft = draft.copy(infoDisplay = v); infoOpen = false }) } }
+                    DropdownMenu(infoOpen, { infoOpen = false }) {
+                        listOf(CATALOG_INFO_NONE to "不显示", CATALOG_INFO_WORD_COUNT to "字数", CATALOG_INFO_PAGE to "页码", CATALOG_INFO_PERCENT to "百分比", CATALOG_INFO_WORD_COUNT_AND_PAGE to "字数和页码").forEach { (v, t) ->
+                            DropdownMenuItem({ Text(t) }, { draft = draft.copy(infoDisplay = v); infoOpen = false })
+                        }
+                    }
                     CatalogStyleChoice("信息位置", "选择信息显示在标题末尾或标题下方", if (draft.infoBelowTitle) "标题下方" else "标题末尾", { positionOpen = true })
-                    DropdownMenu(positionOpen, { positionOpen = false }) { DropdownMenuItem({ Text("标题末尾") }, { draft = draft.copy(infoBelowTitle = false); positionOpen = false }); DropdownMenuItem({ Text("标题下方") }, { draft = draft.copy(infoBelowTitle = true); positionOpen = false }) }
+                    DropdownMenu(positionOpen, { positionOpen = false }) {
+                        DropdownMenuItem({ Text("标题末尾") }, { draft = draft.copy(infoBelowTitle = false); positionOpen = false })
+                        DropdownMenuItem({ Text("标题下方") }, { draft = draft.copy(infoBelowTitle = true); positionOpen = false })
+                    }
                 }
             }
         },
-        confirmButton = { Button({ onConfirm(draft) }) { Text("确定") } },
+        confirmButton = { Button(onClick = { onConfirm(draft) }) { Text("确定") } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
