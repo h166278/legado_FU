@@ -43,11 +43,15 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -319,6 +323,20 @@ private data class CatalogChapter(
     val displayTitle: String,
 )
 
+private data class CatalogStyle(
+    val showOriginalIndex: Boolean = false,
+    val titleMaxLines: Int = 2,
+    val looseSpacing: Boolean = true,
+    val infoDisplay: Int = CATALOG_INFO_PAGE,
+    val infoBelowTitle: Boolean = false,
+)
+
+private const val CATALOG_INFO_NONE = 0
+private const val CATALOG_INFO_WORD_COUNT = 1
+private const val CATALOG_INFO_PAGE = 2
+private const val CATALOG_INFO_PERCENT = 3
+private const val CATALOG_INFO_WORD_COUNT_AND_PAGE = 4
+
 private enum class CatalogTab { Chapters, Bookmarks }
 
 private const val CATALOG_PAGE_SIZE = 64
@@ -351,6 +369,18 @@ private fun ReadCatalogPanel(
     var descending by remember { mutableStateOf(false) }
     var tocCollapsed by remember { mutableStateOf(false) }
     var menuVisible by remember { mutableStateOf(false) }
+    var styleDialogVisible by remember { mutableStateOf(false) }
+    var tocStyle by remember {
+        mutableStateOf(
+            CatalogStyle(
+                showOriginalIndex = AppConfig.tocShowOriginalIndex,
+                titleMaxLines = AppConfig.tocTitleMaxLines,
+                looseSpacing = AppConfig.tocLooseSpacing,
+                infoDisplay = AppConfig.tocInfoDisplay,
+                infoBelowTitle = AppConfig.tocInfoBelowTitle,
+            ),
+        )
+    }
     var visibleChapterCount by remember(chapterCount) { mutableStateOf(chapterCount) }
     val contentColor = Color(NgTheme.colors.onSurface)
     val mutedColor = Color(NgTheme.colors.onSurfaceVariant)
@@ -463,7 +493,26 @@ private fun ReadCatalogPanel(
                             descending = !descending
                             menuVisible = false
                         },
+                        onStyle = {
+                            menuVisible = false
+                            styleDialogVisible = true
+                        },
                     )
+                    if (styleDialogVisible) {
+                        CatalogStyleDialog(
+                            style = tocStyle,
+                            onDismiss = { styleDialogVisible = false },
+                            onConfirm = { style ->
+                                AppConfig.tocShowOriginalIndex = style.showOriginalIndex
+                                AppConfig.tocTitleMaxLines = style.titleMaxLines
+                                AppConfig.tocLooseSpacing = style.looseSpacing
+                                AppConfig.tocInfoDisplay = style.infoDisplay
+                                AppConfig.tocInfoBelowTitle = style.infoBelowTitle
+                                tocStyle = style
+                                styleDialogVisible = false
+                            },
+                        )
+                    }
                     if (loading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
@@ -480,6 +529,7 @@ private fun ReadCatalogPanel(
                             cachedChapterFiles = cachedChapterFiles,
                             isLocalBook = isLocalBook,
                             currentChapterIndex = currentChapterIndex,
+                            style = tocStyle,
                             listState = chapterListState,
                             contentColor = contentColor,
                             mutedColor = mutedColor,
@@ -705,7 +755,6 @@ private fun CatalogSummaryRow(
     currentChapterIndex: Int,
     chapterCount: Int,
     itemCount: Int,
-    descending: Boolean,
     searchVisible: Boolean,
     query: String,
     contentColor: Color,
@@ -721,6 +770,7 @@ private fun CatalogSummaryRow(
     onDismissMenu: () -> Unit,
     onToggleCollapsed: () -> Unit,
     onToggleSort: () -> Unit,
+    onStyle: () -> Unit,
 ) {
     val currentChapterNumber = if (chapterCount > 0) {
         (currentChapterIndex + 1).coerceIn(1, chapterCount)
@@ -791,6 +841,7 @@ private fun CatalogSummaryRow(
                         onDismiss = onDismissMenu,
                         onToggleCollapsed = onToggleCollapsed,
                         onToggleSort = onToggleSort,
+                        onStyle = onStyle,
                     )
                 }
             }
@@ -830,6 +881,7 @@ private fun CatalogMoreMenu(
     onDismiss: () -> Unit,
     onToggleCollapsed: () -> Unit,
     onToggleSort: () -> Unit,
+    onStyle: () -> Unit,
 ) {
     DropdownMenu(
         expanded = true,
@@ -866,13 +918,57 @@ private fun CatalogMoreMenu(
         HorizontalDivider()
         DropdownMenuItem(
             text = { Text(stringResource(R.string.toc_style)) },
-            onClick = onDismiss,
+            onClick = onStyle,
             leadingIcon = {
                 Icon(painterResource(R.drawable.ic_catalog_style), contentDescription = null)
             },
         )
     }
 }
+
+@Composable
+private fun CatalogStyleDialog(
+    style: CatalogStyle,
+    onDismiss: () -> Unit,
+    onConfirm: (CatalogStyle) -> Unit,
+) {
+    var draft by remember(style) { mutableStateOf(style) }
+    var densityOpen by remember { mutableStateOf(false) }
+    var infoOpen by remember { mutableStateOf(false) }
+    var positionOpen by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("目录样式", fontSize = 24.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("调整目录的标题、统计信息和显示密度。")
+                Text("标题", modifier = Modifier.padding(top = 20.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(NgTheme.colors.surfaceContainerLow)).padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("显示原始章节序号"); Text("按书籍原始章节顺序显示序号", fontSize = 13.sp) }; Switch(draft.showOriginalIndex, { draft = draft.copy(showOriginalIndex = it) }) }
+                    Text("标题最大行数", modifier = Modifier.padding(top = 18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) { Text("控制长标题在目录中最多显示几行", Modifier.weight(1f), fontSize = 13.sp); OutlinedButton({ draft = draft.copy(titleMaxLines = (draft.titleMaxLines - 1).coerceAtLeast(1)) }) { Text("−") }; Text(draft.titleMaxLines.toString(), Modifier.padding(horizontal = 14.dp)); OutlinedButton({ draft = draft.copy(titleMaxLines = (draft.titleMaxLines + 1).coerceAtMost(3)) }) { Text("+") } }
+                    CatalogStyleChoice("排列密度", "调整目录项的垂直留白", if (draft.looseSpacing) "宽松模式" else "紧凑模式", { densityOpen = true })
+                    DropdownMenu(densityOpen, { densityOpen = false }) { DropdownMenuItem({ Text("紧凑模式") }, { draft = draft.copy(looseSpacing = false); densityOpen = false }); DropdownMenuItem({ Text("宽松模式") }, { draft = draft.copy(looseSpacing = true); densityOpen = false }) }
+                }
+                Text("信息", modifier = Modifier.padding(top = 20.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(NgTheme.colors.surfaceContainerLow)).padding(18.dp)) {
+                    CatalogStyleChoice("信息显示", "选择标题旁展示的章节信息", catalogInfoLabel(draft.infoDisplay), { infoOpen = true })
+                    DropdownMenu(infoOpen, { infoOpen = false }) { listOf(CATALOG_INFO_NONE to "不显示", CATALOG_INFO_WORD_COUNT to "字数", CATALOG_INFO_PAGE to "页码", CATALOG_INFO_PERCENT to "百分比", CATALOG_INFO_WORD_COUNT_AND_PAGE to "字数和页码").forEach { (v, t) -> DropdownMenuItem({ Text(t) }, { draft = draft.copy(infoDisplay = v); infoOpen = false }) } }
+                    CatalogStyleChoice("信息位置", "选择信息显示在标题末尾或标题下方", if (draft.infoBelowTitle) "标题下方" else "标题末尾", { positionOpen = true })
+                    DropdownMenu(positionOpen, { positionOpen = false }) { DropdownMenuItem({ Text("标题末尾") }, { draft = draft.copy(infoBelowTitle = false); positionOpen = false }); DropdownMenuItem({ Text("标题下方") }, { draft = draft.copy(infoBelowTitle = true); positionOpen = false }) }
+                }
+            }
+        },
+        confirmButton = { Button({ onConfirm(draft) }) { Text("确定") } },
+    )
+}
+
+@Composable
+private fun CatalogStyleChoice(title: String, subtitle: String, value: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); Text(subtitle, fontSize = 13.sp) }; Text(value); Text(" ›", fontSize = 24.sp) }
+}
+
+private fun catalogInfoLabel(value: Int) = when (value) { CATALOG_INFO_WORD_COUNT -> "字数"; CATALOG_INFO_PAGE -> "页码"; CATALOG_INFO_PERCENT -> "百分比"; CATALOG_INFO_WORD_COUNT_AND_PAGE -> "字数和页码"; else -> "不显示" }
 
 @Composable
 private fun CatalogCompactAction(
@@ -952,6 +1048,7 @@ private fun CatalogChapterList(
     cachedChapterFiles: Set<String>,
     isLocalBook: Boolean,
     currentChapterIndex: Int,
+    style: CatalogStyle,
     listState: LazyListState,
     contentColor: Color,
     mutedColor: Color,
@@ -1056,6 +1153,8 @@ private fun CatalogChapterList(
                     CatalogChapterRow(
                         item = item,
                         current = item.chapter.index == currentChapterIndex,
+                        style = style,
+                        chapterCount = chapterCount,
                         cached = isLocalBook || item.chapter.isVolume ||
                             cachedChapterFiles.contains(item.chapter.getFileName()),
                         contentColor = contentColor,
@@ -1072,6 +1171,8 @@ private fun CatalogChapterList(
 private fun CatalogChapterRow(
     item: CatalogChapter,
     current: Boolean,
+    style: CatalogStyle,
+    chapterCount: Int,
     cached: Boolean,
     contentColor: Color,
     mutedColor: Color,
@@ -1084,6 +1185,18 @@ private fun CatalogChapterRow(
         item.chapter.wordCount?.takeIf { it.isNotBlank() }
     } else {
         null
+    }
+    val infoText = when (style.infoDisplay) {
+        CATALOG_INFO_WORD_COUNT -> wordCount
+        CATALOG_INFO_PAGE -> (item.chapter.index + 1).toString()
+        CATALOG_INFO_PERCENT -> if (chapterCount > 0) {
+            "${((item.chapter.index + 1) * 100 / chapterCount).coerceIn(0, 100)}%"
+        } else null
+        CATALOG_INFO_WORD_COUNT_AND_PAGE -> listOfNotNull(
+            wordCount,
+            (item.chapter.index + 1).toString(),
+        ).joinToString(" · ")
+        else -> null
     }
     val chapterTag = item.chapter.tag
         ?.takeIf { it.isNotBlank() }
@@ -1131,17 +1244,33 @@ private fun CatalogChapterRow(
             modifier = Modifier
                 .weight(1f)
                 .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = if (style.looseSpacing) 16.dp else 8.dp,
+                ),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = item.displayTitle,
+                text = buildString {
+                    if (style.showOriginalIndex) append("${item.chapter.index + 1}. ")
+                    append(item.displayTitle)
+                },
                 modifier = Modifier.weight(1f),
                 color = if (current) currentChapterColor else contentColor,
                 fontSize = 15.sp,
-                maxLines = 1,
+                maxLines = style.titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (!style.infoBelowTitle && infoText != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = infoText,
+                    color = if (current) currentChapterColor else mutedColor.copy(alpha = 0.82f),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                )
+            }
             if (!cached) {
                 Spacer(Modifier.width(6.dp))
                 Icon(
@@ -1150,16 +1279,16 @@ private fun CatalogChapterRow(
                     modifier = Modifier.size(16.dp),
                     tint = mutedColor.copy(alpha = 0.72f),
                 )
-            } else if (wordCount != null) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = wordCount,
-                    color = if (current) currentChapterColor else mutedColor.copy(alpha = 0.82f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                )
             }
+        }
+        if (style.infoBelowTitle && infoText != null) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = infoText,
+                color = mutedColor.copy(alpha = 0.78f),
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
         }
         if (chapterTag != null) {
             Spacer(Modifier.height(3.dp))
@@ -1172,6 +1301,7 @@ private fun CatalogChapterRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
     }
     HorizontalDivider(
         thickness = 1.dp,
