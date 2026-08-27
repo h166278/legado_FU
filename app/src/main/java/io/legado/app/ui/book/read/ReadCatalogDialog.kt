@@ -897,6 +897,7 @@ private fun CatalogMoreMenu(
                         else R.drawable.ic_catalog_expand,
                     ),
                     contentDescription = null,
+                    tint = Color(NgTheme.colors.onSurface),
                 )
             },
         )
@@ -912,6 +913,7 @@ private fun CatalogMoreMenu(
                         else R.drawable.ic_catalog_sort_descending,
                     ),
                     contentDescription = null,
+                    tint = Color(NgTheme.colors.onSurface),
                 )
             },
         )
@@ -920,7 +922,11 @@ private fun CatalogMoreMenu(
             text = { Text(stringResource(R.string.toc_style)) },
             onClick = onStyle,
             leadingIcon = {
-                Icon(painterResource(R.drawable.ic_catalog_style), contentDescription = null)
+                Icon(
+                    painterResource(R.drawable.ic_catalog_style),
+                    contentDescription = null,
+                    tint = Color(NgTheme.colors.onSurface),
+                )
             },
         )
     }
