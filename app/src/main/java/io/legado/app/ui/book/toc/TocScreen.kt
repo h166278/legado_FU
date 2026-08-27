@@ -95,6 +95,7 @@ internal data class TocUiState(
     val splitLongChapter: Boolean = false,
     val isLocalTxt: Boolean = false,
     val tocCollapsed: Boolean = false,
+    val tocReversed: Boolean = false,
     val tocStyle: TocStyle = TocStyle(),
 )
 
@@ -361,7 +362,7 @@ private fun tocMenuItems(state: TocUiState): List<NgExpandableActionMenuItem> = 
         }
         add(
             TocMenuAction.ReverseToc.item(
-                R.string.reverse_toc,
+                if (state.tocReversed) R.string.forward_toc else R.string.reverse_toc,
                 R.drawable.ic_catalog_sort_descending,
                 dividerBefore = isNotEmpty(),
             ),

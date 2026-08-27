@@ -101,6 +101,7 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
             book = book.copy(),
             splitLongChapter = book.getSplitLongChapter(),
             isLocalTxt = book.isLocalTxt,
+            tocReversed = book.getReverseToc(),
         )
         loadCachedFiles(book)
         if (uiState.selectedTab == TOC_TAB_BOOKMARKS) {
@@ -303,7 +304,7 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
 
     private fun reverseToc() {
         viewModel.reverseToc { book ->
-            uiState = uiState.copy(book = book.copy())
+            uiState = uiState.copy(book = book.copy(), tocReversed = book.getReverseToc())
             loadChapters()
             setResult(RESULT_OK, Intent().apply {
                 putExtra("index", book.durChapterIndex)

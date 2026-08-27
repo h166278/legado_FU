@@ -1602,6 +1602,7 @@
     <string name="hide">隐藏</string>
     <string name="hide_when_status_bar_show">状态栏显示时隐藏</string>
     <string name="reverse_toc">反向排序</string>
+    <string name="forward_toc">正向排序</string>
     <string name="expand_toc">展开目录</string>
     <string name="collapse_toc">折叠目录</string>
     <string name="toc_style">目录样式</string>

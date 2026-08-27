@@ -1588,6 +1588,7 @@
     <string name="hide">Hide</string>
     <string name="hide_when_status_bar_show">Hide when status bar show</string>
     <string name="reverse_toc">Reverse toc</string>
+    <string name="forward_toc">Forward toc</string>
     <string name="expand_toc">Expand toc</string>
     <string name="collapse_toc">Collapse toc</string>
     <string name="toc_style">Toc style</string>
