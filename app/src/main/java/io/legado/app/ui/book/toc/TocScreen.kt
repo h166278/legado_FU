@@ -778,7 +778,7 @@ private fun TocChapterFloatingActions(
             onClick = onCurrent,
         )
         TocFloatingIcon(
-            iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_up,
+            iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_drop_up,
             contentDescription = if (atTop) "滚动到底部" else "滚动到顶部",
             onClick = onTopOrBottom,
         )
