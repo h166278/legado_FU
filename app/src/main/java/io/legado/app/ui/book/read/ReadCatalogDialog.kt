@@ -879,6 +879,7 @@ private fun CatalogIconAction(
     }
 }
 
+@Composable
 private fun catalogMenuContainerColor(): Color =
     if (NgTheme.snapshot.isDark) Color(NgTheme.colors.surface) else Color(NgTheme.colors.inputContainer)
 
