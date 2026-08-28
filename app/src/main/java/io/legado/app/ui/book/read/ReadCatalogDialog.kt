@@ -875,17 +875,15 @@ private fun CatalogIconAction(
 
 @Composable
 private fun catalogMenuContainerColor(): Color {
-    // 跟随列表中当前选中章节的背景色：
-    // primary 8% 叠加在「列表底色 + 面板底色」之上，与 CatalogChapterRow
-    // 中 current 章节行最终渲染出的背景色保持一致。
+    // 与普通目录章节行的背景色完全同源（不含选中行的高亮叠加），
+    // 随阅读主题色变化；选中章节的 primary 8% 高亮不受影响。
     val drawerSurface = if (NgTheme.snapshot.isDark) {
         Color(NgTheme.colors.surface)
     } else {
         Color(NgTheme.colors.inputContainer)
     }
-    val listSurface = catalogListBackgroundColor(Color(NgTheme.colors.onSurfaceVariant))
+    return catalogListBackgroundColor(Color(NgTheme.colors.onSurfaceVariant))
         .compositeOver(drawerSurface)
-    return Color(NgTheme.colors.primary).copy(alpha = 0.08f).compositeOver(listSurface)
 }
 
 @Composable
