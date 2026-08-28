@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -1785,12 +1786,19 @@ private fun CatalogScrollableList(
                 .padding(end = 4.dp),
             variant = NgLazyListFastScrollerVariant.FLOATING_HANDLE,
         )
-        floatingActions?.invoke()
+        floatingActions?.let { actions ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.BottomEnd,
+            ) {
+                actions()
+            }
+        }
     }
 }
 
 @Composable
-private fun CatalogChapterFloatingActions(
+private fun BoxScope.CatalogChapterFloatingActions(
     atTop: Boolean,
     contentColor: Color,
     containerColor: Color,
