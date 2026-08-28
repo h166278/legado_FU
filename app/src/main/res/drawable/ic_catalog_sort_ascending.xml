@@ -1,4 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@android:color/transparent" android:pathData="M4,7L10,7M4,12L8,12M4,17L6,17M15,18L15,6M12,9L15,6L18,9" android:strokeColor="@android:color/white" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="1.8" />
-</vector>
+PHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjI0ZHAiIGFuZHJvaWQ6aGVpZ2h0PSIyNGRwIiBhbmRyb2lkOnZpZXdwb3J0V2lkdGg9IjI0IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIyNCI+CiAgICA8cGF0aCBhbmRyb2lkOmZpbGxDb2xvcj0iQGFuZHJvaWQ6Y29sb3IvdHJhbnNwYXJlbnQiIGFuZHJvaWQ6cGF0aERhdGE9Ik0xNSw3TDIwLjQsN005LjIsMTEuN0wyMC40LDExLjdNMy41LDE2LjRMMjAuNCwxNi40IiBhbmRyb2lkOnN0cm9rZUNvbG9yPSJAYW5kcm9pZDpjb2xvci93aGl0ZSIgYW5kcm9pZDpzdHJva2VMaW5lQ2FwPSJidXR0IiBhbmRyb2lkOnN0cm9rZUxpbmVKb2luPSJtaXRlciIgYW5kcm9pZDpzdHJva2VXaWR0aD0iMi4wNSIgLz4KPC92ZWN0b3I+Cg==
