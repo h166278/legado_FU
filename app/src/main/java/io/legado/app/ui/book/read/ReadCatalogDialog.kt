@@ -781,6 +781,7 @@ private fun CatalogSummaryRow(
     } else {
         0.0
     }
+    Column(modifier = Modifier.fillMaxWidth()) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -804,25 +805,13 @@ private fun CatalogSummaryRow(
         )
         Spacer(Modifier.weight(1f))
         if (selectedTab == CatalogTab.Chapters) {
-            if (searchVisible) {
-                CatalogInlineSearchField(
-                    query = query,
-                    contentColor = contentColor,
-                    mutedColor = mutedColor,
-                    accentColor = accentColor,
-                    dockColor = dockColor,
-                    onQueryChange = onQueryChange,
-                    onClose = onSearchToggle,
-                )
-            } else {
-                CatalogIconAction(
-                    icon = Icons.Rounded.Search,
-                    contentDescription = stringResource(R.string.search),
-                    contentColor = contentColor,
-                    dockColor = dockColor,
-                    onClick = onSearchToggle,
-                )
-            }
+            CatalogIconAction(
+                icon = Icons.Rounded.Search,
+                contentDescription = stringResource(R.string.search),
+                contentColor = contentColor,
+                dockColor = dockColor,
+                onClick = onSearchToggle,
+            )
             Spacer(Modifier.width(8.dp))
             Box {
                 CatalogIconAction(
@@ -846,6 +835,19 @@ private fun CatalogSummaryRow(
             }
         }
     }
+    if (searchVisible && selectedTab == CatalogTab.Chapters) {
+        CatalogSearchField(
+            query = query,
+            hint = stringResource(R.string.search) + " " + chapterCount + " 个章节",
+            contentColor = contentColor,
+            mutedColor = mutedColor,
+            accentColor = accentColor,
+            dockColor = dockColor,
+            onQueryChange = onQueryChange,
+            onClose = onSearchToggle,
+        )
+    }
+    }
 }
 
 @Composable
@@ -860,8 +862,6 @@ private fun CatalogIconAction(
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(dockColor)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -1178,47 +1178,6 @@ private fun CatalogCompactAction(
         }
         Spacer(Modifier.width(4.dp))
         Text(text = label, color = contentColor, fontSize = 13.sp, maxLines = 1)
-    }
-}
-
-@Composable
-private fun CatalogInlineSearchField(
-    query: String,
-    contentColor: Color,
-    mutedColor: Color,
-    accentColor: Color,
-    dockColor: Color,
-    onQueryChange: (String) -> Unit,
-    onClose: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .height(40.dp)
-            .width(96.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(dockColor)
-            .padding(start = 10.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.Search, null, Modifier.size(17.dp), accentColor)
-        Spacer(Modifier.width(6.dp))
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            textStyle = TextStyle(color = contentColor, fontSize = 13.sp),
-            decorationBox = { inner ->
-                if (query.isEmpty()) Text(stringResource(R.string.search), color = mutedColor, fontSize = 13.sp)
-                inner()
-            },
-        )
-        Box(
-            modifier = Modifier.size(32.dp).clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Close, stringResource(R.string.close), Modifier.size(16.dp), mutedColor)
-        }
     }
 }
 
