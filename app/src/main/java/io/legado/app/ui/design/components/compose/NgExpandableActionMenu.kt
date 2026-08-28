@@ -8,6 +8,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.IdRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -108,6 +109,7 @@ fun NgExpandableActionMenu(
     bottomPointerWidth: Dp = 18.dp,
     bottomPointerEndOffset: Dp = 26.dp,
     menuContainerColor: Color? = null,
+    menuBorderColor: Color? = null,
     defaultExpandedItemIds: Set<Int> = emptySet(),
     variant: NgExpandableActionMenuVariant = NgExpandableActionMenuVariant.DROPDOWN,
     properties: PopupProperties = PopupProperties(),
@@ -179,7 +181,13 @@ fun NgExpandableActionMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         offset = offset,
-        modifier = modifier.width(resolvedWidth),
+        modifier = if (menuBorderColor != null) {
+            modifier
+                .border(1.dp, menuBorderColor, shape)
+                .width(resolvedWidth)
+        } else {
+            modifier.width(resolvedWidth)
+        },
         shape = shape,
         containerColor = containerColor,
         tonalElevation = 0.dp,

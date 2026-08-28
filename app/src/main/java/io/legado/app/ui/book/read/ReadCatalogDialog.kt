@@ -943,6 +943,7 @@ private fun CatalogMoreMenu(
         rowMinHeight = 44.dp,
         offset = DpOffset(0.dp, 4.dp),
         menuContainerColor = catalogMenuContainerColor(),
+        menuBorderColor = Color(NgTheme.colors.onSurface).copy(alpha = 0.45f),
         properties = PopupProperties(focusable = true, clippingEnabled = false),
     )
 }
@@ -991,6 +992,11 @@ private fun CatalogStyleDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .border(
+                        1.dp,
+                        Color(NgTheme.colors.onSurface).copy(alpha = 0.45f),
+                        RoundedCornerShape(14.dp),
+                    )
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color(NgTheme.colors.onSurface).copy(alpha = 0.04f))
                     .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1062,6 +1068,11 @@ private fun CatalogStyleDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .border(
+                        1.dp,
+                        Color(NgTheme.colors.onSurface).copy(alpha = 0.45f),
+                        RoundedCornerShape(14.dp),
+                    )
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color(NgTheme.colors.onSurface).copy(alpha = 0.04f))
                     .padding(horizontal = 16.dp, vertical = 12.dp),
