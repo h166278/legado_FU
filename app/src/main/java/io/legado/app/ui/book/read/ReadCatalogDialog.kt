@@ -72,6 +72,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -104,8 +105,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.components.compose.NgFormActionButton
-import io.legado.app.ui.design.components.compose.NgExpandableActionMenuVariant
-import io.legado.app.ui.design.components.compose.NgExpandableActionMenuWidthVariant
+import io.legado.app.ui.design.components.NgExpandableActionMenuVariant
+import io.legado.app.ui.design.components.NgExpandableActionMenuWidthVariant
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
@@ -886,8 +887,19 @@ private fun CatalogIconAction(
 }
 
 @Composable
-private fun catalogMenuContainerColor(): Color =
-    if (NgTheme.snapshot.isDark) Color(NgTheme.colors.surface) else Color(NgTheme.colors.inputContainer)
+private fun catalogMenuContainerColor(): Color {
+    // 跟随列表中当前选中章节的背景色：
+    // primary 8% 叠加在「列表底色 + 面板底色」之上，与 CatalogChapterRow
+    // 中 current 章节行最终渲染出的背景色保持一致。
+    val drawerSurface = if (NgTheme.snapshot.isDark) {
+        Color(NgTheme.colors.surface)
+    } else {
+        Color(NgTheme.colors.inputContainer)
+    }
+    val listSurface = catalogListBackgroundColor(Color(NgTheme.colors.onSurfaceVariant))
+        .compositeOver(drawerSurface)
+    return Color(NgTheme.colors.primary).copy(alpha = 0.08f).compositeOver(listSurface)
+}
 
 @Composable
 private fun CatalogMoreMenu(
@@ -980,7 +992,7 @@ private fun CatalogStyleDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(NgTheme.colors.surfaceContainerLow))
+                    .background(Color(NgTheme.colors.onSurface).copy(alpha = 0.04f))
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Row(
@@ -1051,7 +1063,7 @@ private fun CatalogStyleDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(NgTheme.colors.surfaceContainerLow))
+                    .background(Color(NgTheme.colors.onSurface).copy(alpha = 0.04f))
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 CatalogStyleChoice(
