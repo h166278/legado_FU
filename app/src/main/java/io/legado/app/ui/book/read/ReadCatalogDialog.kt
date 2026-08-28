@@ -1773,7 +1773,7 @@ private fun catalogCardColor(): Color = if (NgTheme.snapshot.isDark) {
 private fun CatalogScrollableList(
     itemCount: Int,
     listState: LazyListState,
-    floatingActions: (@Composable () -> Unit)? = null,
+    floatingActions: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1791,7 +1791,7 @@ private fun CatalogScrollableList(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.BottomEnd,
             ) {
-                actions()
+                actions(this)
             }
         }
     }
