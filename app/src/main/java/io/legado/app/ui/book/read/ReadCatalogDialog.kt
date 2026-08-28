@@ -104,8 +104,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.components.compose.NgFormActionButton
-import io.legado.app.ui.design.components.NgExpandableActionMenuVariant
-import io.legado.app.ui.design.components.NgExpandableActionMenuWidthVariant
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenuVariant
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenuWidthVariant
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
