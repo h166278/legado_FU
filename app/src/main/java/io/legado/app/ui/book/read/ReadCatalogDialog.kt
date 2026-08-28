@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -75,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
@@ -92,8 +94,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
@@ -123,7 +124,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ReadCatalogDialog : BottomSheetDialogFragment() {
+class ReadCatalogDialog : BaseComposeDialogFragment() {
 
     private var chapterCount by mutableStateOf(0)
     private var bookmarks by mutableStateOf<List<Bookmark>>(emptyList())
@@ -131,21 +132,7 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
     private var loading by mutableStateOf(true)
     private var bottomDialogRegistered = false
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
-    ): View = ComposeView(requireContext()).apply {
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-        )
-        setBackgroundColor(AndroidColor.TRANSPARENT)
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         val readActivity = activity as? ReadBookActivity ?: run {
             dismissAllowingStateLoss()
             return
@@ -154,6 +141,8 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
             dismissAllowingStateLoss()
             return
         }
+        val composeView = view as ComposeView
+        composeView.setBackgroundColor(AndroidColor.TRANSPARENT)
         if (!bottomDialogRegistered) {
             if (readActivity.bottomDialog > 0) {
                 dismissAllowingStateLoss()
@@ -163,9 +152,16 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
             bottomDialogRegistered = true
         }
         val snapshot = ReadDrawerStyle.themeSnapshot(requireContext())
-        (view as ComposeView).setContent {
+        composeView.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        composeView.setContent {
             NgAppTheme(snapshot = snapshot, updateSystemBars = false) {
-                ReadCatalogPanel(
+                val panelHeight = with(LocalDensity.current) {
+                    (requireContext().resources.displayMetrics.heightPixels * 0.82f).toDp()
+                }
+                Box(modifier = Modifier.fillMaxWidth().height(panelHeight)) {
+                    ReadCatalogPanel(
                     chapterCount = chapterCount,
                     bookmarks = bookmarks,
                     cachedChapterFiles = cachedChapterFiles,
@@ -203,8 +199,9 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
                         )
                         dismissAllowingStateLoss()
                     },
-                    onBookmarkDelete = ::deleteBookmark,
-                )
+                        onBookmarkDelete = ::deleteBookmark,
+                    )
+                }
             }
         }
         loadCatalogData(book)
@@ -212,25 +209,15 @@ class ReadCatalogDialog : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.apply {
+        dialog?.window?.run {
+            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setBackgroundDrawableResource(R.color.transparent)
-            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            attributes = attributes.apply { dimAmount = 0.18f }
             decorView.setPadding(0, 0, 0, 0)
-        }
-        val sheet = dialog?.findViewById<View>(
-            com.google.android.material.R.id.design_bottom_sheet
-        ) ?: return
-        sheet.setBackgroundColor(AndroidColor.TRANSPARENT)
-        sheet.layoutParams = sheet.layoutParams.apply {
-            height = (resources.displayMetrics.heightPixels * 0.82f).toInt()
-        }
-        BottomSheetBehavior.from(sheet).apply {
-            skipCollapsed = true
-            isDraggable = true
-            isDraggableOnNestedScroll = true
-            isHideable = true
-            state = BottomSheetBehavior.STATE_EXPANDED
+            attributes = attributes.apply {
+                dimAmount = 0.0f
+                gravity = Gravity.BOTTOM
+            }
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
 
