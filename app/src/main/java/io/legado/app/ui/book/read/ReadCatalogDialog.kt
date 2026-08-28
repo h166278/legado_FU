@@ -85,8 +85,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.PopupProperties
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -102,6 +104,10 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.components.compose.NgFormActionButton
+import io.legado.app.ui.design.components.NgExpandableActionMenuVariant
+import io.legado.app.ui.design.components.NgExpandableActionMenuWidthVariant
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
+import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
 import io.legado.app.ui.design.components.compose.NgLazyListFastScroller
@@ -892,54 +898,41 @@ private fun CatalogMoreMenu(
     onToggleSort: () -> Unit,
     onStyle: () -> Unit,
 ) {
-    DropdownMenu(
+    NgExpandableActionMenu(
         expanded = true,
         onDismissRequest = onDismiss,
-        containerColor = catalogMenuContainerColor(),
-    ) {
-        DropdownMenuItem(
-            text = { Text(if (expanded) stringResource(R.string.collapse_toc) else stringResource(R.string.expand_toc)) },
-            onClick = onToggleCollapsed,
-            leadingIcon = {
-                Icon(
-                    painterResource(
-                        if (expanded) R.drawable.ic_catalog_collapse
-                        else R.drawable.ic_catalog_expand,
-                    ),
-                    contentDescription = null,
-                    tint = Color(NgTheme.colors.onSurface),
-                )
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(if (descending) "正向排序" else "逆向排序")
-            },
-            onClick = onToggleSort,
-            leadingIcon = {
-                Icon(
-                    painterResource(
-                        if (descending) R.drawable.ic_catalog_sort_ascending
-                        else R.drawable.ic_catalog_sort_descending,
-                    ),
-                    contentDescription = null,
-                    tint = Color(NgTheme.colors.onSurface),
-                )
-            },
-        )
-        HorizontalDivider(color = Color(NgTheme.colors.outlineVariant))
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.toc_style)) },
-            onClick = onStyle,
-            leadingIcon = {
-                Icon(
-                    painterResource(R.drawable.ic_catalog_style),
-                    contentDescription = null,
-                    tint = Color(NgTheme.colors.onSurface),
-                )
-            },
-        )
-    }
+        items = listOf(
+            NgExpandableActionMenuItem(
+                itemId = 0x7510,
+                titleRes = if (expanded) R.string.expand_toc else R.string.collapse_toc,
+                iconRes = if (expanded) R.drawable.ic_catalog_expand else R.drawable.ic_catalog_collapse,
+            ),
+            NgExpandableActionMenuItem(
+                itemId = 0x7503,
+                titleRes = if (descending) R.string.forward_toc else R.string.reverse_toc,
+                iconRes = if (descending) R.drawable.ic_catalog_sort_ascending else R.drawable.ic_catalog_sort_descending,
+            ),
+            NgExpandableActionMenuItem(
+                itemId = 0x7511,
+                titleRes = R.string.toc_style,
+                iconRes = R.drawable.ic_catalog_style,
+                dividerBefore = true,
+            ),
+        ),
+        onItemClick = { item ->
+            when (item.itemId) {
+                0x7510 -> onToggleCollapsed()
+                0x7503 -> onToggleSort()
+                0x7511 -> onStyle()
+            }
+        },
+        variant = NgExpandableActionMenuVariant.DROPDOWN,
+        widthVariant = NgExpandableActionMenuWidthVariant.GROUPED_LABELS,
+        rowMinHeight = 44.dp,
+        offset = DpOffset(0.dp, 4.dp),
+        menuContainerColor = catalogMenuContainerColor(),
+        properties = PopupProperties(focusable = true, clippingEnabled = false),
+    )
 }
 
 @Composable
