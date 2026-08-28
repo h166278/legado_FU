@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -85,7 +86,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.lifecycleScope
@@ -100,7 +100,6 @@ import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.book.read.config.ReadConfigDialogSurface
 import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.components.compose.NgFormActionButton
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
@@ -952,13 +951,18 @@ private fun CatalogStyleDialog(
     var densityOpen by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
     var positionOpen by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss) {
-        ReadConfigDialogSurface(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
-        ) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .widthIn(max = 480.dp),
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        shape = RoundedCornerShape(16.dp),
+        containerColor = catalogMenuContainerColor(),
+        tonalElevation = 0.dp,
+        text = {
+            Column {
             Text(
                 "目录样式",
                 color = Color(NgTheme.colors.onSurface),
@@ -1092,20 +1096,16 @@ private fun CatalogStyleDialog(
                     DropdownMenuItem({ Text("标题下方") }, { draft = draft.copy(infoBelowTitle = true); positionOpen = false })
                 }
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                NgFormActionButton(
-                    text = "确定",
-                    onClick = { onConfirm(draft) },
-                    variant = NgButtonVariant.PRIMARY,
-                )
             }
-        }
-    }
+        },
+        confirmButton = {
+            NgFormActionButton(
+                text = "确定",
+                onClick = { onConfirm(draft) },
+                variant = NgButtonVariant.PRIMARY,
+            )
+        },
+    )
 }
 
 @Composable
