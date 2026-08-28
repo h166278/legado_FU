@@ -1202,6 +1202,8 @@ private fun CatalogChapterList(
 ) {
     var itemCount by remember(query, descending) { mutableStateOf(0) }
     var datasetLoading by remember(query, descending) { mutableStateOf(true) }
+    var showFloatingActions by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val loadedPages = remember(query, descending) {
         mutableStateMapOf<Int, List<CatalogChapter>>()
     }
@@ -1253,6 +1255,18 @@ private fun CatalogChapterList(
                 .forEach(loadedPages::remove)
         }
     }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collectLatest { scrolling ->
+                if (scrolling) {
+                    showFloatingActions = true
+                } else {
+                    delay(3_000)
+                    showFloatingActions = false
+                }
+            }
+    }
     if (itemCount == 0) {
         if (datasetLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1270,6 +1284,35 @@ private fun CatalogChapterList(
     CatalogScrollableList(
         itemCount = itemCount,
         listState = listState,
+        floatingActions = if (showFloatingActions) {
+            {
+                CatalogChapterFloatingActions(
+                    atTop = listState.firstVisibleItemIndex == 0 &&
+                        listState.firstVisibleItemScrollOffset == 0,
+                    contentColor = contentColor,
+                    containerColor = drawerSurfaceColorForFloatingActions(),
+                    onCurrent = {
+                        scope.launch {
+                            val currentPosition = if (query.isBlank()) {
+                                loadChapterPosition(descending, itemCount)
+                            } else {
+                                0
+                            }
+                            listState.animateScrollToItem(
+                                (currentPosition - 1).coerceAtLeast(0)
+                            )
+                        }
+                    },
+                    onTopOrBottom = {
+                        scope.launch {
+                            val atTop = listState.firstVisibleItemIndex == 0 &&
+                                listState.firstVisibleItemScrollOffset == 0
+                            listState.animateScrollToItem(if (atTop) itemCount - 1 else 0)
+                        }
+                    },
+                )
+            }
+        } else null,
     ) {
         LazyColumn(
             state = listState,
@@ -1729,6 +1772,7 @@ private fun catalogCardColor(): Color = if (NgTheme.snapshot.isDark) {
 private fun CatalogScrollableList(
     itemCount: Int,
     listState: LazyListState,
+    floatingActions: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1741,7 +1785,74 @@ private fun CatalogScrollableList(
                 .padding(end = 4.dp),
             variant = NgLazyListFastScrollerVariant.FLOATING_HANDLE,
         )
+        floatingActions?.invoke()
     }
+}
+
+@Composable
+private fun CatalogChapterFloatingActions(
+    atTop: Boolean,
+    contentColor: Color,
+    containerColor: Color,
+    onCurrent: () -> Unit,
+    onTopOrBottom: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CatalogFloatingIcon(
+            iconRes = R.drawable.ic_gps_fixed,
+            contentDescription = "定位当前章节",
+            contentColor = containerColor,
+            containerColor = contentColor,
+            onClick = onCurrent,
+        )
+        CatalogFloatingIcon(
+            iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_drop_up,
+            contentDescription = if (atTop) "滚动到底部" else "滚动到顶部",
+            contentColor = containerColor,
+            containerColor = contentColor,
+            onClick = onTopOrBottom,
+        )
+    }
+}
+
+@Composable
+private fun CatalogFloatingIcon(
+    iconRes: Int,
+    contentDescription: String,
+    contentColor: Color,
+    containerColor: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .clip(CircleShape)
+            .background(containerColor)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(28.dp),
+            tint = contentColor,
+        )
+    }
+}
+
+@Composable
+private fun drawerSurfaceColorForFloatingActions(): Color = if (
+    NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk
+) {
+    Color(NgTheme.colors.surfaceContainerLow)
+} else {
+    Color(NgTheme.colors.inputContainer)
 }
 
 @Composable
