@@ -1293,7 +1293,7 @@ private fun CatalogChapterList(
                     contentColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
                         contentColor
                     } else {
-                        selectedContentColor
+                        Color(NgTheme.colors.onPrimary)
                     },
                     containerColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
                         drawerSurfaceColorForFloatingActions()
