@@ -1290,8 +1290,16 @@ private fun CatalogChapterList(
                 CatalogChapterFloatingActions(
                     atTop = listState.firstVisibleItemIndex == 0 &&
                         listState.firstVisibleItemScrollOffset == 0,
-                    contentColor = contentColor,
-                    containerColor = drawerSurfaceColorForFloatingActions(),
+                    contentColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
+                        contentColor
+                    } else {
+                        selectedContentColor
+                    },
+                    containerColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
+                        drawerSurfaceColorForFloatingActions()
+                    } else {
+                        accentColor
+                    },
                     onCurrent = {
                         scope.launch {
                             val currentPosition = if (query.isBlank()) {
@@ -1839,7 +1847,7 @@ private fun CatalogFloatingIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(52.dp)
+            .size(44.dp)
             .clip(CircleShape)
             .background(containerColor)
             .clickable(onClick = onClick),
@@ -1848,7 +1856,7 @@ private fun CatalogFloatingIcon(
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(24.dp),
             tint = contentColor,
         )
     }
