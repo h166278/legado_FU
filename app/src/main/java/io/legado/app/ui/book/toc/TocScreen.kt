@@ -207,7 +207,7 @@ private fun TocTopBar(
             .background(Color(NgTheme.colors.surface).copy(alpha = 0.26f))
             .statusBarsPadding()
             .height(56.dp)
-            .padding(horizontal = 8.dp),
+            .padding(start = 8.dp, end = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TocToolbarIcon(
