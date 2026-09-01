@@ -787,7 +787,7 @@ private fun CatalogSummaryRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .padding(horizontal = 24.dp),
+            .padding(start = 24.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -813,8 +813,10 @@ private fun CatalogSummaryRow(
                 dockColor = dockColor,
                 onClick = onSearchToggle,
             )
-            Spacer(Modifier.width(8.dp))
-            Box {
+            Spacer(Modifier.width(4.dp))
+            Box(
+                modifier = Modifier.padding(end = 8.dp),
+            ) {
                 CatalogIconAction(
                     icon = null,
                     painter = painterResource(R.drawable.ic_more_horiz_circle),
@@ -1833,9 +1835,9 @@ private fun BoxScope.CatalogChapterFloatingActions(
         modifier = Modifier
             .align(Alignment.BottomEnd)
             // 给右侧快速滑动块保留独立触摸区域，避免拖动经过按钮时被 clickable 抢走。
-            .padding(end = 36.dp, bottom = 16.dp),
+            .padding(end = 52.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CatalogFloatingIcon(
             iconRes = R.drawable.ic_gps_fixed,
