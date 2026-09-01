@@ -652,21 +652,42 @@ private fun TocChapterRow(
 ) {
     val chapter = item.chapter
     val infoText = chapter.tocInfoText(style, chapterCount, showWordCount)
-    Column(
+    val rowBackground = when {
+        chapter.isVolume -> Color(NgTheme.colors.surfaceContainerHigh)
+        current -> Color(NgTheme.colors.selectedContainer)
+        else -> Color(NgTheme.colors.surfaceContainerLow)
+    }
+    val titleColor = if (current) {
+        Color(NgTheme.colors.primary)
+    } else {
+        Color(NgTheme.colors.onSurface)
+    }
+    val mutedColor = Color(NgTheme.colors.onSurfaceVariant)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                if (chapter.isVolume) colorResource(R.color.btn_bg_press)
-                else Color.Transparent,
-            )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 12.dp, vertical = if (style.looseSpacing) 18.dp else 12.dp),
+            .background(rowBackground)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        verticalAlignment = Alignment.Stretch,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        if (!chapter.isVolume) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(Color(NgTheme.colors.primary)),
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp, vertical = if (style.looseSpacing) 18.dp else 12.dp),
         ) {
-            if (chapter.isVip && !chapter.isPay) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (chapter.isVip && !chapter.isPay) {
                 Icon(
                     painter = painterResource(R.drawable.ic_lock_outline),
                     contentDescription = "VIP",
@@ -681,11 +702,7 @@ private fun TocChapterRow(
                         if (style.showOriginalIndex) append("${chapter.index + 1}. ")
                         append(item.displayTitle)
                     },
-                    color = if (current) {
-                        Color(NgTheme.colors.primary)
-                    } else {
-                        colorResource(R.color.primaryText)
-                    },
+                    color = titleColor,
                     fontSize = 16.sp,
                     lineHeight = 20.sp,
                     maxLines = style.titleMaxLines,
@@ -754,9 +771,10 @@ private fun TocChapterRow(
             }
         }
     }
+    }
     HorizontalDivider(
         thickness = 0.6.dp,
-        color = colorResource(R.color.bg_divider_line),
+        color = Color(NgTheme.colors.outlineVariant),
     )
 }
 
