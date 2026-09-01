@@ -675,86 +675,87 @@ private fun TocChapterRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (chapter.isVip && !chapter.isPay) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_lock_outline),
-                    contentDescription = "VIP",
-                    modifier = Modifier.size(16.dp),
-                    tint = colorResource(R.color.secondaryText),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = buildString {
-                        if (style.showOriginalIndex) append("${chapter.index + 1}. ")
-                        append(item.displayTitle)
-                    },
-                    color = titleColor,
-                    fontSize = 16.sp,
-                    lineHeight = 20.sp,
-                    maxLines = style.titleMaxLines,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                val tag = chapter.tag?.takeIf { it.isNotBlank() }
-                val wordCount = chapter.wordCount?.takeIf {
-                    showWordCount && !chapter.isVolume && it.isNotBlank()
-                }
-                if (style.infoBelowTitle && infoText != null) {
-                    Text(
-                        text = infoText,
-                        modifier = Modifier.padding(top = 4.dp),
-                        color = colorResource(R.color.secondaryText),
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
+                    Icon(
+                        painter = painterResource(R.drawable.ic_lock_outline),
+                        contentDescription = "VIP",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(NgTheme.colors.onSurfaceVariant),
                     )
-                } else if (tag != null || wordCount != null) {
-                    Row(modifier = Modifier.padding(top = 4.dp)) {
-                        tag?.let {
-                            Text(
-                                text = it,
-                                color = colorResource(R.color.secondaryText),
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        if (tag != null && wordCount != null) Spacer(Modifier.width(18.dp))
-                        wordCount?.let {
-                            Text(
-                                text = it,
-                                color = colorResource(R.color.secondaryText),
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                maxLines = 1,
-                            )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = buildString {
+                            if (style.showOriginalIndex) append("${chapter.index + 1}. ")
+                            append(item.displayTitle)
+                        },
+                        color = titleColor,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
+                        maxLines = style.titleMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val tag = chapter.tag?.takeIf { it.isNotBlank() }
+                    val wordCount = chapter.wordCount?.takeIf {
+                        showWordCount && !chapter.isVolume && it.isNotBlank()
+                    }
+                    if (style.infoBelowTitle && infoText != null) {
+                        Text(
+                            text = infoText,
+                            modifier = Modifier.padding(top = 4.dp),
+                            color = Color(NgTheme.colors.onSurfaceVariant),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                        )
+                    } else if (tag != null || wordCount != null) {
+                        Row(modifier = Modifier.padding(top = 4.dp)) {
+                            tag?.let {
+                                Text(
+                                    text = it,
+                                    color = Color(NgTheme.colors.onSurfaceVariant),
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (tag != null && wordCount != null) Spacer(Modifier.width(18.dp))
+                            wordCount?.let {
+                                Text(
+                                    text = it,
+                                    color = Color(NgTheme.colors.onSurfaceVariant),
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
-            }
-            if (!style.infoBelowTitle && infoText != null) {
-                Text(
-                    text = infoText,
-                    modifier = Modifier.padding(start = 12.dp),
-                    color = colorResource(R.color.secondaryText),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    maxLines = 1,
-                )
-            }
-            when {
-                current -> Icon(
-                    painter = painterResource(R.drawable.ic_check),
-                    contentDescription = stringResource(R.string.success),
-                    modifier = Modifier.size(16.dp),
-                    tint = colorResource(R.color.secondaryText),
-                )
-                !cached -> Icon(
-                    painter = painterResource(R.drawable.ic_outline_cloud_24),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = colorResource(R.color.secondaryText),
-                )
+                if (!style.infoBelowTitle && infoText != null) {
+                    Text(
+                        text = infoText,
+                        modifier = Modifier.padding(start = 12.dp),
+                        color = Color(NgTheme.colors.onSurfaceVariant),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        maxLines = 1,
+                    )
+                }
+                when {
+                    current -> Icon(
+                        painter = painterResource(R.drawable.ic_check),
+                        contentDescription = stringResource(R.string.success),
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(NgTheme.colors.onSurfaceVariant),
+                    )
+                    !cached -> Icon(
+                        painter = painterResource(R.drawable.ic_outline_cloud_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(NgTheme.colors.onSurfaceVariant),
+                    )
+                }
             }
         }
         if (current && !chapter.isVolume) {
