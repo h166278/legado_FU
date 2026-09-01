@@ -1265,8 +1265,8 @@ private fun CatalogChapterList(
             .distinctUntilChanged()
             .collectLatest { position ->
                 previousPosition?.let { previous ->
-                    showUpArrow = position.first > previous.first ||
-                        (position.first == previous.first && position.second > previous.second)
+                    showUpArrow = position.first < previous.first ||
+                        (position.first == previous.first && position.second < previous.second)
                 }
                 previousPosition = position
             }
