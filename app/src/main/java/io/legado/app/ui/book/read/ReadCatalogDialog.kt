@@ -1347,12 +1347,9 @@ private fun CatalogChapterList(
                 .fillMaxSize()
                 .background(catalogListBackgroundColor(mutedColor)),
             contentPadding = PaddingValues(
-                start = 8.dp,
                 top = 6.dp,
-                end = 8.dp,
                 bottom = 20.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             items(count = itemCount, key = { it }) { position ->
                 val pageIndex = position / CATALOG_PAGE_SIZE
@@ -1389,8 +1386,15 @@ private fun CatalogChapterRow(
     mutedColor: Color,
     onClick: () -> Unit,
 ) {
-    val currentChapterColor = Color(NgTheme.colors.primary)
-    val currentContainerColor = currentChapterColor.copy(alpha = 0.08f)
+    val listColor = catalogListBackgroundColor(mutedColor)
+    val themeColor = Color(NgTheme.colors.primary)
+    val themeContainerColor = Color(NgTheme.colors.primaryContainer)
+    // Both row states are translucent primary-container tones, so selection never
+    // becomes darker than the theme container and remains theme-driven.
+    val chapterColor = themeContainerColor.copy(alpha = 0.28f).compositeOver(listColor)
+    val currentChapterColor = themeContainerColor.copy(alpha = 0.68f).compositeOver(listColor)
+    val currentChapterIndicatorColor = themeColor
+    val currentChapterContentColor = themeColor
     val outlineColor = Color(NgTheme.colors.outlineVariant)
     val wordCount = if (cached && AppConfig.tocCountWords) {
         item.chapter.wordCount?.takeIf { it.isNotBlank() }
@@ -1438,27 +1442,23 @@ private fun CatalogChapterRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
-            .then(
-                if (current) Modifier.background(currentContainerColor) else Modifier,
-            ),
+            .background(if (current) currentChapterColor else chapterColor),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (current) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(currentChapterColor),
-            )
-        }
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(if (current) currentChapterIndicatorColor else Color.Transparent),
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable(onClick = onClick)
                 .padding(
                     horizontal = 12.dp,
                     vertical = if (style.looseSpacing) 16.dp else 8.dp,
-                ),
+                )
+                .clickable(onClick = onClick),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -1467,7 +1467,7 @@ private fun CatalogChapterRow(
                     append(item.displayTitle)
                 },
                 modifier = Modifier.weight(1f),
-                color = if (current) currentChapterColor else contentColor,
+                color = if (current) currentChapterContentColor else contentColor,
                 fontSize = 15.sp,
                 maxLines = style.titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
@@ -1476,7 +1476,7 @@ private fun CatalogChapterRow(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = infoText,
-                    color = if (current) currentChapterColor else mutedColor.copy(alpha = 0.82f),
+                    color = if (current) currentChapterContentColor else mutedColor.copy(alpha = 0.82f),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
