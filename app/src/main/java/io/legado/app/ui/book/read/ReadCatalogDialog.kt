@@ -1823,15 +1823,15 @@ private fun BoxScope.CatalogChapterFloatingActions(
         CatalogFloatingIcon(
             iconRes = R.drawable.ic_gps_fixed,
             contentDescription = "定位当前章节",
-            contentColor = containerColor,
-            containerColor = contentColor,
+            contentColor = contentColor,
+            containerColor = containerColor,
             onClick = onCurrent,
         )
         CatalogFloatingIcon(
             iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_drop_up,
             contentDescription = if (atTop) "滚动到底部" else "滚动到顶部",
-            contentColor = containerColor,
-            containerColor = contentColor,
+            contentColor = contentColor,
+            containerColor = containerColor,
             onClick = onTopOrBottom,
         )
     }
