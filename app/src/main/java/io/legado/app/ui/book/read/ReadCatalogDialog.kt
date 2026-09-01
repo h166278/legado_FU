@@ -1331,6 +1331,8 @@ private fun CatalogChapterList(
                             listState.animateScrollToItem(
                                 if (showUpArrow) 0 else itemCount - 1
                             )
+                            // 跳转完成后切换方向，指向下一次可执行的目标。
+                            showUpArrow = !showUpArrow
                         }
                     },
                 )
