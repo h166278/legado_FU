@@ -75,6 +75,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
@@ -1389,10 +1390,11 @@ private fun CatalogChapterRow(
     val listColor = catalogListBackgroundColor(mutedColor)
     val themeColor = Color(NgTheme.colors.primary)
     val themeContainerColor = Color(NgTheme.colors.primaryContainer)
-    // Both row states are translucent primary-container tones, so selection never
-    // becomes darker than the theme container and remains theme-driven.
     val chapterColor = themeContainerColor.copy(alpha = 0.28f).compositeOver(listColor)
-    val currentChapterColor = themeContainerColor.copy(alpha = 0.82f).compositeOver(listColor)
+    // Keep regular rows unchanged and derive the current row from that exact color.
+    val currentChapterColor = Color(
+        NgColorMath.blend(chapterColor.toArgb(), AndroidColor.BLACK, 0.09f)
+    )
     val currentChapterIndicatorColor = themeColor.copy(alpha = 0.86f)
     val currentChapterContentColor = themeColor
     val outlineColor = Color(NgTheme.colors.outlineVariant)
@@ -1447,7 +1449,7 @@ private fun CatalogChapterRow(
     ) {
         Box(
             modifier = Modifier
-                .width(6.dp)
+                .width(3.dp)
                 .fillMaxHeight()
                 .background(if (current) currentChapterIndicatorColor else Color.Transparent),
         )
