@@ -787,7 +787,7 @@ private fun CatalogSummaryRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .padding(start = 24.dp, end = 16.dp),
+            .padding(start = 24.dp, end = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -813,9 +813,9 @@ private fun CatalogSummaryRow(
                 dockColor = dockColor,
                 onClick = onSearchToggle,
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(0.dp))
             Box(
-                modifier = Modifier.padding(end = 8.dp),
+                modifier = Modifier.padding(end = 0.dp),
             ) {
                 CatalogIconAction(
                     icon = null,
