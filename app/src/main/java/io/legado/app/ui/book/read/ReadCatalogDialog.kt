@@ -1833,9 +1833,9 @@ private fun BoxScope.CatalogChapterFloatingActions(
         modifier = Modifier
             .align(Alignment.BottomEnd)
             // 给右侧快速滑动块保留独立触摸区域，避免拖动经过按钮时被 clickable 抢走。
-            .padding(end = 52.dp, bottom = 16.dp),
+            .padding(end = 36.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         CatalogFloatingIcon(
             iconRes = R.drawable.ic_gps_fixed,
