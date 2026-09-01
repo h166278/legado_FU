@@ -1816,7 +1816,8 @@ private fun BoxScope.CatalogChapterFloatingActions(
     Column(
         modifier = Modifier
             .align(Alignment.BottomEnd)
-            .padding(end = 16.dp, bottom = 16.dp),
+            // 给右侧快速滑动块保留独立触摸区域，避免拖动经过按钮时被 clickable 抢走。
+            .padding(end = 52.dp, bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
