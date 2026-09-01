@@ -817,7 +817,7 @@ private fun CatalogSummaryRow(
             Box {
                 CatalogIconAction(
                     icon = null,
-                    painter = painterResource(R.drawable.ic_more_horiz),
+                    painter = painterResource(R.drawable.ic_more_horiz_circle),
                     contentDescription = stringResource(R.string.more),
                     contentColor = contentColor,
                     dockColor = dockColor,
