@@ -662,15 +662,14 @@ private fun TocChapterRow(
     } else {
         Color(NgTheme.colors.onSurface)
     }
-    val mutedColor = Color(NgTheme.colors.onSurfaceVariant)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(rowBackground)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        verticalAlignment = Alignment.Stretch,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!chapter.isVolume) {
+        if (current && !chapter.isVolume) {
             Box(
                 modifier = Modifier
                     .width(4.dp)
