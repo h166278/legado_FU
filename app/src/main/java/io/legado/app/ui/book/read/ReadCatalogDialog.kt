@@ -1204,6 +1204,7 @@ private fun CatalogChapterList(
     var itemCount by remember(query, descending) { mutableStateOf(0) }
     var datasetLoading by remember(query, descending) { mutableStateOf(true) }
     var showFloatingActions by remember { mutableStateOf(false) }
+    var showUpArrow by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val loadedPages = remember(query, descending) {
         mutableStateMapOf<Int, List<CatalogChapter>>()
@@ -1257,6 +1258,20 @@ private fun CatalogChapterList(
         }
     }
     LaunchedEffect(listState) {
+        var previousPosition: Pair<Int, Int>? = null
+        snapshotFlow {
+            listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+        }
+            .distinctUntilChanged()
+            .collectLatest { position ->
+                previousPosition?.let { previous ->
+                    showUpArrow = position.first > previous.first ||
+                        (position.first == previous.first && position.second > previous.second)
+                }
+                previousPosition = position
+            }
+    }
+    LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress }
             .distinctUntilChanged()
             .collectLatest { scrolling ->
@@ -1288,6 +1303,7 @@ private fun CatalogChapterList(
         floatingActions = if (showFloatingActions) {
             {
                 CatalogChapterFloatingActions(
+                    showUpArrow = showUpArrow,
                     atTop = listState.firstVisibleItemIndex == 0 &&
                         listState.firstVisibleItemScrollOffset == 0,
                     contentColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
@@ -1807,6 +1823,7 @@ private fun CatalogScrollableList(
 
 @Composable
 private fun BoxScope.CatalogChapterFloatingActions(
+    showUpArrow: Boolean,
     atTop: Boolean,
     contentColor: Color,
     containerColor: Color,
@@ -1829,8 +1846,8 @@ private fun BoxScope.CatalogChapterFloatingActions(
             onClick = onCurrent,
         )
         CatalogFloatingIcon(
-            iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_drop_up,
-            contentDescription = if (atTop) "滚动到底部" else "滚动到顶部",
+            iconRes = if (showUpArrow) R.drawable.ic_arrow_drop_up else R.drawable.ic_arrow_down,
+            contentDescription = if (showUpArrow) "滚动到顶部" else "滚动到底部",
             contentColor = contentColor,
             containerColor = containerColor,
             onClick = onTopOrBottom,
