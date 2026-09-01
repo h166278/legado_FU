@@ -1392,8 +1392,8 @@ private fun CatalogChapterRow(
     // Both row states are translucent primary-container tones, so selection never
     // becomes darker than the theme container and remains theme-driven.
     val chapterColor = themeContainerColor.copy(alpha = 0.28f).compositeOver(listColor)
-    val currentChapterColor = themeContainerColor.copy(alpha = 0.68f).compositeOver(listColor)
-    val currentChapterIndicatorColor = themeColor
+    val currentChapterColor = themeContainerColor.copy(alpha = 0.82f).compositeOver(listColor)
+    val currentChapterIndicatorColor = themeColor.copy(alpha = 0.86f)
     val currentChapterContentColor = themeColor
     val outlineColor = Color(NgTheme.colors.outlineVariant)
     val wordCount = if (cached && AppConfig.tocCountWords) {
@@ -1447,7 +1447,7 @@ private fun CatalogChapterRow(
     ) {
         Box(
             modifier = Modifier
-                .width(4.dp)
+                .width(6.dp)
                 .fillMaxHeight()
                 .background(if (current) currentChapterIndicatorColor else Color.Transparent),
         )
