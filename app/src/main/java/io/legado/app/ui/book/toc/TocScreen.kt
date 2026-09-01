@@ -295,7 +295,7 @@ private fun TocToolbarIcon(
     contentDescription: String,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
@@ -652,34 +652,22 @@ private fun TocChapterRow(
 ) {
     val chapter = item.chapter
     val infoText = chapter.tocInfoText(style, chapterCount, showWordCount)
+    val themePrimary = Color(NgTheme.colors.primary)
     val rowBackground = when {
         chapter.isVolume -> Color(NgTheme.colors.surfaceContainerHigh)
-        current -> Color(NgTheme.colors.selectedContainer)
-        else -> Color(NgTheme.colors.surfaceContainerLow)
+        current -> themePrimary.copy(alpha = 0.18f)
+        else -> themePrimary.copy(alpha = 0.05f)
     }
-    val titleColor = if (current) {
-        Color(NgTheme.colors.primary)
-    } else {
-        Color(NgTheme.colors.onSurface)
-    }
-    Row(
+    val titleColor = if (current) themePrimary else Color(NgTheme.colors.onSurface)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .background(rowBackground)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (current && !chapter.isVolume) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(Color(NgTheme.colors.primary)),
-            )
-        }
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = if (style.looseSpacing) 18.dp else 12.dp),
         ) {
             Row(
@@ -769,7 +757,15 @@ private fun TocChapterRow(
                 )
             }
         }
-    }
+        if (current && !chapter.isVolume) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(4.dp)
+                    .matchParentSize()
+                    .background(themePrimary),
+            )
+        }
     }
     HorizontalDivider(
         thickness = 0.6.dp,
