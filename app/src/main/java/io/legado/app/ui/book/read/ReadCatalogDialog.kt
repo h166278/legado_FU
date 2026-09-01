@@ -1304,8 +1304,6 @@ private fun CatalogChapterList(
             {
                 CatalogChapterFloatingActions(
                     showUpArrow = showUpArrow,
-                    atTop = listState.firstVisibleItemIndex == 0 &&
-                        listState.firstVisibleItemScrollOffset == 0,
                     contentColor = if (NgTheme.snapshot.isDark || NgTheme.snapshot.isEInk) {
                         contentColor
                     } else {
@@ -1330,9 +1328,9 @@ private fun CatalogChapterList(
                     },
                     onTopOrBottom = {
                         scope.launch {
-                            val atTop = listState.firstVisibleItemIndex == 0 &&
-                                listState.firstVisibleItemScrollOffset == 0
-                            listState.animateScrollToItem(if (atTop) itemCount - 1 else 0)
+                            listState.animateScrollToItem(
+                                if (showUpArrow) 0 else itemCount - 1
+                            )
                         }
                     },
                 )
@@ -1824,7 +1822,6 @@ private fun CatalogScrollableList(
 @Composable
 private fun BoxScope.CatalogChapterFloatingActions(
     showUpArrow: Boolean,
-    atTop: Boolean,
     contentColor: Color,
     containerColor: Color,
     onCurrent: () -> Unit,
