@@ -57,7 +57,7 @@ jsoup = "1.16.2"
 
 # 新版本使用了 Android 6 以下缺少的 Arrays.setAll 方法，导致进入阅读界面会崩溃
 #noinspection GradleDependency,NewerVersionAvailable
-commonsText = "1.13.1"
+commonsText = "1.15.0"
 
 # 与 JS 单文件书源参考实现保持一致的 HtmlUnit Rhino 兼容分支。
 htmlunitCoreJs = "5.3.0-legado.4-android21.1"
