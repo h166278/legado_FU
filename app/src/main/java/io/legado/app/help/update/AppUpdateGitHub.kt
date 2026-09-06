@@ -15,6 +15,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 
+/**
+ * 发行说明去重：同一 tag 下多次构建会把相同条目重复堆叠，
+ * 这里按行去重（保留首次出现顺序与空行分段）。
+ */
+private fun String.deduplicateReleaseNotes(): String {
+    val seen = LinkedHashSet<String>()
+    return lineSequence()
+        .map { it.trimEnd() }
+        .filter { line ->
+            val key = line.trim()
+            key.isEmpty() || seen.add(key)
+        }
+        .joinToString("\n")
+}
+
 @Keep
 @Suppress("unused")
 object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
@@ -30,9 +45,9 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
 
     private suspend fun getLatestRelease(): List<AppReleaseInfo> {
         val gitHubUrl = if (checkVariant.isBeta()) {
-            "https://api.github.com/repos/joestar817/legado_NG/releases/tags/beta"
+            "https://api.github.com/repos/h166278/legado_FU/releases/tags/beta"
         } else {
-            "https://api.github.com/repos/joestar817/legado_NG/releases/latest"
+            "https://api.github.com/repos/h166278/legado_FU/releases/latest"
         }
         var lastError: Throwable? = null
         for (releaseUrl in AppUpdateRelay.apiCandidates(gitHubUrl)) {
@@ -104,7 +119,7 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
 
     private fun AppReleaseInfo.toUpdateInfo() = AppUpdate.UpdateInfo(
         tagName = versionName,
-        updateLog = note,
+        updateLog = note.deduplicateReleaseNotes(),
         downloadUrls = AppUpdateRelay.downloadCandidates(downloadUrl, name),
         fileName = name,
         fileSize = fileSize,

@@ -10,8 +10,8 @@ internal object AppUpdateRelay {
     private const val API_RELAY_PREFIX = "https://gh-proxy.com/"
     private const val DOWNLOAD_RELAY_PREFIX = "https://gh-proxy.com/"
     private const val STREAM_DOWNLOAD_URL = "https://download.githubcdn.com?url="
-    private const val RELEASE_OWNER = "joestar817"
-    private const val RELEASE_REPOSITORY = "legado_NG"
+    private const val RELEASE_OWNER = "h166278"
+    private const val RELEASE_REPOSITORY = "legado_FU"
 
     fun apiCandidates(gitHubUrl: String): List<String> {
         require(isAllowedGitHubApiUrl(gitHubUrl)) { "不支持的 GitHub 更新接口" }

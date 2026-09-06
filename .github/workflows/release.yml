@@ -60,7 +60,7 @@ jobs:
         run: |
           echo "开始进行 app release 构建"
           chmod +x gradlew
-          ./gradlew assembleAppRelease -PUPDATE_CHANNEL=official --build-cache --parallel --daemon --warning-mode all
+          ./gradlew assembleAppRelease -PUPDATE_CHANNEL=official --build-cache --no-daemon --warning-mode all
 
       - name: Organize the Files
         run: |
@@ -76,9 +76,11 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          name: legado_ng_${{ env.VERSION }}
+          name: legado_fu_${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
-          body_path: ${{ github.workspace }}/CHANGELOG.md
+          generate_release_notes: true
           draft: false
           prerelease: false
-          files: ${{ github.workspace }}/apk/legado_app_*.apk
+          # 产物名由 app/build.gradle 的 `def name` 决定（reading_fu_<flavor>_<version>.apk），
+          # Organize 步骤已把 apk 目录只留下构建产物，这里用通配避免改名后上传为空
+          files: ${{ github.workspace }}/apk/*.apk
