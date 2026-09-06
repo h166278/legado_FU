@@ -15,11 +15,12 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.CacheManager
 import io.legado.app.help.JsExtensions
 import io.legado.app.help.http.BackstageWebView
-import io.legado.app.help.http.CookieStore
+import io.legado.app.help.http.BookSourceCookieStore
+import io.legado.app.help.source.scriptCacheObject
 import io.legado.app.help.source.getShareScope
+import io.legado.app.help.source.withBookSourceClassPolicy
 import io.legado.app.model.Debug
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
@@ -39,8 +40,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.nodes.Node
-import org.mozilla.javascript.NativeObject
-import org.mozilla.javascript.Scriptable
+import org.htmlunit.corejs.javascript.NativeObject
+import org.htmlunit.corejs.javascript.Scriptable
+import org.htmlunit.corejs.javascript.TopLevel
 import java.lang.ref.WeakReference
 import java.net.URL
 import java.util.Locale
@@ -79,7 +81,7 @@ class AnalyzeRule(
     private val stringRuleCache = hashMapOf<String, List<SourceRule>>()
     private val regexCache = hashMapOf<String, Regex?>()
     private val scriptCache = hashMapOf<String, CompiledScript>()
-    private var topScopeRef: WeakReference<Scriptable>? = null
+    private var topScopeRef: WeakReference<TopLevel>? = null
     private var evalJSCallCount = 0
 
     private var coroutineContext: CoroutineContext = EmptyCoroutineContext
@@ -182,6 +184,7 @@ class AnalyzeRule(
                 javaScript = jsStr,
                 headerMap = getSource()?.getHeaderMap(true),
                 tag = getSource()?.getKey(),
+                source = getSource(),
                 cacheFirst = true,
                 timeout = 10000,
                 result = GSON.toJson(result),
@@ -826,36 +829,39 @@ class AnalyzeRule(
      * 执行JS
      */
     fun evalJS(jsStr: String, result: Any? = null): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings["source"] = source
-            bindings["book"] = book
-            bindings["result"] = result
-            bindings["baseUrl"] = baseUrl
-            bindings["chapter"] = chapter
-            bindings["title"] = chapter?.title
-            bindings["src"] = content
-            bindings["nextChapterUrl"] = nextChapterUrl
-            bindings["rssArticle"] = rssArticle
-            bindings["fromBookInfo"] = isFromBookInfo
-        }
-        val topScope = source?.getShareScope(coroutineContext) ?: topScopeRef?.get()
-        val scope = if (topScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings).apply {
+        return source.withBookSourceClassPolicy {
+            val bindings = buildScriptBindings { bindings ->
+                bindings["java"] = this
+                bindings["cookie"] = BookSourceCookieStore.forSource(source)
+                bindings["cache"] = source.scriptCacheObject()
+                bindings["source"] = source
+                bindings["book"] = book
+                bindings["result"] = result
+                bindings["baseUrl"] = baseUrl
+                bindings["chapter"] = chapter
+                bindings["title"] = chapter?.title
+                bindings["src"] = content
+                bindings["nextChapterUrl"] = nextChapterUrl
+                bindings["rssArticle"] = rssArticle
+                bindings["fromBookInfo"] = isFromBookInfo
+            }
+            val topScope = source?.getShareScope(coroutineContext) ?: topScopeRef?.get()
+            val scope = if (topScope == null) {
+                val fresh = RhinoScriptEngine.newStandardTopLevel()
                 if (evalJSCallCount++ > 16) {
-                    topScopeRef = WeakReference(prototype)
+                    topScopeRef = WeakReference(fresh)
+                }
+                bindings.apply {
+                    chainTo(fresh)
+                }
+            } else {
+                bindings.apply {
+                    chainTo(topScope)
                 }
             }
-        } else {
-            bindings.apply {
-                prototype = topScope
-            }
+            val script = compileScriptCache(jsStr)
+            script.eval(scope, coroutineContext)
         }
-        val script = compileScriptCache(jsStr)
-        val result = script.eval(scope, coroutineContext)
-        return result
     }
 
     private fun compileScriptCache(jsStr: String): CompiledScript {

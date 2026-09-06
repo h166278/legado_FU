@@ -14,14 +14,17 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.Theme
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.exoplayer.AudioDownloadCache
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
@@ -64,13 +67,6 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
         TocUiState(
             useReplace = AppConfig.tocUiUseReplace,
             loadWordCount = AppConfig.tocCountWords,
-            tocStyle = TocStyle(
-                showOriginalIndex = AppConfig.tocShowOriginalIndex,
-                titleMaxLines = AppConfig.tocTitleMaxLines,
-                looseSpacing = AppConfig.tocLooseSpacing,
-                infoDisplay = AppConfig.tocInfoDisplay,
-                infoBelowTitle = AppConfig.tocInfoBelowTitle,
-            ),
         ),
     )
     private var fullChapterList: List<BookChapter> = emptyList()
@@ -101,7 +97,6 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
             book = book.copy(),
             splitLongChapter = book.getSplitLongChapter(),
             isLocalTxt = book.isLocalTxt,
-            tocReversed = book.getReverseToc(),
         )
         loadCachedFiles(book)
         if (uiState.selectedTab == TOC_TAB_BOOKMARKS) {
@@ -124,7 +119,6 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
             }
             is TocUiEvent.QueryChange -> changeQuery(event.query)
             is TocUiEvent.Menu -> handleMenuAction(event.action)
-            is TocUiEvent.TocStyleChange -> updateTocStyle(event.style)
             is TocUiEvent.ChapterClick -> openChapter(event.chapter)
             is TocUiEvent.ChapterLongClick -> longToastOnUi(event.title)
             is TocUiEvent.BookmarkClick -> openBookmark(event.bookmark)
@@ -244,20 +238,19 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
     private fun loadCachedFiles(book: Book) {
         cacheJob?.cancel()
         cacheJob = lifecycleScope.launch {
-            val cacheFiles = withContext(IO) { BookHelp.getChapterFiles(book).toSet() }
+            val cacheFiles = withContext(IO) {
+                if (book.isAudio) {
+                    appDb.bookSourceDao.getBookSource(book.origin)?.let {
+                        AudioDownloadCache.getCachedChapterFileNames(it, book)
+                    }.orEmpty()
+                } else {
+                    BookHelp.getChapterFiles(book).toSet()
+                }
+            }
             if (viewModel.bookData.value?.bookUrl == book.bookUrl) {
                 uiState = uiState.copy(cachedFileNames = cacheFiles)
             }
         }
-    }
-
-    private fun updateTocStyle(style: TocStyle) {
-        AppConfig.tocShowOriginalIndex = style.showOriginalIndex
-        AppConfig.tocTitleMaxLines = style.titleMaxLines
-        AppConfig.tocLooseSpacing = style.looseSpacing
-        AppConfig.tocInfoDisplay = style.infoDisplay
-        AppConfig.tocInfoBelowTitle = style.infoBelowTitle
-        uiState = uiState.copy(tocStyle = style)
     }
 
     private fun handleMenuAction(action: TocMenuAction) {
@@ -267,10 +260,6 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
             )
             TocMenuAction.SplitLongChapter -> toggleSplitLongChapter()
             TocMenuAction.ReverseToc -> reverseToc()
-            TocMenuAction.ToggleCollapsedToc -> {
-                uiState = uiState.copy(tocCollapsed = !uiState.tocCollapsed)
-            }
-            TocMenuAction.TocStyle -> Unit
             TocMenuAction.UseReplace -> {
                 AppConfig.tocUiUseReplace = !AppConfig.tocUiUseReplace
                 uiState = uiState.copy(useReplace = AppConfig.tocUiUseReplace)
@@ -304,7 +293,7 @@ class TocActivity : VMBaseActivity<ComposeActivityBinding, TocViewModel>(
 
     private fun reverseToc() {
         viewModel.reverseToc { book ->
-            uiState = uiState.copy(book = book.copy(), tocReversed = book.getReverseToc())
+            uiState = uiState.copy(book = book.copy())
             loadChapters()
             setResult(RESULT_OK, Intent().apply {
                 putExtra("index", book.durChapterIndex)

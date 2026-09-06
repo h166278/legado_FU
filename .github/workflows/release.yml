@@ -60,7 +60,7 @@ jobs:
         run: |
           echo "开始进行 app release 构建"
           chmod +x gradlew
-          ./gradlew assembleAppRelease --build-cache --no-daemon --warning-mode all
+          ./gradlew assembleAppRelease -PUPDATE_CHANNEL=official --build-cache --parallel --daemon --warning-mode all
 
       - name: Organize the Files
         run: |
@@ -76,9 +76,9 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          name: legado_fu_${{ env.VERSION }}
+          name: legado_ng_${{ env.VERSION }}
           tag_name: ${{ env.VERSION }}
-          generate_release_notes: true
+          body_path: ${{ github.workspace }}/CHANGELOG.md
           draft: false
           prerelease: false
-          files: ${{ github.workspace }}/apk/legado_fu_*.apk
+          files: ${{ github.workspace }}/apk/legado_app_*.apk

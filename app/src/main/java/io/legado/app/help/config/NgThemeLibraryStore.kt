@@ -34,6 +34,26 @@ internal data class NgThemeBackground(
 )
 
 @Keep
+internal data class NgThemeSceneProfile(
+    @SerializedName("sceneId") val sceneId: String? = null,
+    @SerializedName("intensity") val intensity: Int = DEFAULT_INTENSITY,
+) {
+    fun sceneType(): ListeningCartoonType? =
+        ListeningCartoonType.fromStorageOrNull(sceneId)
+
+    fun normalized(): NgThemeSceneProfile = copy(
+        sceneId = sceneType()?.storageValue,
+        intensity = intensity.coerceIn(MIN_INTENSITY, MAX_INTENSITY),
+    )
+
+    companion object {
+        const val MIN_INTENSITY = 0
+        const val MAX_INTENSITY = 100
+        const val DEFAULT_INTENSITY = 100
+    }
+}
+
+@Keep
 internal data class NgThemeBarProfile(
     @SerializedName("useFloatingBottomBar")
     val useFloatingBottomBar: Boolean? = null,
@@ -166,6 +186,10 @@ internal data class NgManagedTheme(
     val resourceProfile: NgThemeResourceProfile? = null,
     @SerializedName("coverProfile")
     val coverProfile: NgThemeCoverProfile? = null,
+    @SerializedName("ownedCoverAlbumIds")
+    val ownedCoverAlbumIds: List<String>? = null,
+    @SerializedName("sceneProfile")
+    val sceneProfile: NgThemeSceneProfile? = null,
 ) {
     fun normalized(): NgManagedTheme = copy(
         schemaVersion = NG_MANAGED_THEME_SCHEMA_VERSION,
@@ -177,6 +201,12 @@ internal data class NgManagedTheme(
         barProfile = barProfile?.normalized(),
         resourceProfile = resourceProfile?.normalized() ?: NgThemeResourceProfile(),
         coverProfile = coverProfile?.normalized(),
+        ownedCoverAlbumIds = ownedCoverAlbumIds.orEmpty()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+            .takeIf { it.isNotEmpty() },
+        sceneProfile = sceneProfile?.normalized()?.takeIf { it.sceneType() != null },
     )
 
     fun resolvePackageAsset(relativePath: String?): File? {
@@ -214,7 +244,13 @@ internal object NgThemeLibraryStore {
 
     private const val THEMES_KEY = "ngManagedThemes.v1"
     private const val ACTIVE_THEME_KEY = "ngActiveManagedThemeId.v1"
-    private const val RETIRED_CLASSIC_THEME_ID = "builtin.ng.classic"
+    private val RETIRED_BUILT_IN_THEME_IDS = setOf(
+        "builtin.ng.classic",
+        "builtin.ng.warm",
+        "builtin.ng.bamboo",
+        "builtin.ng.mist",
+        "builtin.ng.rain_night",
+    )
     private val lock = Any()
     private var initialized = false
     private var installedBuiltInThemes: List<NgManagedTheme> = emptyList()
@@ -249,7 +285,11 @@ internal object NgThemeLibraryStore {
             ACTIVE_THEME_KEY,
             null,
         )
-        if (selectedThemeId == RETIRED_CLASSIC_THEME_ID) {
+        NgDynamicSceneTheme.fromLegacyThemeId(selectedThemeId)?.let { preset ->
+            migrateLegacyDynamicTheme(context, preset)
+            return
+        }
+        if (selectedThemeId != null && selectedThemeId in RETIRED_BUILT_IN_THEME_IDS) {
             val defaultTheme = builtInThemes(context)
                 .firstOrNull { it.id == NgBuiltInThemes.defaultTheme.id }
                 ?: return
@@ -266,6 +306,33 @@ internal object NgThemeLibraryStore {
             .firstOrNull { it.id == NgBuiltInThemes.defaultTheme.id }
             ?: return
         apply(context, defaultTheme)
+    }
+
+    private fun migrateLegacyDynamicTheme(
+        context: Context,
+        preset: ListeningCartoonType,
+    ) {
+        val previousMode = NgThemeModeStore.current(context)
+        if (previousMode == NgThemePresentationMode.STANDARD) {
+            NgDynamicSceneTheme.migrateLegacyColorsIfCustomized(
+                context = context,
+                preset = preset,
+                colors = NgColorConfigStore.current(context),
+            )
+        }
+        val standardFallback = builtInThemes(context)
+            .firstOrNull { it.id == NgBuiltInThemes.defaultTheme.id }
+            ?: return
+        // Scene themes used to own the global bar profile. Preserve the user's current geometry
+        // while replacing only the now-invalid regular theme colors and backgrounds.
+        if (!apply(context, standardFallback.copy(barProfile = null))) return
+        NgDynamicSceneTheme.select(context, preset)
+        if (previousMode == NgThemePresentationMode.STANDARD) {
+            NgThemeModeStore.activateInternal(
+                context,
+                NgThemePresentationMode.DYNAMIC_SCENE,
+            )
+        }
     }
 
     fun snapshotCurrent(context: Context, name: String): NgManagedTheme {
@@ -288,6 +355,7 @@ internal object NgThemeLibraryStore {
             barProfile = currentBarProfile(context),
             packageRootPath = active?.packageRootPath,
             resourceProfile = active?.resourceProfile ?: NgThemeResourceProfile(),
+            ownedCoverAlbumIds = active?.ownedCoverAlbumIds,
             coverProfile = NgThemeCoverProfile(
                 applyAlbumSelection = true,
                 albumId = NgCoverAlbumStore.current(context).selectedAlbumId,
@@ -373,13 +441,50 @@ internal object NgThemeLibraryStore {
         persistThemes(context, updated)
         persistActive(context, nextActive)
         mutableState.value = NgThemeLibraryState(updated, nextActive)
+        val orphanedAlbumIds = orphanedCoverAlbumIds(removed, updated)
+        NgCoverAlbumStore.removeImported(context, orphanedAlbumIds)
         removed.packageRootPath
             ?.takeIf { root -> updated.none { it.packageRootPath == root } }
             ?.let { deleteOwnedPackageRoot(context, it) }
         removed
     }
 
-    fun apply(context: Context, theme: NgManagedTheme) {
+    fun detachCoverAlbum(context: Context, albumId: String): Boolean = synchronized(lock) {
+        ensureInitialized(context)
+        if (albumId.isBlank()) return@synchronized false
+        val current = mutableState.value
+        var changed = false
+        val updated = current.savedThemes.map { theme ->
+            val nextOwnedAlbumIds = theme.ownedCoverAlbumIds.orEmpty()
+                .filterNot { it == albumId }
+                .takeIf { it.isNotEmpty() }
+            val nextCoverProfile = theme.coverProfile?.let { profile ->
+                if (profile.albumId == albumId) {
+                    profile.copy(applyAlbumSelection = false, albumId = null)
+                } else {
+                    profile
+                }
+            }
+            if (
+                nextOwnedAlbumIds != theme.ownedCoverAlbumIds ||
+                nextCoverProfile != theme.coverProfile
+            ) {
+                changed = true
+                theme.copy(
+                    coverProfile = nextCoverProfile,
+                    ownedCoverAlbumIds = nextOwnedAlbumIds,
+                )
+            } else {
+                theme
+            }
+        }
+        if (!changed) return@synchronized false
+        persistThemes(context, updated)
+        mutableState.value = current.copy(savedThemes = updated)
+        true
+    }
+
+    fun apply(context: Context, theme: NgManagedTheme): Boolean {
         val previousActiveId = synchronized(lock) {
             ensureInitialized(context)
             val previous = mutableState.value.activeThemeId
@@ -387,11 +492,12 @@ internal object NgThemeLibraryStore {
             mutableState.value = mutableState.value.copy(activeThemeId = theme.id)
             previous
         }
-        if (ThemeConfig.applyManagedTheme(context, theme)) return
+        if (ThemeConfig.applyManagedTheme(context, theme)) return true
         synchronized(lock) {
             persistActive(context, previousActiveId)
             mutableState.value = mutableState.value.copy(activeThemeId = previousActiveId)
         }
+        return false
     }
 
     private fun currentBarProfile(context: Context): NgThemeBarProfile = NgThemeBarProfile(
@@ -473,9 +579,22 @@ internal object NgThemeLibraryStore {
     }
 }
 
+private fun NgManagedTheme.coverAlbumReferences(): Set<String> = buildSet {
+    addAll(ownedCoverAlbumIds.orEmpty())
+    coverProfile?.albumId?.let(::add)
+}
+
+internal fun orphanedCoverAlbumIds(
+    removed: NgManagedTheme,
+    remaining: List<NgManagedTheme>,
+): Set<String> {
+    val retainedAlbumIds = remaining.flatMapTo(hashSetOf()) { it.coverAlbumReferences() }
+    return removed.coverAlbumReferences() - retainedAlbumIds
+}
+
 internal object NgBuiltInThemes {
     private const val BACKGROUND_PREFIX = "asset://defaultData/theme/"
-    private const val READING_BACKGROUND_PREFIX = "asset://bg/"
+    private const val CARTOON_BACKGROUND_PREFIX = "asset://listening_motion/cartoon/"
 
     private val standardFloatingBarProfile = NgThemeBarProfile(
         useFloatingBottomBar = true,
@@ -488,62 +607,40 @@ internal object NgBuiltInThemes {
             BookshelfFloatingDockSearchPosition.LEFT.value,
     )
 
-    val warm = theme(
-        id = "builtin.ng.warm",
-        name = "暖色渐变",
-        lightPrimary = 0xFFF78E66.toInt(),
+    val summer = theme(
+        id = "builtin.ng.summer_childhood",
+        name = "夏日童趣",
+        lightPrimary = 0xFF008B71.toInt(),
         lightSecondary = 0xFFFFFFFF.toInt(),
-        darkPrimary = 0xFFF78E66.toInt(),
-        darkSecondary = 0xFF303030.toInt(),
-        lightBackgroundPath = "${READING_BACKGROUND_PREFIX}暖色渐变.webp",
-        transparentAppBars = true
-    )
-    val bamboo = theme(
-        id = "builtin.ng.bamboo",
-        name = "竹影之韵",
-        lightPrimary = 0xFF7F9554.toInt(),
-        lightSecondary = 0xFFFFFFFF.toInt(),
-        darkPrimary = 0xFFA8C477.toInt(),
-        darkSecondary = 0xFF303030.toInt(),
-        lightBackgroundPath = "${READING_BACKGROUND_PREFIX}竹影之韵.webp",
-        transparentAppBars = true
-    )
-    val mist = theme(
-        id = "builtin.ng.mist",
-        name = "灰色雾霭",
-        lightPrimary = 0xFF758DB4.toInt(),
-        lightSecondary = 0xFFFFFFFF.toInt(),
-        darkPrimary = 0xFF9DB6DE.toInt(),
-        darkSecondary = 0xFF303030.toInt(),
-        lightBackgroundPath = "${READING_BACKGROUND_PREFIX}灰色雾霭.webp",
-        darkBackgroundPath = "${READING_BACKGROUND_PREFIX}灰色雾霭.webp",
-        lightTopBarTextMode = NgTopBarTextMode.LIGHT,
+        darkPrimary = 0xFF5CCBFF.toInt(),
+        darkSecondary = 0xFF153A5B.toInt(),
+        darkPrimaryText = 0xFFF2F7FF.toInt(),
+        darkSecondaryText = 0xFFB8D4E8.toInt(),
+        darkBackgroundColor = 0xFF06182D.toInt(),
+        darkLabelContainer = 0xFF12314D.toInt(),
+        lightBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_summer_childhood.webp",
+        darkBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_summer_childhood_dark.webp",
+        lightTopBarTextMode = NgTopBarTextMode.DARK,
         darkTopBarTextMode = NgTopBarTextMode.LIGHT,
-        reuseLightColorsAtNight = true,
-        transparentAppBars = true
+        transparentAppBars = true,
     )
 
-    val autumn = warm.copy(
+    val autumn = theme(
         id = "builtin.ng.autumn_mountains",
         name = "秋山书意",
-        colors = warm.colors.copy(
-            darkSeed = 0xFF758DB4.toInt(),
-            manualDark = NgManualColorSet(
-                primary = 0xFF758DB4.toInt(),
-                secondary = 0xFF2F3B4B.toInt(),
-                primaryText = 0xFFF2F5F8.toInt(),
-                secondaryText = 0xFFB8C2CC.toInt(),
-                background = 0xFF192633.toInt(),
-                labelContainer = 0xFF263440.toInt(),
-            ),
-            darkTopBarTextMode = NgTopBarTextMode.LIGHT,
-        ),
-        lightBackground = NgThemeBackground(
-            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains.webp"
-        ),
-        darkBackground = NgThemeBackground(
-            path = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains_dark.webp"
-        ),
+        lightPrimary = 0xFFF78E66.toInt(),
+        lightSecondary = 0xFFFFFFFF.toInt(),
+        darkPrimary = 0xFF758DB4.toInt(),
+        darkSecondary = 0xFF2F3B4B.toInt(),
+        darkPrimaryText = 0xFFF2F5F8.toInt(),
+        darkSecondaryText = 0xFFB8C2CC.toInt(),
+        darkBackgroundColor = 0xFF192633.toInt(),
+        darkLabelContainer = 0xFF263440.toInt(),
+        lightBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains.webp",
+        darkBackgroundPath = "${BACKGROUND_PREFIX}reading_ng_autumn_mountains_dark.webp",
+        darkTopBarTextMode = NgTopBarTextMode.LIGHT,
+        transparentAppBars = true,
+    ).copy(
         barProfile = NgThemeBarProfile(
             useFloatingBottomBar = true,
             floatingBottomBarBottomDistancePx = 40,
@@ -556,9 +653,51 @@ internal object NgBuiltInThemes {
         ),
     )
 
+    val sakura = dynamicTheme(
+        id = "builtin.ng.sakura",
+        name = "湖畔樱花",
+        sceneType = ListeningCartoonType.SAKURA,
+        backgroundPath = "${CARTOON_BACKGROUND_PREFIX}sakura/background.webp",
+    )
+
+    val cats = dynamicTheme(
+        id = "builtin.ng.cats",
+        name = "好奇猫咪",
+        sceneType = ListeningCartoonType.CATS,
+        backgroundPath = "${CARTOON_BACKGROUND_PREFIX}cats/poster.webp",
+    )
+
     val defaultTheme = autumn
 
-    val all = listOf(warm, bamboo, mist, autumn)
+    val all = listOf(summer, autumn)
+
+    private fun dynamicTheme(
+        id: String,
+        name: String,
+        sceneType: ListeningCartoonType,
+        backgroundPath: String,
+    ): NgManagedTheme {
+        val primary = sceneType.scenePrimaryColor()
+        val base = theme(
+            id = id,
+            name = name,
+            lightPrimary = primary,
+            lightSecondary = 0xFFFFFFFF.toInt(),
+            darkPrimary = primary,
+            darkSecondary = 0xFF303030.toInt(),
+            lightBackgroundPath = backgroundPath,
+            darkBackgroundPath = backgroundPath,
+            lightTopBarTextMode = NgTopBarTextMode.LIGHT,
+            darkTopBarTextMode = NgTopBarTextMode.LIGHT,
+            transparentAppBars = true,
+        )
+        return base.copy(
+            sceneProfile = NgThemeSceneProfile(
+                sceneId = sceneType.storageValue,
+                intensity = NgThemeSceneProfile.DEFAULT_INTENSITY,
+            ),
+        )
+    }
 
     private fun theme(
         id: String,
@@ -575,7 +714,6 @@ internal object NgBuiltInThemes {
         darkBackgroundPath: String? = null,
         lightTopBarTextMode: NgTopBarTextMode = NgTopBarTextMode.AUTO,
         darkTopBarTextMode: NgTopBarTextMode = NgTopBarTextMode.AUTO,
-        reuseLightColorsAtNight: Boolean = false,
         transparentAppBars: Boolean = false
     ): NgManagedTheme {
         val light = manualColors(
@@ -584,36 +722,28 @@ internal object NgBuiltInThemes {
             background = 0xFFF5F5F5.toInt(),
             label = 0xFFEEEEEE.toInt()
         )
-        val dark = if (reuseLightColorsAtNight) {
-            light
-        } else {
-            manualColors(
-                primary = darkPrimary,
-                secondary = darkSecondary,
-                background = darkBackgroundColor,
-                label = darkLabelContainer,
-                primaryText = darkPrimaryText,
-                secondaryText = darkSecondaryText,
-            )
-        }
+        val dark = manualColors(
+            primary = darkPrimary,
+            secondary = darkSecondary,
+            background = darkBackgroundColor,
+            label = darkLabelContainer,
+            primaryText = darkPrimaryText,
+            secondaryText = darkSecondaryText,
+        )
         return NgManagedTheme(
             id = id,
             name = name,
             colors = NgColorSystem(
                 mode = NgColorGenerationMode.MANUAL,
                 lightSeed = lightPrimary,
-                darkSeed = if (reuseLightColorsAtNight) lightPrimary else darkPrimary,
+                darkSeed = darkPrimary,
                 paletteStyle = NgPaletteStyle.TONAL_SPOT,
                 contrast = NgContrastLevel.DEFAULT,
                 colorSpec = NgColorSpec.MATERIAL_3_2021,
                 manualLight = light,
                 manualDark = dark,
                 lightTopBarTextMode = lightTopBarTextMode,
-                darkTopBarTextMode = if (reuseLightColorsAtNight) {
-                    lightTopBarTextMode
-                } else {
-                    darkTopBarTextMode
-                }
+                darkTopBarTextMode = darkTopBarTextMode,
             ),
             lightBackground = NgThemeBackground(lightBackgroundPath),
             darkBackground = NgThemeBackground(darkBackgroundPath),

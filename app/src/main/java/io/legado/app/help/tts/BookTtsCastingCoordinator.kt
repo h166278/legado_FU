@@ -23,6 +23,7 @@ import io.legado.app.ui.book.character.StoryboardSegmentType
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.fromJsonObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import splitties.init.appCtx
@@ -176,6 +177,33 @@ object BookTtsCastingCoordinator {
         workKey: String,
         onAssignmentRequired: () -> Unit = {}
     ): Int {
+        var preparationShown = false
+        fun showPreparation() {
+            if (!preparationShown) {
+                preparationShown = true
+                onAssignmentRequired()
+            }
+        }
+        val initialEngine = prepareMutex(workKey).withLock {
+            currentMultiRoleEngine()
+        } ?: return 0
+        if (initialEngine.enabledVoices().isEmpty() && initialEngine.supportsVoiceFetch()) {
+            showPreparation()
+            try {
+                TtsEngineStore.ensureVoiceCatalog(
+                    engineId = initialEngine.id,
+                    restartReadAloud = false
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                AppLog.put(
+                    "多人朗读发音人目录初始化失败，已继续使用对白兜底\n${error.localizedMessage}",
+                    error
+                )
+                return 0
+            }
+        }
         val snapshot = prepareMutex(workKey).withLock {
             val current = currentCastingSnapshot(workKey) ?: return@withLock null
             val usableVoiceIds = current.engine.enabledVoices()
@@ -192,7 +220,7 @@ object BookTtsCastingCoordinator {
             }
             current.copy(targets = missingTargets).takeIf { missingTargets.isNotEmpty() }
         } ?: return 0
-        onAssignmentRequired()
+        showPreparation()
         return assignTargets(snapshot.engine, workKey, snapshot.targets, replaceAuto = false)
     }
 
@@ -386,10 +414,17 @@ object BookTtsCastingCoordinator {
     ): SyncedCastRoles {
         val dao = appDb.bookCharacterDao
         val profile = dao.getOrCreateProfile(book.name, book.author, book.bookUrl)
+        val persistedCharacters = dao.getCharacters(profile.workKey)
+        val persistedRoles = dao.getTtsCastRoles(profile.workKey)
+        val blockedNames = blockedIdentityNames(persistedCharacters, persistedRoles)
+        val blockedRoleIds = persistedRoles
+            .asSequence()
+            .filter { it.ignored }
+            .mapTo(mutableSetOf()) { it.id }
         linkPromotedRoles(profile.workKey, characters)
         applyExplicitIdentityLinks(profile.workKey, storyboard.identityLinks, characters)
         mergeExplicitFormalRoles(profile.workKey, storyboard, characters)
-        val canonicalNames = characters.flatMap { character ->
+        val canonicalNames = persistedCharacters.filter { it.enabled }.flatMap { character ->
             buildList {
                 add(character.name.trim())
                 character.aliasesJson
@@ -408,7 +443,12 @@ object BookTtsCastingCoordinator {
                     it == BookCharacter.Gender.MALE || it == BookCharacter.Gender.FEMALE
                 } ?: BookCharacter.Gender.UNKNOWN
                 val normalizedName = normalizeIdentityName(name)
-                if (normalizedName in canonicalNames) return@mapNotNull null
+                if (normalizedName in canonicalNames || normalizedName in blockedNames) {
+                    return@mapNotNull null
+                }
+                if (segment.castRoleId?.let(blockedRoleIds::contains) == true) {
+                    return@mapNotNull null
+                }
                 DiscoveredOccurrence(
                     name = name,
                     gender = gender,
@@ -836,6 +876,7 @@ object BookTtsCastingCoordinator {
         val role = dao.getTtsCastRole(roleId) ?: return
         val contributions = dao.getTtsCastRoleContributions(roleId)
         if (contributions.isEmpty()) {
+            if (role.ignored) return
             val bindings = dao.getTtsBindings(role.workKey)
             if (role.linkedCharacterId != null || hasProtectedBinding(role.id, bindings)) return
             bindings.filter {
@@ -936,6 +977,29 @@ object BookTtsCastingCoordinator {
             (listOf(role.name) + roleAliases(role)).filter { it.isNotBlank() }.forEach { name ->
                 putIfAbsent(normalizeIdentityName(name), role)
             }
+        }
+    }
+
+    internal fun blockedIdentityNames(
+        characters: List<BookCharacter>,
+        roles: List<BookTtsCastRole>
+    ): Set<String> = buildSet {
+        characters.filter { !it.enabled }.forEach { character ->
+            buildList {
+                add(character.name)
+                character.aliasesJson
+                    ?.let { GSON.fromJsonObject<List<String>>(it).getOrNull() }
+                    .orEmpty()
+                    .forEach(::add)
+            }.map(String::trim)
+                .filter(String::isNotBlank)
+                .mapTo(this, ::normalizeIdentityName)
+        }
+        roles.filter { it.ignored }.forEach { role ->
+            (listOf(role.name) + roleAliases(role))
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .mapTo(this, ::normalizeIdentityName)
         }
     }
 
@@ -1049,8 +1113,6 @@ object BookTtsCastingCoordinator {
         castRoles: List<BookTtsCastRole>
     ): Int {
         val engine = currentMultiRoleEngine() ?: return 0
-        val voices = engine.enabledVoices().filter { it.id.isNotBlank() }
-        if (voices.isEmpty()) return 0
         val workKey = BookCharacterProfile.workKey(book.name, book.author)
         val segments = storyboard.scenes.flatMap { it.segments }
             .filter { it.type == StoryboardSegmentType.DIALOGUE || it.type == StoryboardSegmentType.THOUGHT }
@@ -1391,11 +1453,21 @@ object BookTtsCastingCoordinator {
         targets: List<CastingTarget>,
         replaceAuto: Boolean
     ): Int = assignmentMutex(workKey, engine.id).withLock {
-        val voices = engine.enabledVoices().filter { it.id.isNotBlank() }
+        val effectiveEngine = if (
+            engine.enabledVoices().isEmpty() && engine.supportsVoiceFetch()
+        ) {
+            TtsEngineStore.ensureVoiceCatalog(
+                engineId = engine.id,
+                restartReadAloud = false
+            )
+        } else {
+            engine
+        }
+        val voices = effectiveEngine.enabledVoices().filter { it.id.isNotBlank() }
         if (voices.isEmpty() || targets.isEmpty()) return@withLock 0
         val dao = appDb.bookCharacterDao
         val existingBindings = dao.getTtsBindings(workKey)
-            .filter { it.engineId == engine.id }
+            .filter { it.engineId == effectiveEngine.id }
             .associateBy { it.targetType to it.targetId }
         val candidateMap = targets.associateWith { target ->
             val languageCandidates = preferLanguageCandidates(voices, target.representativeTexts)
@@ -1426,7 +1498,7 @@ object BookTtsCastingCoordinator {
             emptyList()
         } else {
             requestAssignments(
-                engine = engine,
+                engine = effectiveEngine,
                 voices = voices.filter { it.id in aiCandidateIds },
                 targets = aiTargets.map { target ->
                     target.copy(candidateVoiceIds = candidateMap[target].orEmpty().map { it.id })
@@ -1439,7 +1511,7 @@ object BookTtsCastingCoordinator {
         var savedCount = 0
         appDb.runInTransaction {
             val currentBindings = dao.getTtsBindings(workKey)
-                .filter { it.engineId == engine.id }
+                .filter { it.engineId == effectiveEngine.id }
                 .associateBy { it.targetType to it.targetId }
             eligibleTargets.forEach { target ->
                 val key = target.targetType to target.targetId
@@ -1470,11 +1542,11 @@ object BookTtsCastingCoordinator {
                     current = current,
                     newBinding = {
                         BookCharacterTtsBinding(
-                        workKey = workKey,
-                        targetType = target.targetType,
-                        targetId = target.targetId,
-                        engineId = engine.id,
-                        createdAt = now
+                            workKey = workKey,
+                            targetType = target.targetType,
+                            targetId = target.targetId,
+                            engineId = effectiveEngine.id,
+                            createdAt = now
                         )
                     },
                     usableVoiceIds = allowed,

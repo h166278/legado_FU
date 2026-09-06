@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.os.Build
 import com.github.liuyueyi.quick.transfer.constants.TransType
 import com.jeremyliao.liveeventbus.LiveEventBus
@@ -19,6 +20,7 @@ import io.legado.app.base.AppContextWrapper
 import io.legado.app.constant.AppConst.channelIdDownload
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -46,10 +48,13 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.Cronet
 import io.legado.app.help.http.ObsoleteUrlFactory
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.rhino.BookSourceGuardLog
 import io.legado.app.help.rhino.NativeBaseSource
+import io.legado.app.help.rhino.NativeBook
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.storage.Backup
 import io.legado.app.model.BookCover
+import io.legado.app.quickjs.QuickJsSandboxProcess
 import io.legado.app.service.McpService
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.LogUtils
@@ -57,6 +62,7 @@ import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.isDebuggable
 import io.legado.app.utils.isNightMode
+import io.legado.app.utils.postEvent
 import kotlinx.coroutines.launch
 import org.chromium.base.ThreadUtils
 import splitties.init.appCtx
@@ -71,6 +77,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (QuickJsSandboxProcess.isCurrentProcess()) return
         CrashHandler(this)
         if (isDebuggable) {
             ThreadUtils.setThreadAssertsDisabledForTesting(true)
@@ -133,14 +140,23 @@ class App : Application() {
     }
 
     override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(AppContextWrapper.wrap(base))
+        if (QuickJsSandboxProcess.isCurrentProcess()) {
+            super.attachBaseContext(base)
+        } else {
+            super.attachBaseContext(AppContextWrapper.wrap(base))
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (QuickJsSandboxProcess.isCurrentProcess()) return
         val diff = newConfig.diff(oldConfig)
         if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0) {
             onSystemUiModeChanged(this, newConfig.isNightMode)
+            postEvent(
+                EventBus.SYSTEM_UI_MODE_CHANGED,
+                Resources.getSystem().configuration.isNightMode,
+            )
         }
         oldConfig = Configuration(newConfig)
     }
@@ -230,11 +246,17 @@ class App : Application() {
         RhinoScriptEngine
         RhinoWrapFactory.register(BookSource::class.java, NativeBaseSource.factory)
         RhinoWrapFactory.register(RssSource::class.java, NativeBaseSource.factory)
+        RhinoWrapFactory.register(Book::class.java, NativeBook.factory)
         RhinoWrapFactory.register(ExploreRule::class.java, ReadOnlyJavaObject.factory)
         RhinoWrapFactory.register(SearchRule::class.java, ReadOnlyJavaObject.factory)
         RhinoWrapFactory.register(BookInfoRule::class.java, ReadOnlyJavaObject.factory)
         RhinoWrapFactory.register(ContentRule::class.java, ReadOnlyJavaObject.factory)
-        RhinoWrapFactory.register(BookChapter::class.java, ReadOnlyJavaObject.factory)
+        RhinoWrapFactory.register(
+            BookChapter::class.java,
+            ReadOnlyJavaObject.factory(setOf("update")) { member ->
+                BookSourceGuardLog.noOp("BookChapter", member)
+            }
+        )
         RhinoWrapFactory.register(Book.ReadConfig::class.java, ReadOnlyJavaObject.factory)
     }
 

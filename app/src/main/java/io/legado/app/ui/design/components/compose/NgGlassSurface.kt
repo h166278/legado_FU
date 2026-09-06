@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import android.view.View
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -42,9 +43,10 @@ import io.legado.app.ui.book.read.ReadFloatingPalette
 import kotlin.math.max
 
 /**
- * NG 的透明玻璃承载面。
+ * NG 既有玻璃组件的视觉体系兼容入口。
  *
- * 组件只负责材质、裁切和内容承载，不负责决定抽屉结构。调用方若提供 [backdrop]，
+ * 旧调用无需感知透明／液态后端；只需按组件语义补充 [role]。页面若提供统一的
+ * 液态 backdrop host，同一树中的既有调用会自动切换。调用方若提供 [backdrop]，
  * 必须传入已经与当前界面对齐的背景内容，不能把整张主题图再次缩放到局部区域。
  */
 @Composable
@@ -54,6 +56,34 @@ fun NgGlassSurface(
     style: NgGlassStyle = NgGlassDefaults.style(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
     backdrop: (@Composable BoxScope.() -> Unit)? = null,
+    materialViewport: NgGlassMaterialViewport? = null,
+    role: NgMaterialRole = NgMaterialRole.SOFT_SURFACE,
+    liquidCornerRadius: Dp? = null,
+    viewBackdropSource: View? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    NgVisualSurface(
+        modifier = modifier,
+        role = role,
+        cornerRadius = liquidCornerRadius ?: NgTheme.shapes.dialogDp.dp,
+        shape = shape,
+        style = style,
+        contentPadding = contentPadding,
+        viewBackdropSource = viewBackdropSource,
+        transparentBackdrop = backdrop,
+        materialViewport = materialViewport,
+        content = content,
+    )
+}
+
+@Composable
+internal fun NgTransparentGlassSurface(
+    modifier: Modifier = Modifier,
+    shape: Shape,
+    style: NgGlassStyle,
+    contentPadding: PaddingValues,
+    backdrop: (@Composable BoxScope.() -> Unit)?,
+    materialViewport: NgGlassMaterialViewport?,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -87,7 +117,7 @@ fun NgGlassSurface(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .ngGlassLayer(shape, style)
+                    .ngGlassLayer(shape, style, materialViewport)
             )
 
             Column(
@@ -112,6 +142,16 @@ data class NgGlassStyle(
     val shadowElevation: Dp,
     val borderWidth: Dp,
     val highlightWidth: Dp
+)
+
+/**
+ * 可选的固定材质坐标空间。只改变渐变与光场的采样尺寸；真实裁切、圆角和描边
+ * 仍跟随承载面边界。为 null 时保持既有按实际尺寸绘制的行为。
+ */
+@Immutable
+data class NgGlassMaterialViewport(
+    val width: Dp,
+    val height: Dp,
 )
 
 object NgGlassDefaults {
@@ -538,9 +578,10 @@ internal fun resolveNgDrawerGlassStyle(
     )
 }
 
-private fun Modifier.ngGlassLayer(
+internal fun Modifier.ngGlassLayer(
     shape: Shape,
-    style: NgGlassStyle
+    style: NgGlassStyle,
+    materialViewport: NgGlassMaterialViewport?,
 ): Modifier = drawWithCache {
     val outline = shape.createOutline(size, layoutDirection, this)
     val outlinePath = when (outline) {
@@ -548,7 +589,17 @@ private fun Modifier.ngGlassLayer(
         is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
         is Outline.Generic -> outline.path
     }
-    val diagonalEnd = Offset(size.width, size.height)
+    val materialWidth = materialViewport
+        ?.width
+        ?.toPx()
+        ?.coerceAtLeast(1f)
+        ?: size.width
+    val materialHeight = materialViewport
+        ?.height
+        ?.toPx()
+        ?.coerceAtLeast(1f)
+        ?: size.height
+    val diagonalEnd = Offset(materialWidth, materialHeight)
     val containerBrush = Brush.linearGradient(
         colors = listOf(style.containerTop, style.containerBottom),
         start = Offset.Zero,
@@ -556,8 +607,8 @@ private fun Modifier.ngGlassLayer(
     )
     val accentBrush = Brush.radialGradient(
         colors = listOf(style.accentGlow, Color.Transparent),
-        center = Offset(size.width * 0.10f, size.height * 0.04f),
-        radius = max(size.width, size.height).coerceAtLeast(1f) * 0.82f
+        center = Offset(materialWidth * 0.10f, materialHeight * 0.04f),
+        radius = max(materialWidth, materialHeight) * 0.82f
     )
     val glossBrush = Brush.verticalGradient(
         colors = listOf(
@@ -566,7 +617,7 @@ private fun Modifier.ngGlassLayer(
             Color.Transparent
         ),
         startY = 0f,
-        endY = (size.height * 0.62f).coerceAtLeast(1f)
+        endY = (materialHeight * 0.62f).coerceAtLeast(1f)
     )
     val highlightBrush = Brush.linearGradient(
         colors = listOf(
@@ -586,12 +637,12 @@ private fun Modifier.ngGlassLayer(
         start = Offset.Zero,
         end = diagonalEnd
     )
+    val depthBandHeight = (materialHeight * 0.30f)
+        .coerceIn(1f, size.height.coerceAtLeast(1f))
     val depthFillBrush = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.00f to Color.Transparent,
-            0.70f to Color.Transparent,
-            1.00f to style.depthEdge
-        )
+        colors = listOf(Color.Transparent, style.depthEdge),
+        startY = (size.height - depthBandHeight).coerceAtLeast(0f),
+        endY = size.height.coerceAtLeast(1f),
     )
     val softHighlightBrush = Brush.linearGradient(
         colors = listOf(

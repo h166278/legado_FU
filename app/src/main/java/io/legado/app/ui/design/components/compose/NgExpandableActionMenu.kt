@@ -8,7 +8,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.IdRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +49,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.Dp
@@ -58,6 +62,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
@@ -76,7 +81,8 @@ data class NgExpandableActionMenuItem(
     val title: String? = null,
     val checked: Boolean = false,
     val danger: Boolean = false,
-    val themedIconKind: NgThemedActionIconKind? = null
+    val themedIconKind: NgThemedActionIconKind? = null,
+    val enabled: Boolean = true,
 )
 
 enum class NgExpandableActionMenuVariant {
@@ -85,9 +91,57 @@ enum class NgExpandableActionMenuVariant {
     DRILL_IN
 }
 
-enum class NgExpandableActionMenuWidthVariant(val width: Dp) {
+enum class NgExpandableActionMenuWidthVariant(val width: Dp?) {
+    CONTENT(null),
     STANDARD(152.dp),
     GROUPED_LABELS(160.dp),
+}
+
+@Composable
+internal fun rememberNgExpandableActionMenuContentWidth(
+    items: List<NgExpandableActionMenuItem>,
+): Dp {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val textStyle = MaterialTheme.typography.bodyMedium
+    val minWidth = 96.dp
+    val maxWidth = (configuration.screenWidthDp.dp - 16.dp)
+        .coerceAtMost(240.dp)
+        .coerceAtLeast(minWidth)
+
+    return remember(items, configuration, density, textStyle, maxWidth) {
+        fun itemTitle(item: NgExpandableActionMenuItem): String {
+            return item.title ?: item.titleRes
+                .takeIf { it != 0 }
+                ?.let { titleRes -> context.getString(titleRes) }
+                .orEmpty()
+        }
+
+        fun groupWidthPx(group: List<NgExpandableActionMenuItem>): Float {
+            if (group.isEmpty()) return 0f
+            val reserveIconSpace = group.any {
+                it.iconRes != 0 || it.themedIconKind != null
+            }
+            return group.maxOf { item ->
+                val textWidthPx = textMeasurer.measure(
+                    text = AnnotatedString(itemTitle(item)),
+                    style = textStyle,
+                    maxLines = 1,
+                ).size.width.toFloat()
+                var fixedWidthDp = 24.dp
+                if (reserveIconSpace) fixedWidthDp += 30.dp
+                if (item.checked) fixedWidthDp += 30.dp
+                if (item.children.isNotEmpty()) fixedWidthDp += 30.dp
+                val rowWidthPx = textWidthPx + with(density) { fixedWidthDp.toPx() }
+                maxOf(rowWidthPx, groupWidthPx(item.children))
+            }
+        }
+
+        with(density) { groupWidthPx(items).toDp() }
+            .coerceIn(minWidth, maxWidth)
+    }
 }
 
 /**
@@ -109,14 +163,15 @@ fun NgExpandableActionMenu(
     bottomPointerWidth: Dp = 18.dp,
     bottomPointerEndOffset: Dp = 26.dp,
     menuContainerColor: Color? = null,
-    menuBorderColor: Color? = null,
     defaultExpandedItemIds: Set<Int> = emptySet(),
     variant: NgExpandableActionMenuVariant = NgExpandableActionMenuVariant.DROPDOWN,
     properties: PopupProperties = PopupProperties(),
+    sideSlideEndMargin: Dp = 8.dp,
     widthVariant: NgExpandableActionMenuWidthVariant =
-        NgExpandableActionMenuWidthVariant.STANDARD,
+        NgExpandableActionMenuWidthVariant.CONTENT,
 ) {
-    val resolvedWidth = width ?: widthVariant.width
+    val contentWidth = rememberNgExpandableActionMenuContentWidth(items)
+    val resolvedWidth = width ?: widthVariant.width ?: contentWidth
     var expandedItemIds by remember(items, defaultExpandedItemIds) {
         mutableStateOf(defaultExpandedItemIds)
     }
@@ -139,6 +194,7 @@ fun NgExpandableActionMenu(
             rowMinHeight = rowMinHeight,
             menuContainerColor = menuContainerColor,
             properties = properties,
+            endMargin = sideSlideEndMargin,
             onFullyHidden = { expandedItemIds = defaultExpandedItemIds }
         )
         return
@@ -175,19 +231,39 @@ fun NgExpandableActionMenu(
     } else {
         RoundedCornerShape(cornerRadius)
     }
-    val containerColor = menuContainerColor ?: colorResource(R.color.ng_surface_card)
+    val containerColor = menuContainerColor ?: ngDrawerContentCardColor()
+
+    if (bottomPointerHeight > 0.dp) {
+        NgBottomPointerExpandableActionMenu(
+            expanded = expanded,
+            onDismissRequest = onDismissRequest,
+            items = items,
+            expandedItemIds = expandedItemIds,
+            onToggle = { itemId ->
+                expandedItemIds = if (itemId in expandedItemIds) {
+                    expandedItemIds - itemId
+                } else {
+                    expandedItemIds + itemId
+                }
+            },
+            onItemClick = onItemClick,
+            modifier = modifier,
+            offset = offset,
+            width = resolvedWidth,
+            rowMinHeight = rowMinHeight,
+            shape = shape,
+            containerColor = containerColor,
+            properties = properties,
+            bottomPointerHeight = bottomPointerHeight,
+        )
+        return
+    }
 
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
         offset = offset,
-        modifier = if (menuBorderColor != null) {
-            modifier
-                .border(1.dp, menuBorderColor, shape)
-                .width(resolvedWidth)
-        } else {
-            modifier.width(resolvedWidth)
-        },
+        modifier = modifier.width(resolvedWidth),
         shape = shape,
         containerColor = containerColor,
         tonalElevation = 0.dp,
@@ -207,8 +283,76 @@ fun NgExpandableActionMenu(
             onItemClick = onItemClick,
             rowMinHeight = rowMinHeight
         )
-        if (bottomPointerHeight > 0.dp) {
-            Spacer(Modifier.heightIn(min = bottomPointerHeight))
+    }
+}
+
+/**
+ * 带底部指向角的菜单需要严格锚在触发段上方。Material DropdownMenu 会额外参与
+ * 窗口边界候选定位，靠近页面底部时会让业务层偏移量难以直接对应最终几何；这里
+ * 保留同款 Surface 材质与内容留白，只把定位改为明确的“菜单底边对齐锚点顶边”。
+ */
+@Composable
+private fun NgBottomPointerExpandableActionMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    items: List<NgExpandableActionMenuItem>,
+    expandedItemIds: Set<Int>,
+    onToggle: (Int) -> Unit,
+    onItemClick: (NgExpandableActionMenuItem) -> Unit,
+    modifier: Modifier,
+    offset: DpOffset,
+    width: Dp,
+    rowMinHeight: Dp,
+    shape: Shape,
+    containerColor: Color,
+    properties: PopupProperties,
+    bottomPointerHeight: Dp,
+) {
+    if (!expanded) return
+
+    val density = LocalDensity.current
+    val horizontalOffsetPx = with(density) { offset.x.roundToPx() }
+    val verticalOffsetPx = with(density) { offset.y.roundToPx() }
+    val windowMarginPx = with(density) { 8.dp.roundToPx() }
+    val positionProvider = remember(
+        horizontalOffsetPx,
+        verticalOffsetPx,
+        windowMarginPx,
+    ) {
+        NgAnchorAbovePopupPositionProvider(
+            horizontalOffsetPx = horizontalOffsetPx,
+            verticalOffsetPx = verticalOffsetPx,
+            windowMarginPx = windowMarginPx,
+        )
+    }
+
+    Popup(
+        popupPositionProvider = positionProvider,
+        onDismissRequest = onDismissRequest,
+        properties = properties,
+    ) {
+        Surface(
+            modifier = modifier.width(width),
+            shape = shape,
+            color = containerColor,
+            contentColor = Color(NgTheme.colors.onSurface),
+            tonalElevation = 0.dp,
+            shadowElevation = NgTheme.effects.overlayElevationDp.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 8.dp),
+            ) {
+                NgExpandableActionMenuRows(
+                    items = items,
+                    expandedItemIds = expandedItemIds,
+                    onToggle = onToggle,
+                    onItemClick = onItemClick,
+                    rowMinHeight = rowMinHeight,
+                )
+                Spacer(Modifier.height(bottomPointerHeight))
+            }
         }
     }
 }
@@ -235,7 +379,9 @@ private fun NgDrillInExpandableActionMenu(
         if (!expanded) activeParentId = null
     }
     val activeParent = activeParentId?.let { parentId ->
-        items.firstOrNull { it.itemId == parentId && it.children.isNotEmpty() }
+        items.firstOrNull {
+            it.itemId == parentId && it.enabled && it.children.isNotEmpty()
+        }
     }
     val visibleItems = activeParent?.children ?: items
     val shape = RoundedCornerShape(NgTheme.shapes.largeDp.dp)
@@ -249,7 +395,7 @@ private fun NgDrillInExpandableActionMenu(
         offset = offset,
         modifier = modifier.width(width),
         shape = shape,
-        containerColor = menuContainerColor ?: colorResource(R.color.ng_surface_card),
+        containerColor = menuContainerColor ?: ngDrawerContentCardColor(),
         tonalElevation = 0.dp,
         shadowElevation = NgTheme.effects.overlayElevationDp.dp,
         properties = properties
@@ -289,24 +435,28 @@ private fun NgSideSlideExpandableActionMenu(
     rowMinHeight: Dp,
     menuContainerColor: Color?,
     properties: PopupProperties,
+    endMargin: Dp,
     onFullyHidden: () -> Unit
 ) {
-    val slideFraction = remember { Animatable(1f) }
+    val slideFraction = remember {
+        Animatable(if (expanded) 0f else 1f)
+    }
     var popupVisible by remember { mutableStateOf(expanded) }
     val motion = NgTheme.snapshot.motion
     val durationMs = if (motion.enabled) motion.mediumDurationMs else 0
     val density = LocalDensity.current
-    val endMarginPx = with(density) { 8.dp.roundToPx() }
+    val endMarginPx = with(density) { endMargin.roundToPx() }
     val anchorBottomOffsetPx = with(density) { 16.dp.roundToPx() }
+    // Popup observes snapshot reads made by its position provider. Keep this
+    // provider stable so a submenu remeasure cannot recreate the slide source.
     val positionProvider = remember(
         endMarginPx,
-        anchorBottomOffsetPx,
-        slideFraction.value
+        anchorBottomOffsetPx
     ) {
         NgWindowEndBelowAnchorPopupPositionProvider(
             marginPx = endMarginPx,
             anchorBottomOffsetPx = anchorBottomOffsetPx,
-            horizontalSlideFraction = slideFraction.value
+            horizontalSlideFraction = { slideFraction.value }
         )
     }
     val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 220.dp)
@@ -342,34 +492,50 @@ private fun NgSideSlideExpandableActionMenu(
             properties = properties
         ) {
             val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
-            Surface(
-                modifier = Modifier.width(width),
-                shape = shape,
-                color = menuContainerColor ?: colorResource(R.color.ng_surface_card),
-                contentColor = Color(NgTheme.colors.onSurface),
-                border = BorderStroke(
-                    width = if (NgTheme.snapshot.isEInk) 1.dp else 0.5.dp,
-                    color = Color(NgTheme.colors.outlineVariant).copy(
-                        alpha = if (NgTheme.snapshot.isEInk) 1f else 0.45f
-                    )
-                ),
-                tonalElevation = 0.dp,
-                shadowElevation = NgTheme.effects.overlayElevationDp.dp
+            Column(
+                modifier = Modifier
+                    .width(width)
+                    .height(maxHeight)
             ) {
-                Column(
-                    modifier = Modifier
-                        .heightIn(max = maxHeight)
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 4.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = shape,
+                    color = menuContainerColor ?: ngDrawerContentCardColor(),
+                    contentColor = Color(NgTheme.colors.onSurface),
+                    border = BorderStroke(
+                        width = if (NgTheme.snapshot.isEInk) 1.dp else 0.5.dp,
+                        color = Color(NgTheme.colors.outlineVariant).copy(
+                            alpha = if (NgTheme.snapshot.isEInk) 1f else 0.45f
+                        )
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = NgTheme.effects.overlayElevationDp.dp
                 ) {
-                    NgExpandableActionMenuRows(
-                        items = items,
-                        expandedItemIds = expandedItemIds,
-                        onToggle = onToggle,
-                        onItemClick = onItemClick,
-                        rowMinHeight = rowMinHeight
-                    )
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = maxHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 4.dp)
+                    ) {
+                        NgExpandableActionMenuRows(
+                            items = items,
+                            expandedItemIds = expandedItemIds,
+                            onToggle = onToggle,
+                            onItemClick = onItemClick,
+                            rowMinHeight = rowMinHeight
+                        )
+                    }
                 }
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onDismissRequest
+                        )
+                )
             }
         }
     }
@@ -382,7 +548,7 @@ private fun NgSideSlideExpandableActionMenu(
 private class NgWindowEndBelowAnchorPopupPositionProvider(
     private val marginPx: Int,
     private val anchorBottomOffsetPx: Int,
-    private val horizontalSlideFraction: Float
+    private val horizontalSlideFraction: () -> Float
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -393,7 +559,8 @@ private class NgWindowEndBelowAnchorPopupPositionProvider(
         val maxX = (windowSize.width - popupContentSize.width - marginPx)
             .coerceAtLeast(marginPx)
         val slideOffsetPx = (
-            (popupContentSize.width + marginPx) * horizontalSlideFraction.coerceIn(0f, 1f)
+            (popupContentSize.width + marginPx) *
+                horizontalSlideFraction().coerceIn(0f, 1f)
             ).roundToInt()
         val x = when (layoutDirection) {
             LayoutDirection.Ltr -> maxX + slideOffsetPx
@@ -403,6 +570,37 @@ private class NgWindowEndBelowAnchorPopupPositionProvider(
             .coerceAtLeast(marginPx)
         val y = (anchorBounds.bottom + anchorBottomOffsetPx)
             .coerceIn(marginPx, maxY)
+        return IntOffset(x, y)
+    }
+}
+
+/**
+ * 让带底部指向角的菜单稳定展开在锚点上方；偏移量直接作用于最终位置，不再经过
+ * DropdownMenu 的多候选位置选择。
+ */
+private class NgAnchorAbovePopupPositionProvider(
+    private val horizontalOffsetPx: Int,
+    private val verticalOffsetPx: Int,
+    private val windowMarginPx: Int,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val desiredX = when (layoutDirection) {
+            LayoutDirection.Ltr -> anchorBounds.left + horizontalOffsetPx
+            LayoutDirection.Rtl -> anchorBounds.right - popupContentSize.width - horizontalOffsetPx
+        }
+        val maxX = (windowSize.width - popupContentSize.width - windowMarginPx)
+            .coerceAtLeast(windowMarginPx)
+        val x = desiredX.coerceIn(windowMarginPx, maxX)
+
+        val desiredY = anchorBounds.top - popupContentSize.height + verticalOffsetPx
+        val maxY = (windowSize.height - popupContentSize.height - windowMarginPx)
+            .coerceAtLeast(windowMarginPx)
+        val y = desiredY.coerceIn(windowMarginPx, maxY)
         return IntOffset(x, y)
     }
 }
@@ -465,7 +663,7 @@ private fun NgExpandableActionMenuRows(
                     )
                 )
             }
-            val isExpanded = item.itemId in expandedItemIds
+            val isExpanded = item.enabled && item.itemId in expandedItemIds
             NgExpandableActionMenuRow(
                 item = item,
                 isExpanded = isExpanded,
@@ -502,13 +700,13 @@ private fun NgExpandableActionMenuRow(
 ) {
     val contentColor = Color(
         if (item.danger) NgTheme.colors.error else NgTheme.colors.onSurface
-    )
+    ).copy(alpha = if (item.enabled) 1f else 0.38f)
     val themedIconKind = item.themedIconKind
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = rowMinHeight)
-            .clickable(onClick = onClick)
+            .clickable(enabled = item.enabled, onClick = onClick)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

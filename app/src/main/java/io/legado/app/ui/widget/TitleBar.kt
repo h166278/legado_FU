@@ -24,6 +24,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
+import io.legado.app.ui.design.theme.NgColorMath
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.utils.activity
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
@@ -63,6 +64,7 @@ class TitleBar @JvmOverloads constructor(
     private val fitNavigationBar: Boolean
     private val attachToActivity: Boolean
     private val opaque: Boolean
+    private var temporarySolidSurface = false
 
     init {
         val a = context.obtainStyledAttributes(
@@ -183,16 +185,8 @@ class TitleBar @JvmOverloads constructor(
                 }
             }
 
-            if (AppConfig.isEInkMode) {
-                setBackgroundResource(R.drawable.bg_eink_border_bottom)
-            } else if (!opaque && context.transparentNavBar) {
-                setBackgroundColor(Color.TRANSPARENT)
-                elevation = 0f
-            } else {
-                setBackgroundColor(context.primaryColor)
-                elevation = context.elevation
-            }
-            applyTopBarContentColor()
+            applyConfiguredBackground()
+            refreshContentColor()
 
             stateListAnimator = null
         }
@@ -204,16 +198,75 @@ class TitleBar @JvmOverloads constructor(
         attachToActivity()
         if (!isInEditMode) {
             // ActionBar 会在 attachToActivity() 时才创建返回图标，因此需在挂载后重新应用。
-            applyTopBarContentColor()
+            refreshContentColor()
         }
     }
 
-    private fun applyTopBarContentColor() {
-        val color = NgThemeResolver.resolve(context).colors.onTopBar
+    private fun applyConfiguredBackground() {
+        when {
+            AppConfig.isEInkMode -> {
+                setBackgroundResource(R.drawable.bg_eink_border_bottom)
+                elevation = 0f
+            }
+
+            !opaque && context.transparentNavBar -> {
+                setBackgroundColor(Color.TRANSPARENT)
+                elevation = 0f
+            }
+
+            else -> {
+                setBackgroundColor(context.primaryColor)
+                elevation = context.elevation
+            }
+        }
+    }
+
+    private fun applyTopBarContentColor(
+        @ColorInt color: Int = NgThemeResolver.resolve(context).colors.onTopBar
+    ) {
         setTextColor(color)
         setColorFilter(color)
         toolbar.findViewById<SearchView>(R.id.search_view)?.setContentColor(color)
         toolbar.findViewById<TabLayout>(R.id.tab_layout)?.setTabTextColors(color, color)
+    }
+
+    internal val currentContentColor: Int
+        get() {
+            val colors = NgThemeResolver.resolve(context).colors
+            return when {
+                temporarySolidSurface -> NgColorMath.readableContentColor(
+                    background = colors.surface,
+                    preferred = colors.onSurface,
+                )
+
+                AppConfig.isEInkMode || opaque || !context.transparentNavBar ->
+                    NgColorMath.readableContentColor(
+                        background = context.primaryColor,
+                        preferred = colors.onTopBar,
+                    )
+
+                else -> colors.onTopBar
+            }
+        }
+
+    internal fun refreshContentColor() {
+        applyTopBarContentColor(currentContentColor)
+    }
+
+    /**
+     * 为共享宿主中的局部工作页临时切换不透明语义表面；关闭时恢复 XML 配置的外观。
+     */
+    fun setTemporarySolidSurface(enabled: Boolean) {
+        if (isInEditMode) return
+        temporarySolidSurface = enabled
+        if (enabled && !AppConfig.isEInkMode) {
+            val colors = NgThemeResolver.resolve(context).colors
+            setBackgroundColor(colors.surface)
+            elevation = context.elevation
+        } else {
+            applyConfiguredBackground()
+        }
+        refreshContentColor()
     }
 
     fun setNavigationOnClickListener(clickListener: ((View) -> Unit)) {

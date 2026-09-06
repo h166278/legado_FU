@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.ui.main.bookshelf.BookshelfContentToolbarActionButton
@@ -55,6 +56,9 @@ internal fun BookshelfScreen(
 ) {
     val density = LocalDensity.current
     val hostView = LocalView.current
+    val backdropSource = remember(hostView) {
+        hostView.rootView.findViewById<View>(R.id.bookshelf_content_panel)
+    }
     val dockProgress = remember { Animatable(0f) }
     val topInset = with(density) { dockContentTopInsetPx.toDp() }
     val dockTranslation = with(density) { (-4).dp.toPx() }
@@ -62,6 +66,15 @@ internal fun BookshelfScreen(
         configuredStyle = configuredTopBarStyle,
         groupGridMode = groupGridMode,
     )
+    val navigationGroupIndices = remember(dockGroups) {
+        dockGroups.indices.filter { index ->
+            dockGroups[index].groupId != BookGroup.IdNoGroup
+        }
+    }
+    val navigationGroups = navigationGroupIndices.map(dockGroups::get)
+    val navigationSelectedIndex = navigationGroupIndices
+        .indexOf(selectedGroupIndex)
+        .coerceAtLeast(0)
 
     LaunchedEffect(Unit) {
         dockProgress.animateTo(
@@ -109,19 +122,25 @@ internal fun BookshelfScreen(
                 contentTopInsetPx = dockContentTopInsetPx,
                 transparencyPercent = dockTransparency,
                 searchPosition = dockSearchPosition,
+                backdropSource = backdropSource,
                 modifier = dockModifier,
             )
         } else {
             BookshelfFloatingDock(
-                groups = dockGroups,
-                selectedIndex = selectedGroupIndex,
+                groups = navigationGroups,
+                selectedIndex = navigationSelectedIndex,
                 onSearchClick = onSearchClick,
-                onGroupClick = onGroupClick,
-                onGroupLongClick = onGroupLongClick,
+                onGroupClick = { index ->
+                    navigationGroupIndices.getOrNull(index)?.let(onGroupClick)
+                },
+                onGroupLongClick = { index ->
+                    navigationGroupIndices.getOrNull(index)?.let(onGroupLongClick)
+                },
                 topDistancePx = dockTopDistancePx,
                 contentTopInsetPx = dockContentTopInsetPx,
                 transparencyPercent = dockTransparency,
                 searchPosition = dockSearchPosition,
+                backdropSource = backdropSource,
                 modifier = dockModifier,
             )
             BookshelfContentToolbar(

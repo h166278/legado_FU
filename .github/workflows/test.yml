@@ -3,7 +3,6 @@ name: Test Build
 on:
   push:
     branches:
-      - main
       - release
       - 'beta-*'
   pull_request:
@@ -56,12 +55,7 @@ jobs:
             CHANNEL="beta"
             PUBLISH="true"
             PRERELEASE="true"
-            TAG_NAME="beta-${GITHUB_RUN_NUMBER}"
-          elif [[ "$REF_NAME" == main ]]; then
-            CHANNEL="release"
-            PUBLISH="true"
-            PRERELEASE="false"
-            TAG_NAME="${{ steps.set-ver.outputs.version }}"
+            TAG_NAME="beta"
           fi
 
           if [[ "$CHANNEL" == "release" ]]; then
@@ -83,103 +77,17 @@ jobs:
           echo "DEBUG: CHANNEL=$CHANNEL PUBLISH=$PUBLISH PRERELEASE=$PRERELEASE TAG_NAME=$TAG_NAME"
           echo "DEBUG: COMMIT_RANGE=$COMMIT_RANGE"
 
-          translate_subject() {
-            local subject="$1"
-            local detail="$subject"
-            local category="更新"
-
-            case "$subject" in
-              feat:*|feature:*)
-                category="功能"
-                detail="${subject#*: }" ;;
-              fix:*|bugfix:*)
-                category="修复"
-                detail="${subject#*: }" ;;
-              refactor:*)
-                category="重构"
-                detail="${subject#*: }" ;;
-              perf:*)
-                category="优化"
-                detail="${subject#*: }" ;;
-              docs:*)
-                category="文档"
-                detail="${subject#*: }" ;;
-              chore:*|build:*|ci:*)
-                category="构建"
-                detail="${subject#*: }" ;;
-              修复*|修正*|解决*)
-                category="修复"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(修复|修正|解决)[：:[:space:]]*//') ;;
-              优化*|改进*|调整*|微调*)
-                category="优化"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(优化|改进|调整|微调)[：:[:space:]]*//') ;;
-              新增*|增加*|支持*|恢复*)
-                category="新增"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(新增|增加|支持|恢复)[：:[:space:]]*//') ;;
-              重构*)
-                category="重构"
-                detail=$(printf '%s' "$subject" | sed -E 's/^重构[：:[:space:]]*//') ;;
-              构建*|编译*|依赖*)
-                category="构建"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(构建|编译|依赖)[：:[:space:]]*//') ;;
-              文档*|说明*)
-                category="文档"
-                detail=$(printf '%s' "$subject" | sed -E 's/^(文档|说明)[：:[:space:]]*//') ;;
-            esac
-
-            # 未明确分类但表达改进意图的提交，归入优化；更新继续作为兜底分类。
-            if [[ "$category" == "更新" && "$subject" == *遵循* ||
-                "$category" == "更新" && "$subject" == *统一* ||
-                "$category" == "更新" && "$subject" == *适配* ||
-                "$category" == "更新" && "$subject" == *兼容* ||
-                "$category" == "更新" && "$subject" == *完善* ||
-                "$category" == "更新" && "$subject" == *细化* ||
-                "$category" == "更新" && "$subject" == *改良* ||
-                "$category" == "更新" && "$subject" == *调整* ]]; then
-              category="优化"
-            fi
-
-            detail=$(printf '%s' "$detail" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')
-            echo "$category|$detail"
-          }
-
           UPDATED_CONTENT=""
           if git rev-parse "$COMMIT_RANGE" >/dev/null 2>&1; then
-            RAW_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"%s" --reverse 2>/dev/null \
-              | grep -vE '^(Merge|Sync upstream)$' \
-              | grep -vE '^$' \
-              | awk '!seen[$0]++' \
-              | while IFS= read -r subject; do translate_subject "$subject"; done || true)
-            UPDATED_CONTENT=$(printf '%s\n' "$RAW_CONTENT" | awk -F'|' '
-              BEGIN { count = 0 }
-              NF >= 2 {
-                category = $1
-                detail = $2
-                if (!(category in seenCategory)) {
-                  seenCategory[category] = 1
-                  order[++count] = category
-                }
-                key = category SUBSEP detail
-                if (!(key in seenItem)) {
-                  seenItem[key] = 1
-                  items[category] = items[category] "\n- " detail
-                }
-              }
-              END {
-                for (i = 1; i <= count; i++) {
-                  category = order[i]
-                  print "### " category
-                  print items[category]
-                  print ""
-                }
-              }')
+            UPDATED_CONTENT=$(git log "$COMMIT_RANGE" --pretty=format:"* %s" --reverse 2>/dev/null \
+              | grep -vE '^\* (Merge|Sync upstream)' \
+              | grep -vE '^\* $' || true)
           else
             echo "DEBUG: invalid commit range, fallback to last commit"
           fi
 
           if [ -z "$UPDATED_CONTENT" ]; then
-            FALLBACK_CONTENT=$(translate_subject "$(git log -1 --pretty=format:"%s")")
-            UPDATED_CONTENT=$(printf '%s\n' "$FALLBACK_CONTENT" | awk -F'|' 'NF >= 2 { print "### " $1; print "- " $2 }')
+            UPDATED_CONTENT=$(git log -1 --pretty=format:"* %s")
           fi
 
           CONTENT_JSON=$(echo "$UPDATED_CONTENT" | jq -Rs . 2>/dev/null || echo "\"Error generating update content\"")
@@ -252,17 +160,22 @@ jobs:
           echo "$RELEASE_KEY_STORE" | base64 --decode > "$GITHUB_WORKSPACE/app/key.jks"
 
       - name: Build With Gradle
+        continue-on-error: true
         run: |
           typeName="${{ env.CHANNEL }}"
+          updateChannel="official"
+          if [ "$typeName" = "beta" ]; then
+            updateChannel="beta"
+          fi
           echo "统一版本号"
           sed "/def version/c def version = \"${{ env.VERSION }}\"" $GITHUB_WORKSPACE/app/build.gradle  -i
           echo "开始${{ env.product }}$typeName构建"
           chmod +x gradlew
-          ./gradlew assemble${{ env.product }}release --build-cache --parallel --daemon --warning-mode all
+          ./gradlew assemble${{ env.product }}release -PUPDATE_CHANNEL="$updateChannel" --build-cache --parallel --daemon --warning-mode all
           echo "修改APK文件名"
           mkdir -p ${{ github.workspace }}/apk/
           for file in `ls ${{ github.workspace }}/app/build/outputs/apk/*/*/*.apk`; do
-            mv "$file" ${{ github.workspace }}/apk/legado_fu_${{ env.VERSIONL }}_$typeName.apk
+            mv "$file" ${{ github.workspace }}/apk/legado_NG_${{ env.VERSIONL }}_$typeName.apk
           done
           echo "移动mapping文件"
           mkdir -p ${{ github.workspace }}/mapping/
@@ -313,7 +226,7 @@ jobs:
 
   publish:
     needs: [ prepare, build ]
-    if: github.event_name != 'pull_request' && github.repository == 'h166278/legado_FU' && needs.prepare.outputs.publish == 'true'
+    if: github.event_name != 'pull_request' && github.repository == 'joestar817/legado_NG' && needs.prepare.outputs.publish == 'true'
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
@@ -330,10 +243,27 @@ jobs:
           mv */*.apk .
           rm -rf */
 
+      - name: Delete Beta Release
+        if: needs.prepare.outputs.channel == 'beta'
+        run: |
+          if gh release view beta &>/dev/null; then
+            gh release delete beta -y
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create or update beta tag
+        if: needs.prepare.outputs.channel == 'beta'
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: beta
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          name: legado_fu_${{ env.VERSION }}
+          name: legado_ng_${{ env.VERSION }}
           tag_name: ${{ needs.prepare.outputs.tag_name }}
           body: |
             ### 更新内容

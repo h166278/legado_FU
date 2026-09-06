@@ -1,5 +1,6 @@
 package io.legado.app.help.config
 
+import android.content.res.Resources
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -25,10 +26,13 @@ import io.legado.app.utils.getFile
 import io.legado.app.utils.getMeanColor
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
+import io.legado.app.utils.isNightMode
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
+import io.legado.app.utils.putPrefString
 import io.legado.app.utils.resizeAndRecycle
 import splitties.init.appCtx
 import java.io.File
@@ -45,6 +49,32 @@ internal fun resolveBundledReadBackgroundName(backgroundName: String): String = 
     "秋山书意-夜间.png" -> "秋山书意-夜间.webp"
     else -> backgroundName
 }
+
+enum class ReadThemeMode(val storageValue: String) {
+    FOLLOW_SYSTEM("follow"),
+    DAY("day"),
+    NIGHT("night");
+
+    companion object {
+        fun fromStorage(value: String?): ReadThemeMode? =
+            entries.firstOrNull { it.storageValue == value }
+    }
+}
+
+internal fun resolveReadThemeNightMode(
+    mode: ReadThemeMode,
+    systemNightMode: Boolean,
+): Boolean = when (mode) {
+    ReadThemeMode.FOLLOW_SYSTEM -> systemNightMode
+    ReadThemeMode.DAY -> false
+    ReadThemeMode.NIGHT -> true
+}
+
+internal fun resolveReadThemeMode(
+    storedMode: String?,
+    legacyNightTheme: Boolean,
+): ReadThemeMode = ReadThemeMode.fromStorage(storedMode)
+    ?: if (legacyNightTheme) ReadThemeMode.NIGHT else ReadThemeMode.DAY
 
 @Suppress("ConstPropertyName")
 @Keep
@@ -79,8 +109,22 @@ object ReadBookConfig {
     var isNineBgImg = false
 
     init {
+        val hasStoredReadConfig = File(configFilePath).isFile
         initConfigs()
         initShareConfig()
+        val legacyRuleGroups = configList.map { it.highlightRules } +
+            listOf(shareConfig.highlightRules)
+        ReadHighlightRuleStore.initialize(
+            legacyRuleGroups = legacyRuleGroups,
+            preferredIndex = if (appCtx.getPrefBoolean(PreferKey.shareLayout, false)) {
+                legacyRuleGroups.lastIndex
+            } else {
+                appCtx.getPrefInt(PreferKey.readStyleSelect)
+            },
+            defaultRules = DefaultData.readHighlightRules,
+            useDefaultsWhenLegacyEmpty = !hasStoredReadConfig,
+        )
+        if (clearEmbeddedHighlightRules()) save()
     }
 
     @Synchronized
@@ -205,13 +249,15 @@ object ReadBookConfig {
     fun restoreCurrentDefault(): Boolean {
         val index = styleSelect.takeIf(configList.indices::contains) ?: return false
         val default = defaultConfig(configList[index].name) ?: return false
-        configList[index] = default.detachedCopy()
+        configList[index] = default.detachedCopy().apply { highlightRules.clear() }
         save()
         return true
     }
 
     fun restoreAllDefaults(): Boolean {
-        val defaults = DefaultData.readConfigs.map { it.detachedCopy() }
+        val defaults = DefaultData.readConfigs.map {
+            it.detachedCopy().apply { highlightRules.clear() }
+        }
         if (defaults.isEmpty()) return false
         configList.clear()
         configList.addAll(defaults)
@@ -246,6 +292,26 @@ object ReadBookConfig {
         highlightRules = ArrayList(highlightRules.map { it.copy() }),
         ngUnknownFields = ngUnknownFields.toMap(),
     )
+
+    private fun clearEmbeddedHighlightRules(): Boolean {
+        var changed = false
+        (configList + shareConfig).forEach { config ->
+            if (config.highlightRules.isNotEmpty()) {
+                config.highlightRules.clear()
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    internal fun migrateRestoredEmbeddedHighlightRules() {
+        val migrated = migrateLegacyReadHighlightRules(
+            ruleGroups = configList.map { it.highlightRules } + listOf(shareConfig.highlightRules),
+            preferredIndex = readStyleSelect,
+        )
+        ReadHighlightRuleStore.replace(migrated)
+        if (clearEmbeddedHighlightRules()) save()
+    }
 
     private fun resetAll() {
         restoreAllDefaults()
@@ -296,17 +362,42 @@ object ReadBookConfig {
             }
         }
 
+    var readFloatingFollowAppGlobally = appCtx.getPrefBoolean(
+        PreferKey.readFloatingFollowAppGlobally,
+        false,
+    )
+        set(value) {
+            field = value
+            if (appCtx.getPrefBoolean(PreferKey.readFloatingFollowAppGlobally, false) != value) {
+                appCtx.putPrefBoolean(PreferKey.readFloatingFollowAppGlobally, value)
+            }
+        }
+
+    var readFloatingGlobalColorStyle = ReadFloatingColorStyle.fromStorage(
+        appCtx.getPrefString(PreferKey.readFloatingGlobalColorStyle)
+    )
+        set(value) {
+            field = value
+            if (appCtx.getPrefString(PreferKey.readFloatingGlobalColorStyle) != value.storageValue) {
+                appCtx.putPrefString(PreferKey.readFloatingGlobalColorStyle, value.storageValue)
+            }
+        }
+
+    fun reloadGlobalReadFloatingColorPreferences() {
+        readFloatingFollowAppGlobally = appCtx.getPrefBoolean(
+            PreferKey.readFloatingFollowAppGlobally,
+            false,
+        )
+        readFloatingGlobalColorStyle = ReadFloatingColorStyle.fromStorage(
+            appCtx.getPrefString(PreferKey.readFloatingGlobalColorStyle)
+        )
+    }
+
     private fun normalizeAutoReadPageMode(value: Int): Int = when (value) {
         PageAnim.coverPageAnim -> PageAnim.coverPageAnim
         else -> PageAnim.scrollPageAnim
     }
     var isNightTheme = appCtx.getPrefBoolean(PreferKey.readNightTheme, false)
-        get() = if (AppConfig.themeMode == THEME_MODE_FOLLOW_SYSTEM) {
-            // 跟随系统时，阅读页不能继续使用独立保存的日间状态。
-            AppConfig.isSystemNightTheme
-        } else {
-            field
-        }
         set(value) {
             field = value
             if (appCtx.getPrefBoolean(PreferKey.readNightTheme, false) != value) {
@@ -314,7 +405,31 @@ object ReadBookConfig {
             }
         }
 
-    private const val THEME_MODE_FOLLOW_SYSTEM = "0"
+    fun currentThemeMode(): ReadThemeMode = resolveReadThemeMode(
+        storedMode = appCtx.getPrefString(PreferKey.readThemeMode),
+        legacyNightTheme = isNightTheme,
+    )
+
+    fun selectThemeMode(
+        mode: ReadThemeMode,
+        systemNightMode: Boolean = Resources.getSystem().configuration.isNightMode,
+    ): Boolean {
+        appCtx.putPrefString(PreferKey.readThemeMode, mode.storageValue)
+        return updateEffectiveNightTheme(resolveReadThemeNightMode(mode, systemNightMode))
+    }
+
+    fun syncFollowSystemTheme(
+        systemNightMode: Boolean = Resources.getSystem().configuration.isNightMode,
+    ): Boolean {
+        if (currentThemeMode() != ReadThemeMode.FOLLOW_SYSTEM) return false
+        return updateEffectiveNightTheme(systemNightMode)
+    }
+
+    private fun updateEffectiveNightTheme(night: Boolean): Boolean {
+        if (isNightTheme == night) return false
+        isNightTheme = night
+        return true
+    }
 
     /**
      * 两端对齐
@@ -331,6 +446,17 @@ object ReadBookConfig {
     var useZhLayout = appCtx.getPrefBoolean(PreferKey.useZhLayout)
 
     val config get() = if (shareLayout) shareConfig else durConfig
+
+    internal fun effectiveReadFloatingColor(
+        preset: Config = durConfig,
+    ): EffectiveReadFloatingColor = resolveEffectiveReadFloatingColor(
+        isEInk = AppConfig.isEInkMode,
+        globallyFollowsApplication = readFloatingFollowAppGlobally,
+        globalColorStyle = readFloatingGlobalColorStyle,
+        presetSeed = preset.curReadFloatingSeed(),
+        presetFollowsApplication = preset.curReadFloatingFollowsApplication(),
+        presetColorStyle = preset.curReadFloatingColorStyle(),
+    )
 
     var bgAlpha: Int
         get() = config.bgAlpha
@@ -485,11 +611,7 @@ object ReadBookConfig {
             config.dottedRatio = value
         }
     val highlightRules: List<ReadHighlightRule>
-        get() = config.highlightRules
-            .asSequence()
-            .filter(ReadHighlightRule::enabled)
-            .sortedBy(ReadHighlightRule::position)
-            .toList()
+        get() = ReadHighlightRuleStore.enabledRules()
 
     var paddingBottom: Int
         get() = config.paddingBottom
@@ -581,7 +703,12 @@ object ReadBookConfig {
         // 修复：原实现把 durConfig 与 shareConfig 杂交（部分字段覆盖、部分不覆盖），
         // 导致页眉/页脚/字体等字段取到 shareConfig 的默认值而丢失，背景/文字颜色
         // 等未覆盖字段又取 durConfig，导出的排版包与用户实际生效的设置不一致。
-        return if (shareLayout) shareConfig.copy() else durConfig.copy()
+        // 高亮规则由 ReadHighlightRuleStore 全局维护，不随排版包导出。
+        return if (shareLayout) {
+            shareConfig.copy(highlightRules = arrayListOf())
+        } else {
+            durConfig.copy(highlightRules = arrayListOf())
+        }
     }
 
     fun import(byteArray: ByteArray): Config = importWithReport(byteArray).config
@@ -594,10 +721,26 @@ object ReadBookConfig {
         return ReadStylePackageManager.export(getExportConfig(), output)
     }
 
+    internal data class AppendImportedConfigResult(
+        val index: Int,
+        val highlightRuleMerge: ReadHighlightRuleMergeResult?,
+    )
+
     fun findPresetIndexByName(name: String): Int =
         configList.indexOfFirst { it.name == name }
 
-    internal fun appendImportedConfig(config: Config, replaceIndex: Int? = null): Int {
+    internal fun appendImportedConfig(config: Config, replaceIndex: Int? = null): Int =
+        appendImportedConfigWithReport(config, replaceIndex).index
+
+    internal fun appendImportedConfigWithReport(
+        config: Config,
+        replaceIndex: Int? = null,
+    ): AppendImportedConfigResult {
+        val importedRules = config.highlightRules.toList()
+        config.highlightRules.clear()
+        val ruleMerge = importedRules.takeIf { it.isNotEmpty() }?.let {
+            ReadHighlightRuleStore.merge(it, replaceMatchingIds = false)
+        }
         val index = replaceIndex?.takeIf { it in configList.indices } ?: run {
             configList.add(config)
             configList.lastIndex
@@ -613,7 +756,7 @@ object ReadBookConfig {
             shareConfig = config.detachedCopy()
         }
         save()
-        return index
+        return AppendImportedConfigResult(index, ruleMerge)
     }
 
     @Keep
@@ -628,6 +771,8 @@ object ReadBookConfig {
         var bgTypeEInk: Int = 0,//EInk背景类型
         @SerializedName("readFloatingSeed") var readFloatingSeed: Int = 0,
         @SerializedName("readFloatingSeedNight") var readFloatingSeedNight: Int = 0,
+        @SerializedName("readFloatingFollowAppNight")
+        var readFloatingFollowAppNight: Boolean? = null,
         @SerializedName("readFloatingTransparency")
         var readFloatingTransparency: Int = ReadFloatingAppearanceConfig.DEFAULT_TRANSPARENCY_PERCENT,
         @SerializedName("readFloatingPrimaryStrength")
@@ -716,6 +861,7 @@ object ReadBookConfig {
         var tipDividerColor: Int = -1,
         var headerMode: Int = 2,
         var footerMode: Int = 0,
+        /** 仅用于兼容旧配置和排版包传输；运行时规则由 [ReadHighlightRuleStore] 持有。 */
         @SerializedName("highlightRules") var highlightRules: ArrayList<ReadHighlightRule> = arrayListOf(),
         @SerializedName("ngReadStyleSource") var ngReadStyleSource: String? = null,
         @SerializedName("ngUnknownFields") var ngUnknownFields: Map<String, String> = emptyMap(),
@@ -903,6 +1049,7 @@ object ReadBookConfig {
             val opaqueColor = color or 0xFF000000.toInt()
             if (ReadBookConfig.isNightTheme) {
                 readFloatingSeedNight = opaqueColor
+                readFloatingFollowAppNight = false
             } else {
                 readFloatingSeed = opaqueColor
             }
@@ -911,6 +1058,7 @@ object ReadBookConfig {
         fun clearCurReadFloatingSeed() {
             if (ReadBookConfig.isNightTheme) {
                 readFloatingSeedNight = 0
+                readFloatingFollowAppNight = true
             } else {
                 readFloatingSeed = 0
             }
@@ -920,6 +1068,17 @@ object ReadBookConfig {
             AppConfig.isEInkMode -> 0
             ReadBookConfig.isNightTheme -> readFloatingSeedNight
             else -> readFloatingSeed
+        }
+
+        /**
+         * 旧内置预设只验收过日间种子，夜间的 0 不是用户显式选择“跟随应用”。
+         * 新选择会写入独立标记；旧数据仅在日夜种子都为空时延续跟随语义。
+         */
+        fun curReadFloatingFollowsApplication(): Boolean = when {
+            AppConfig.isEInkMode -> false
+            ReadBookConfig.isNightTheme -> readFloatingSeedNight == 0 &&
+                (readFloatingFollowAppNight ?: (readFloatingSeed == 0))
+            else -> readFloatingSeed == 0
         }
 
         fun curReadFloatingTransparency(): Int =

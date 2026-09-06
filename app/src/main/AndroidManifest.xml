@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- QuickJS client rejects API < 23 before loading the dependency; core app remains API 21. -->
+    <uses-sdk tools:overrideLibrary="com.dokar.quickjs" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
@@ -194,9 +197,6 @@
         <activity
             android:name=".ui.book.character.BookStoryboardActivity"
             android:launchMode="singleTop" />
-        <activity
-            android:name=".ui.book.character.BookCharacterEditActivity"
-            android:windowSoftInputMode="adjustResize|stateHidden" />
         <!-- 音频播放界面 -->
         <activity
             android:name="io.legado.app.ui.book.audio.AudioPlayActivity"
@@ -224,15 +224,14 @@
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize|stateHidden" />
-        <!-- 订阅源编辑 -->
         <activity
-            android:name=".ui.rss.source.edit.RssSourceEditActivity"
+            android:name=".ui.book.source.edit.JsSourceEditActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize|stateHidden" />
-        <!-- 替换规则编辑 -->
+        <!-- 订阅源编辑 -->
         <activity
-            android:name=".ui.replace.edit.ReplaceEditActivity"
+            android:name=".ui.rss.source.edit.RssSourceEditActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize|stateHidden" />
@@ -261,6 +260,10 @@
         <!-- 书源管理 -->
         <activity
             android:name=".ui.book.source.manage.BookSourceActivity"
+            android:launchMode="singleTop"
+            android:screenOrientation="behind" />
+        <activity
+            android:name=".ui.book.source.manage.BookSourceCheckActivity"
             android:launchMode="singleTop"
             android:screenOrientation="behind" />
         <!-- 订阅源管理 -->

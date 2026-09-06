@@ -1,114 +1,140 @@
-# 阅读FU
+<div align="center">
 
-> 基于 [legado_NG](https://github.com/joestar817/legado_NG) 合并演进的开源阅读器，集成多项面向实际阅读体验的改进。
+<img width="128" height="128" src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="Legado NG" />
 
-本仓库为“阅读FU”的 GitHub 主页，包含 `joestar817/legado_NG` 最新 `main` 的完整代码，并在此基础上维护 FU 功能分支。上游功能、书源规则、WebDAV、TXT/EPUB 阅读和规则引擎等能力继续保留。
+# 阅读 NG · Legado NG
 
-## 阅读FU 独有功能
+### Next Generation Legado
 
-以下功能是本项目相对上游 `legado_NG` 增加或整合的主要改动。
+**致力于打造下一代阅读体验**
 
-### 1. Lottie 高级章节标题
+保留自定义书源、本地阅读与高度可定制能力，<br>
+带来统一的 NG 界面、AI 辅助阅读、多角色听书与动态主题体验。
 
-阅读页支持使用 Lottie 动画作为章节标题样式，让章节切换和标题展示更具表现力。
+[![GitHub Stars](https://img.shields.io/github/stars/joestar817/legado_NG?style=flat-square&logo=github)](https://github.com/joestar817/legado_NG/stargazers)
+[![GitHub Release](https://img.shields.io/github/v/release/joestar817/legado_NG?include_prereleases&style=flat-square&label=release)](https://github.com/joestar817/legado_NG/releases/latest)
+[![GitHub Downloads](https://img.shields.io/github/downloads/joestar817/legado_NG/total?style=flat-square&label=downloads)](https://github.com/joestar817/legado_NG/releases)
+[![License](https://img.shields.io/github/license/joestar817/legado_NG?style=flat-square)](LICENSE)
 
-- 支持 Lottie 高级章节标题资源。
-- 支持标题样式包的导入、管理和应用。
-- 对 Lottie 资源解析和加载失败进行保护，避免异常资源导致阅读页崩溃。
-- 预览和正式阅读使用一致的字体资源处理逻辑。
+**[下载最新版](https://github.com/joestar817/legado_NG/releases/latest)** ·
+**[使用帮助](app/src/main/assets/web/help/md/appHelp.md)** ·
+**[交流反馈](https://t.me/+lYttMZGrQ1RkOTE1)** ·
+**[English](English.md)**
 
-### 2. 高级标题字号与字重调节
+</div>
 
-高级章节标题不再只能使用固定样式，可以直接调整标题的显示比例和字体粗细。
+## 为什么选择 Legado NG
 
-- 提供标题字号滑块，支持 `50%` 至 `200%` 的显示比例。
-- 提供标题字重调节，适配不同字体和不同阅读主题。
-- 修改设置后即时生效，不需要重新进入阅读页。
-- 标题预览与实际阅读效果保持同步。
+- **更现代、美观的 UI**：主要页面经过重新设计，提供统一的 NG 界面与丰富的主题效果。
+- **融入 AI 生态**：支持 AI 净化、AI 扫书、阅读助手、Skills、工具调用与 MCP。
+- **完全重构的 TTS 体系**：重新设计朗读引擎、发音人和角色音色管理，支持多人朗读与有声书播放。
 
-### 3. 阿拉伯章节序号自动转换为中文
+## 核心能力
 
-对目录、阅读页和书架中的数字章节标题进行统一转换，提升中文网文阅读体验。
+|  | 功能 | 说明 |
+| :---: | --- | --- |
+| 📖 | 在线与本地阅读 | 支持自定义书源、多源搜索、发现、换源、目录与正文规则，也可扫描或导入本地 TXT、EPUB 文件 |
+| 🗂️ | 书架与书籍管理 | 支持列表、网格、分组、排序、阅读记录、书签、关联作品和单本书快捷操作 |
+| 🎨 | NG 界面与主题 | 支持透明／液态玻璃视觉体系、柔光与动态场景主题、独立阅读配色、悬浮控件和多种翻页方式 |
+| ✨ | AI 阅读辅助 | 支持段落／章节净化、替换规则生成、书籍分析、角色卡和基于当前书籍上下文的对话 |
+| 🎧 | 多角色听书 | 支持系统及在线朗读引擎、角色分镜、音色路由、跨章播放、预缓存、进度跳转与有声书离线缓存 |
+| 🧩 | 书源与规则 | 支持书源导入、编辑、登录、分组、批量操作、步骤调试，以及替换规则分组、作用域和生效结果查看 |
+| 🔌 | AI 与扩展能力 | 支持多 AI 提供商、Skills、工具调用和内置 MCP 服务，为书籍、章节、缓存与上下文提供扩展入口 |
+| ☁️ | 数据与配置 | 支持 WebDAV 备份恢复，以及书源、订阅源、主题、阅读排版和朗读引擎配置导入 |
+| 🛠️ | 调试与日志 | 支持书源步骤调试、代码高亮、调试日志、网络日志、敏感信息脱敏和日志导出 |
 
-```text
-1.       -> 第一章
-10.      -> 第十章
-938.     -> 第九百三十八章
-```
+## 当前状态
 
-- 网络书源和本地 TXT 均支持。
-- 目录、阅读页、书架统一显示转换后的章节号。
-- 已有“第X章”“卷”“非数字标题”等内容不会被重复改写。
-- 转换逻辑按完整数字处理，不会把章节编号简单拆成逐位数字。
+Legado NG 本轮主要界面与体验重构已基本收口，当前重点转向稳定性、兼容性、性能和细节打磨。
 
-### 4. 排版导入与导出修复
+- 基础阅读、书架、搜索换源、规则管理、设置与备份等主要流程可正常使用。
+- AI、在线朗读和 MCP 能力需要用户自行配置相应服务。
+- 隔离式 QuickJS 仅用于少量有特殊需求的 JS 书源，目前属于实验性能力。
+- 新功能与界面细节仍会根据实际使用反馈继续调整。
 
-修复阅读排版包在导入、导出和备份恢复过程中的配置丢失问题。
+## UI 展示
 
-- 修复排版导出时字段丢失的问题。
-- 跟随共享排版时，完整导出共享配置，不再与预设配置错误混合。
-- 导入排版包后，预设配置会正确同步为共享配置。
-- 重新导入同一排版包时会校验资源完整性，缺失资源会自动补装。
-- 备份和恢复会携带 `read_style_packages/`，换机或清理数据后排版字体不再无故丢失。
-- 字体加载失败时不会清空已经保存的排版字体设置，避免设置被永久重置为系统默认字体。
+以下截图展示“我的”、AI 提供商、发音人管理和关于页面，不包含书架作品或正文内容。
 
-### 5. 唤醒菜单保留页眉
+<p align="center">
+  <a href="docs/images/readme/ng-my.webp"><img src="docs/images/readme/ng-my.webp" width="23%" alt="Legado NG 我的页面" /></a>
+  <a href="docs/images/readme/ng-ai-providers.webp"><img src="docs/images/readme/ng-ai-providers.webp" width="23%" alt="Legado NG AI 提供商管理" /></a>
+  <a href="docs/images/readme/ng-tts-voices.webp"><img src="docs/images/readme/ng-tts-voices.webp" width="23%" alt="Legado NG 发音人管理" /></a>
+  <a href="docs/images/readme/ng-about.webp"><img src="docs/images/readme/ng-about.webp" width="23%" alt="Legado NG 关于页面" /></a>
+</p>
 
-优化阅读页唤醒菜单的显示行为：打开菜单时保留页面顶部页眉，不再因为菜单显隐而错误隐藏页眉。
+## 下载与开始使用
 
-该修复同时覆盖不同阅读页面实现，包括 `PageView` 和 `ReadView`，减少阅读过程中顶部状态和导航信息突然消失的问题。
+前往 **[GitHub Releases](https://github.com/joestar817/legado_NG/releases/latest)** 下载最新 APK。
 
-### 6. 独立应用标识
+首次使用时，可以导入自己的书源或订阅源，也可以直接导入本地 TXT／EPUB 文件。AI 与在线朗读能力均为可选配置，不影响基础阅读功能。
 
-阅读FU 使用独立的应用名称和包名，可以与官方阅读、阅读NG 并行安装，方便对比体验和迁移数据。
+Legado NG 使用独立包名前缀，可与阅读原版、阅读 Sigma 同时安装，应用数据相互独立。
 
-```text
-应用名：阅读FU
-正式版包名：io.legado.fu.release
-测试版包名：io.legado.fu.debug
-```
+| 类型 | 包名 |
+| --- | --- |
+| 对外分发版 | `io.legado.app.ng.release` |
+| 调试版 | `io.legado.app.ng.debug` |
 
-## 与上游的区别
+## 项目关系
 
-| 功能 | 官方 Legado | legado_NG | 阅读FU |
-|---|---:|---:|---:|
-| Lottie 高级章节标题 | - | 基础支持/持续演进 | 完整整合与稳定性修复 |
-| 高级标题字号滑块 | - | - | `50%` - `200%` |
-| 高级标题字重调节 | - | - | 支持并即时生效 |
-| 阿拉伯章节号转中文 | - | 局部规则支持 | 目录、阅读页、书架全局支持 |
-| 排版导入/导出与字体恢复 | 基础能力 | 部分支持 | 完整修复与资源完整性校验 |
-| 唤醒菜单保留页眉 | - | - | `PageView` / `ReadView` 均支持 |
-| 独立应用包名 | 官方包名 | NG 包名 | `io.legado.fu.release` |
+Legado NG 基于 Legado 生态及阅读 Sigma 的历史代码基础持续演进，保留规则生态与高度自定义能力，同时独立推进 NG 界面、AI 阅读、多角色听书和动态主题等方向。
 
-## 合并与冲突修复
+项目名称中的“NG”代表 **Next Generation**，中文名称统一使用“阅读 NG”，英文名称统一使用“Legado NG”。
 
-本项目已完成上游代码与 FU 功能的合并，并处理阅读页面相关冲突：
+## 使用须知
 
-- 解决 `ReadView.kt` 中 `upTipVisibility` 方法冲突。
-- 解决 `ReadView.kt` 中 `setTextHighlights` 方法冲突。
-- 保留上游最新代码，同时保留 FU 的高级标题、排版、章节号和阅读页行为改进。
-- 合并参考提交：`83fff9339`。
+Legado NG 只提供阅读器、规则引擎和相关管理工具，不提供任何书籍、书源、订阅源或其他内容服务。
 
-## 构建
+应用中的网页访问、自定义规则、第三方书源、订阅源及其他外部数据均由用户自行配置或导入。项目开发者不制作、不维护、不分发第三方内容源，也无法保证第三方数据的合法性、可用性或安全性。
 
-```bash
-./gradlew assembleAppRelease
-```
+使用者应遵守所在地法律法规，并自行确认和承担所使用数据来源及内容的责任。
 
-GitHub Actions 已配置 `test.yml` 和 `release.yml`，推送到 `main` 后会自动触发构建。
+## 交流与帮助
 
-未配置签名 Secrets 时，Actions 会生成未签名的 release APK。配置签名需要以下仓库 Secrets：
+- [下载最新版](https://github.com/joestar817/legado_NG/releases/latest)
+- [应用更新日志](app/src/main/assets/updateLog.md)
+- [使用帮助](app/src/main/assets/web/help/md/appHelp.md)
+- [Telegram 交流反馈群组](https://t.me/+lYttMZGrQ1RkOTE1)
+- [GitHub Issues](https://github.com/joestar817/legado_NG/issues)
 
-- `RELEASE_KEY_STORE`：经过 base64 编码的 JKS 文件
-- `RELEASE_KEY_ALIAS`
-- `RELEASE_KEY_PASSWORD`
-- `RELEASE_STORE_PASSWORD`
+反馈问题时，建议同时提供应用版本、Android 版本、复现步骤，以及必要的日志或截图。
+
+## 动态主题与动效素材来源
+
+Legado NG 的“湖畔樱花”“好奇猫咪”动态主题及播放器“雨夜”动效，使用了由 Wallpaper Engine 创意工坊社区作品适配而来的场景素材。本项目免费开源，不单独销售这些素材：
+
+- “湖畔樱花”：取材自 [Workshop 3056182945「樱花」](https://steamcommunity.com/sharedfiles/filedetails/?id=3056182945)
+- “好奇猫咪”：取材自 [Workshop 3455074362「4K Curious Cats (PHONE)」](https://steamcommunity.com/sharedfiles/filedetails/?id=3455074362)
+- “雨夜”：取材自 [Workshop 3503882817「Convenience Store in the Rain」](https://steamcommunity.com/sharedfiles/filedetails/?id=3503882817)
+
+原作品著作权归各自作者所有。如权利人认为相关使用不当，请通过项目 Issue 或交流渠道联系我们，我们会及时删除或替换相关素材。
 
 ## 致谢
 
-- [gedoor/legado](https://github.com/gedoor/legado) — 开源阅读项目
-- [joestar817/legado_NG](https://github.com/joestar817/legado_NG) — 本项目的上游基础
+Legado NG 的演进离不开 Legado 生态及众多优秀开源项目：
 
-## License
+- [gedoor/legado](https://github.com/gedoor/legado) — Legado 原项目，为规则生态和核心阅读能力奠定了基础。
+- [Luoyacheng/legado-E](https://github.com/Luoyacheng/legado-E) — 阅读 Sigma，Legado NG 最初的直接代码基础。
+- [Rimchars/legado](https://github.com/Rimchars/legado) — 阅读Archive，AI 多角色分镜与角色化朗读的重要灵感来源，也为部分旧设备兼容性问题的定位和修复提供了参考。
+- [LegadoTeam/legado](https://github.com/LegadoTeam/legado) — 阅读 Beta，Legado NG 的单文件 JavaScript 书源支持直接参考了其实现。
+- [skybbk1001/legadoT](https://github.com/skybbk1001/legadoT) — 阅读 T；Legado NG 所参考的单文件 JavaScript 书源方案最初由该项目作者实现。
+- [HapeLee/legado-with-MD3](https://github.com/HapeLee/legado-with-MD3) — 主题体系相关设计参考。
+- [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub) — AI Provider、模型配置和聊天体验的重要参考。
+- 感谢本项目使用的所有开源依赖、素材作者、贡献者和测试者。
 
-[GPL-3.0](LICENSE)
+## 许可证
+
+项目源代码基于 [GNU General Public License v3.0](LICENSE) 开源。第三方素材的权利归各自作者所有，并按上方来源说明使用和处理。
+
+---
+
+<div align="center">
+
+如果 Legado NG 对你有帮助，欢迎点亮一个 ⭐，让更多喜欢自由阅读、AI 辅助与多人听书的人发现它。
+
+**[Star](https://github.com/joestar817/legado_NG)** ·
+**[Releases](https://github.com/joestar817/legado_NG/releases/latest)** ·
+**[Community](https://t.me/+lYttMZGrQ1RkOTE1)**
+
+</div>

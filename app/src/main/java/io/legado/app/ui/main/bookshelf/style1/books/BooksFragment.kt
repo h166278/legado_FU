@@ -33,6 +33,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
@@ -40,6 +41,7 @@ import io.legado.app.help.config.BookshelfLayoutMode
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.CacheBook
+import io.legado.app.model.BookCacheManager
 import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
 import io.legado.app.model.SourceCallBack
@@ -47,7 +49,9 @@ import io.legado.app.model.localBook.LocalBook
 import io.legado.app.data.entities.BookCharacterProfile
 import io.legado.app.service.ExportBookService
 import io.legado.app.ui.book.character.BookCharacterActivity
+import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
+import io.legado.app.ui.book.changesource.ChangeBookSourceDrawer
 import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.book.info.BookAiAssistantLauncher
 import io.legado.app.ui.book.info.BookInfoActivity
@@ -385,6 +389,14 @@ class BooksFragment() : BaseFragment(0),
     }
 
     override fun onListen(book: Book) {
+        if (book.isAudio) {
+            startActivity<AudioPlayActivity> {
+                putExtra("bookUrl", book.bookUrl)
+                putExtra("inBookshelf", true)
+                AudioPlayActivity.applyAutoStart(this)
+            }
+            return
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             val prepared = ReadAloudLauncher.prepareState(
                 book = book,
@@ -415,7 +427,7 @@ class BooksFragment() : BaseFragment(0),
 
     override fun onChangeSource(book: Book) {
         actionBook = book
-        showDialogFragment(ChangeBookSourceDialog(book.name, book.author))
+        showDialogFragment(ChangeBookSourceDrawer(book.name, book.author))
     }
 
     override fun onSimulatedReading(book: Book) {
@@ -477,7 +489,7 @@ class BooksFragment() : BaseFragment(0),
         viewLifecycleOwner.lifecycleScope.launch {
             val error = withContext(IO) {
                 runCatching {
-                    BookHelp.clearCache(book)
+                    BookCacheManager.clear(book)
                     if (ReadBook.book?.bookUrl == book.bookUrl) {
                         ReadBook.clearTextChapter()
                     }

@@ -364,8 +364,6 @@ object NgMenuPopup {
             R.id.menu_group_null,
             R.id.menu_enabled_explore_group,
             R.id.menu_disabled_explore_group,
-            R.id.menu_group_sources_by_domain -> R.drawable.ic_groups
-
             R.id.action_sort,
             R.id.menu_sort,
             R.id.menu_sort_desc,
@@ -396,7 +394,6 @@ object NgMenuPopup {
             R.id.menu_export_selection,
             R.id.menu_export_all,
             R.id.menu_export_bookmark,
-            R.id.menu_export_md,
             R.id.menu_export -> R.drawable.ic_export
             R.id.menu_share_source -> R.drawable.ic_share
             R.id.menu_check_source,
@@ -416,21 +413,18 @@ object NgMenuPopup {
             R.id.menu_clear,
             R.id.menu_clear_cache -> R.drawable.ic_outline_delete
 
-            R.id.menu_quick_delete -> R.drawable.ic_book_info_delete
             R.id.menu_restore_temporary -> R.drawable.ic_restore
 
             R.id.menu_edit,
             R.id.menu_edit_source,
             R.id.menu_edit_content,
             R.id.menu_fullscreen_edit -> R.drawable.ic_edit
-            R.id.menu_copy_audio_url,
             R.id.menu_copy_video_url,
             R.id.menu_copy_book_url,
             R.id.menu_copy_toc_url,
             R.id.menu_copy_url,
             R.id.menu_copy_source,
             R.id.menu_copy_rule,
-            R.id.menu_copy_content,
             R.id.menu_copy_all -> R.drawable.ic_copy
             R.id.menu_share_it,
             R.id.menu_share_qr,
@@ -486,8 +480,6 @@ object NgMenuPopup {
             R.id.menu_full_screen -> R.drawable.ic_fullscreen
             R.id.menu_config_settings,
             R.id.menu_server_config -> R.drawable.ic_settings
-            R.id.menu_wake_lock -> R.drawable.ic_lock_outline
-            R.id.menu_skip_credits -> R.drawable.ic_skip_next
             else -> titleFallbackIconRes()
         }
     }

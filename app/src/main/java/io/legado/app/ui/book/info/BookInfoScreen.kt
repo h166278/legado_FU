@@ -58,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -89,9 +90,17 @@ import io.legado.app.ui.design.components.compose.NgExpandableActionMenuVariant
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuWidthVariant
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.components.compose.NgMaterialRole
 import io.legado.app.ui.design.components.compose.NgPullRefreshBox
+import io.legado.app.ui.design.components.compose.NgVisualIconButton
+import io.legado.app.ui.design.components.compose.NgWindowLiquidGlassBackdropHost
 import io.legado.app.ui.design.theme.NgTheme
 import androidx.compose.ui.window.PopupProperties
+
+internal enum class BookInfoIntroRenderMode {
+    TEXT,
+    WEB,
+}
 
 internal data class BookInfoUiState(
     val book: Book? = null,
@@ -111,6 +120,8 @@ internal data class BookInfoUiState(
     val primaryActionIsPlay: Boolean = false,
     val cache: BookInfoCacheUiState = BookInfoCacheUiState(),
     val introRevision: Int = 0,
+    val introRenderMode: BookInfoIntroRenderMode = BookInfoIntroRenderMode.TEXT,
+    val webIntroHeightPx: Int = 0,
     val charactersVisible: Boolean = false,
     val characters: List<BookInfoCharacterUiItem> = emptyList(),
     val characterCount: Int = 0,
@@ -235,10 +246,19 @@ internal fun BookInfoScreen(
     onEvent: (BookInfoUiEvent) -> Unit,
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    if (isLandscape) {
-        BookInfoLandscape(state = state, introView = introView, onEvent = onEvent)
-    } else {
-        BookInfoPortrait(state = state, introView = introView, onEvent = onEvent)
+    NgWindowLiquidGlassBackdropHost(
+        modifier = Modifier.fillMaxSize(),
+        backgroundOverlay = if (isLandscape) {
+            Color(NgTheme.colors.background)
+        } else {
+            Color.Transparent
+        },
+    ) {
+        if (isLandscape) {
+            BookInfoLandscape(state = state, introView = introView, onEvent = onEvent)
+        } else {
+            BookInfoPortrait(state = state, introView = introView, onEvent = onEvent)
+        }
     }
     if (state.deleteDialogVisible) {
         BookInfoDeleteDialog(state = state, onEvent = onEvent)
@@ -403,6 +423,7 @@ private fun BookInfoTopBar(
         BookInfoToolbarIcon(
             iconRes = R.drawable.ic_arrow_back,
             contentDescription = stringResource(R.string.back),
+            tint = colorResource(R.color.ng_search_icon),
             onClick = { onEvent(BookInfoUiEvent.Back) },
         )
         Spacer(Modifier.weight(1f))
@@ -589,13 +610,14 @@ private fun BookInfoMenuAction.item(
 private fun BookInfoToolbarIcon(
     iconRes: Int,
     contentDescription: String,
+    tint: Color = Color(NgTheme.colors.onTopBar),
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+    NgVisualIconButton(onClick = onClick) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
-            tint = Color(NgTheme.colors.onTopBar),
+            tint = tint,
             modifier = Modifier.size(24.dp),
         )
     }
@@ -944,9 +966,13 @@ private fun BookInfoIntro(
     introView: View,
     withSurface: Boolean,
 ) {
+    val isWebIntro = state.introRenderMode == BookInfoIntroRenderMode.WEB
+    val webIntroHeight = with(LocalDensity.current) {
+        state.webIntroHeightPx.takeIf { it > 0 }?.toDp() ?: 48.dp
+    }
     val content: @Composable () -> Unit = {
         Column(modifier = Modifier.fillMaxWidth()) {
-            if (withSurface) {
+            if (withSurface && !isWebIntro) {
                 Text(
                     text = stringResource(R.string.book_intro_short),
                     color = colorResource(R.color.primaryText),
@@ -959,20 +985,30 @@ private fun BookInfoIntro(
             AndroidView(
                 factory = { introView },
                 update = { it.requestLayout() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp),
+                modifier = if (isWebIntro) {
+                    Modifier
+                        .fillMaxWidth()
+                        .height(maxOf(webIntroHeight, 48.dp))
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                },
             )
         }
     }
     if (withSurface) {
         BookInfoCard(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 16.dp,
-                top = 8.dp,
-                end = 16.dp,
-                bottom = 12.dp,
-            ),
+            contentPadding = if (isWebIntro) {
+                androidx.compose.foundation.layout.PaddingValues(0.dp)
+            } else {
+                androidx.compose.foundation.layout.PaddingValues(
+                    start = 16.dp,
+                    top = 8.dp,
+                    end = 16.dp,
+                    bottom = 12.dp,
+                )
+            },
         ) {
             content()
         }
@@ -1303,6 +1339,8 @@ private fun BookInfoCard(
         modifier = modifier,
         shape = RoundedCornerShape(NgTheme.shapes.smallDp.dp),
         style = NgGlassDefaults.bookDetailStyle(),
+        role = NgMaterialRole.CONTENT,
+        liquidCornerRadius = NgTheme.shapes.smallDp.dp,
         contentPadding = contentPadding,
         content = content,
     )

@@ -80,7 +80,6 @@ import androidx.core.view.get
 import io.legado.app.help.update.AppUpdate
 import io.legado.app.ui.about.UpdateDialog
 import kotlin.math.abs
-import kotlin.time.Duration.Companion.hours
 
 /**
  * 主界面
@@ -102,6 +101,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private var bookshelfReselected: Long = 0
     private var exploreReselected: Long = 0
     private var pagePosition = 0
+    private var mainPagerScrollState = ViewPager.SCROLL_STATE_IDLE
     private var aiChatSwipeStartX = 0f
     private var aiChatSwipeStartY = 0f
     private var aiChatSwipeStartedOnBookshelf = false
@@ -171,6 +171,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             if (!privacyPolicy()) return@launch
             //版本更新
             upVersion()
+            checkUpdateOnProcessStart()
             notifyAppCrash()
             //备份同步
             backupSync()
@@ -304,6 +305,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         bottomNavigationView.setOnNavigationItemSelectedListener(this@MainActivity)
         bottomNavigationView.setOnNavigationItemReselectedListener(this@MainActivity)
         floatingBottomNavigation.setVariant(NgFloatingTabBarVariant.CONTENT_OVERLAY)
+        bindFloatingBottomBackdropToCurrentPage()
         if (AppConfig.isEInkMode) {
             bottomNavigationView.setBackgroundResource(R.drawable.bg_eink_border_top)
         }
@@ -323,6 +325,17 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             }
         }
         refreshAiChatFab()
+    }
+
+    private fun bindFloatingBottomBackdropToCurrentPage() = binding.run {
+        val position = viewPagerMain.currentItem.coerceIn(0, bottomMenuCount - 1)
+        val pageView = fragmentMap[getFragmentId(position)]
+            ?.view
+            ?.takeIf { it.isAttachedToWindow }
+        val backgroundSource = root.rootView.findViewById<View>(
+            R.id.ng_liquid_glass_backdrop_source,
+        )
+        floatingBottomNavigation.setLiquidBackdropSource(pageView ?: backgroundSource)
     }
 
     private fun startBookshelfGenericAiChat() {
@@ -364,17 +377,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
      */
     private suspend fun upVersion() = suspendCancellableCoroutine sc@{ block ->
         if (LocalConfig.versionCode == appInfo.versionCode) {
-            if (AppConfig.autoUpdateVariant) {
-                if (LocalConfig.lastCheckUpdate + 24.hours.inWholeMilliseconds < System.currentTimeMillis()) {
-                    AppUpdate.gitHubUpdate.check(lifecycleScope)
-                        .onSuccess {
-                            showDialogFragment(
-                                UpdateDialog(it)
-                            )
-                        }
-                    LocalConfig.lastCheckUpdate = System.currentTimeMillis()
-                }
-            }
             block.resume(null)
             return@sc
         }
@@ -396,6 +398,17 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         } else {
             block.resume(null)
         }
+    }
+
+    /**
+     * 每个应用进程冷启动只自动检查一次，Activity 重建不重复触发。
+     */
+    private fun checkUpdateOnProcessStart() {
+        if (!AppConfig.autoUpdateVariant || !AppUpdate.tryStartAutoCheck()) return
+        AppUpdate.gitHubUpdate.check(lifecycleScope)
+            .onSuccess {
+                showDialogFragment(UpdateDialog(it))
+            }
     }
 
     private fun notifyAppCrash() {
@@ -671,10 +684,24 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     private inner class PageChangeCallback : ViewPager.SimpleOnPageChangeListener() {
 
+        override fun onPageScrollStateChanged(state: Int) {
+            mainPagerScrollState = state
+            if (state == ViewPager.SCROLL_STATE_IDLE) {
+                bindFloatingBottomBackdropToCurrentPage()
+            } else {
+                binding.floatingBottomNavigation.setLiquidBackdropSource(
+                    binding.viewPagerMain,
+                )
+            }
+        }
+
         override fun onPageSelected(position: Int) {
             pagePosition = position
             binding.bottomNavigationView.menu[realPositions[position]].isChecked = true
             binding.floatingBottomNavigation.select(position, notify = false)
+            if (mainPagerScrollState == ViewPager.SCROLL_STATE_IDLE) {
+                bindFloatingBottomBackdropToCurrentPage()
+            }
         }
 
     }
@@ -721,6 +748,16 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 fragment = super.instantiateItem(container, position) as Fragment
             }
             fragmentMap[getId(position)] = fragment
+            if (position == binding.viewPagerMain.currentItem) {
+                container.post {
+                    if (
+                        position == binding.viewPagerMain.currentItem &&
+                        mainPagerScrollState == ViewPager.SCROLL_STATE_IDLE
+                    ) {
+                        bindFloatingBottomBackdropToCurrentPage()
+                    }
+                }
+            }
             return fragment
         }
 

@@ -31,6 +31,7 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.upType
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReadHighlightRuleStore
 import io.legado.app.help.config.ReadStylePackageManager
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
@@ -235,6 +236,7 @@ object Restore {
         }?.onFailure {
             AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
         }
+        var readConfigsRestored = false
         if (!BackupConfig.ignoreReadConfig &&
             BackupRestorePolicy.shouldRestoreReadConfigs(isMd3Backup)
         ) {
@@ -245,6 +247,7 @@ object Restore {
                 FileUtils.delete(ReadBookConfig.configFilePath)
                 copyTo(File(ReadBookConfig.configFilePath))
                 ReadBookConfig.initConfigs()
+                readConfigsRestored = true
             }?.onFailure {
                 AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
             }
@@ -256,6 +259,22 @@ object Restore {
                 ReadBookConfig.initShareConfig()
             }?.onFailure {
                 AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
+            }
+        }
+        if (!BackupConfig.ignoreReadConfig &&
+            BackupRestorePolicy.shouldRestoreHighlightRules(isMd3Backup)
+        ) {
+            val highlightRuleFile = File(path, ReadHighlightRuleStore.fileName)
+            if (highlightRuleFile.exists()) {
+                highlightRuleFile.runCatching {
+                    FileUtils.delete(ReadHighlightRuleStore.filePath)
+                    copyTo(File(ReadHighlightRuleStore.filePath))
+                    ReadHighlightRuleStore.reloadFromFile()
+                }.onFailure {
+                    AppLog.put("恢复高亮规则出错\n${it.localizedMessage}", it)
+                }
+            } else if (readConfigsRestored) {
+                ReadBookConfig.migrateRestoredEmbeddedHighlightRules()
             }
         }
         // 还原排版包内嵌资源（导入排版时随包安装的字体/背景图）：
@@ -328,6 +347,7 @@ object Restore {
             comicStyleSelect = appCtx.getPrefInt(PreferKey.comicStyleSelect)
             readStyleSelect = appCtx.getPrefInt(PreferKey.readStyleSelect)
             shareLayout = appCtx.getPrefBoolean(PreferKey.shareLayout)
+            reloadGlobalReadFloatingColorPreferences()
             hideStatusBar = appCtx.getPrefBoolean(PreferKey.hideStatusBar)
             hideNavigationBar = appCtx.getPrefBoolean(PreferKey.hideNavigationBar)
             autoReadSpeed = appCtx.getPrefInt(

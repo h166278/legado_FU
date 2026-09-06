@@ -20,10 +20,13 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnLayout
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.NgColorConfigStore
+import io.legado.app.help.config.NgThemeModeStore
+import io.legado.app.help.config.NgThemePresentationMode
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadFloatingColorStyle
 import io.legado.app.help.config.ThemeConfig
@@ -92,24 +95,36 @@ object ReadDrawerStyle {
     }
 
     /**
-     * 阅读抽屉跟随阅读页自己的日夜模式，而不是应用主题的日夜模式。
+     * 阅读浮层使用背景取色时保持自己的日夜配色；跟随应用时采用当前应用配色。
+     * 柔光渐变只参与配色，不作为阅读页背景；墨水屏继续保留全局强制黑白。
      */
     fun themeSnapshot(
         context: Context,
         primaryStrengthPercent: Int = ReadBookConfig.durConfig.curReadFloatingPrimaryStrength(),
-        colorStyle: ReadFloatingColorStyle = ReadBookConfig.durConfig.curReadFloatingColorStyle(),
-    ): NgThemeSnapshot = if (AppConfig.isEInkMode) {
+        colorStyle: ReadFloatingColorStyle =
+            ReadBookConfig.effectiveReadFloatingColor().colorStyle,
+    ): NgThemeSnapshot = if (
+        NgThemeModeStore.current(context) == NgThemePresentationMode.EINK
+    ) {
         NgThemeResolver.resolve(context)
     } else {
-        val isDark = ReadBookConfig.isNightTheme
-        val base = NgThemeResolver.resolve(
-            context = context,
-            colors = NgColorConfigStore.current(context),
-            isDark = isDark,
-        )
+        val effectiveColor = ReadBookConfig.effectiveReadFloatingColor()
+        val seed = effectiveColor.seed
+        val base = if (
+            effectiveColor.followsApplication &&
+            NgThemeModeStore.current(context) == NgThemePresentationMode.SOFT_GRADIENT
+        ) {
+            NgThemeResolver.resolve(context)
+        } else {
+            NgThemeResolver.resolve(
+                context = context,
+                colors = NgColorConfigStore.current(context),
+                isDark = ReadBookConfig.isNightTheme,
+            )
+        }
         val seeded = ReadFloatingPalette.applySeed(
             base = base,
-            seed = ReadBookConfig.durConfig.curReadFloatingSeed(),
+            seed = seed,
         )
         ReadFloatingPalette.applySemanticRoles(
             snapshot = seeded,
@@ -125,6 +140,19 @@ object ReadDrawerStyle {
     fun indicatorColor(context: Context): Int = themeSnapshot(context).colors.primary
 
     fun surfaceColor(context: Context): Int = themeSnapshot(context).colors.surface
+
+    /**
+     * Material BottomSheet 的默认回调会在非 IME Insets 动画开始时也写入 translationY，
+     * 阅读页显示系统栏时会把抽屉短暂移到屏幕顶部。保留原 IME 补偿，只过滤其它类型。
+     */
+    fun installImeOnlyBottomSheetInsetsAnimation(sheet: View) {
+        sheet.doOnLayout {
+            ViewCompat.setWindowInsetsAnimationCallback(
+                sheet,
+                ImeOnlyBottomSheetInsetsAnimationCallback(sheet),
+            )
+        }
+    }
 
     /** 与 View 版浮动 Dock 对齐，但按阅读页自己的日夜快照取色。 */
     @Composable
@@ -183,6 +211,50 @@ object ReadDrawerStyle {
                 .toFloat()
             updateDrawerTranslation(avoidView, drawerState, drawerRetreat)
         }
+    }
+
+    private class ImeOnlyBottomSheetInsetsAnimationCallback(
+        private val view: View,
+    ) : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_STOP) {
+
+        private val location = IntArray(2)
+        private var startY = 0
+        private var startTranslationY = 0f
+
+        override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+            if (!animation.isImeAnimation()) return
+            view.getLocationOnScreen(location)
+            startY = location[1]
+        }
+
+        override fun onStart(
+            animation: WindowInsetsAnimationCompat,
+            bounds: WindowInsetsAnimationCompat.BoundsCompat,
+        ): WindowInsetsAnimationCompat.BoundsCompat {
+            if (!animation.isImeAnimation()) return bounds
+            view.getLocationOnScreen(location)
+            startTranslationY = (startY - location[1]).toFloat()
+            view.translationY = startTranslationY
+            return bounds
+        }
+
+        override fun onProgress(
+            insets: WindowInsetsCompat,
+            runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+        ): WindowInsetsCompat {
+            val imeAnimation = runningAnimations.firstOrNull { it.isImeAnimation() }
+                ?: return insets
+            view.translationY = startTranslationY * (1f - imeAnimation.interpolatedFraction)
+            return insets
+        }
+
+        override fun onEnd(animation: WindowInsetsAnimationCompat) {
+            if (!animation.isImeAnimation()) return
+            view.translationY = 0f
+        }
+
+        private fun WindowInsetsAnimationCompat.isImeAnimation(): Boolean =
+            typeMask and WindowInsetsCompat.Type.ime() != 0
     }
 
     private fun bindDrawerRestore(
@@ -257,6 +329,7 @@ object ReadDrawerStyle {
     ): Drawable {
         val source = if (!AppConfig.isEInkMode && ThemeConfig.isReadingNgBackgroundTheme(context)) {
             ThemeConfig.getBgImage(context, context.windowManager.windowSize)
+                ?: ThemeConfig.getGradientBgImage(context)
         } else {
             null
         }

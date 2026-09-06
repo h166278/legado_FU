@@ -2,9 +2,6 @@ package io.legado.app.ui.widget.dialog
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -20,13 +17,11 @@ import androidx.core.widget.doOnTextChanged
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import io.legado.app.R
-import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.design.components.compose.NgDrawerContentCardStyle
+import io.legado.app.ui.design.components.compose.NgDrawerDefaults
 import io.legado.app.ui.design.components.view.NgSearchBar
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.windowSize
-import splitties.systemservices.windowManager
 
 class NgLongListBottomSheet(
     private val context: Context,
@@ -37,7 +32,8 @@ class NgLongListBottomSheet(
     private val heightRatio: Float = 0.88f,
     private val compact: Boolean = false,
     private val searchInitiallyVisible: Boolean = !compact,
-    private val showCompactSearchAction: Boolean = compact
+    private val showCompactSearchAction: Boolean = compact,
+    private val contentCardStyle: NgDrawerContentCardStyle = NgDrawerContentCardStyle.LEGACY,
 ) {
 
     val dialog = BottomSheetDialog(context)
@@ -50,7 +46,6 @@ class NgLongListBottomSheet(
             horizontalPadding,
             if (compact) 14.dpToPx() else 18.dpToPx()
         )
-        background = createSheetBackground()
     }
     private val titleAction = TextView(context).apply {
         gravity = Gravity.CENTER
@@ -62,6 +57,9 @@ class NgLongListBottomSheet(
     val searchBar = NgSearchBar(context).apply {
         hint = searchHint
         isVisible = searchInitiallyVisible
+        if (contentCardStyle == NgDrawerContentCardStyle.ADAPTIVE) {
+            setContainerColor(NgDrawerDefaults.adaptiveContentCardColor(context))
+        }
     }
     val searchEdit get() = searchBar.editText
     private val compactSearchAction = ImageButton(context).apply {
@@ -83,17 +81,6 @@ class NgLongListBottomSheet(
     private var scrollableContent: NestedScrollView? = null
     private var searchVisibilityHost: View? = null
     val contentFrame = FrameLayout(context)
-
-    private fun createSheetBackground() = runCatching {
-        ThemeConfig.getBgImage(context, context.windowManager.windowSize)
-    }.getOrNull()?.let { background ->
-        val overlay = ColorDrawable(Color.argb(96, 255, 255, 249))
-        ReadDrawerStyle.wrapTopRounded(LayerDrawable(arrayOf(background, overlay)))
-    } ?: GradientDrawable().apply {
-        val radius = 28.dpToPx().toFloat()
-        cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
-        setColor(ContextCompat.getColor(context, R.color.ng_surface_card))
-    }
 
     init {
         if (title != null) {
@@ -131,7 +118,13 @@ class NgLongListBottomSheet(
                 weight = 1f
             }
         )
-        dialog.setContentView(root)
+        dialog.setContentView(
+            context.createNgBottomDrawerViewHost(
+                contentView = root,
+                fillMaxHeight = true,
+                contentCardStyle = contentCardStyle,
+            )
+        )
         dialog.setOnShowListener {
             val sheet = dialog.findViewById<View>(
                 com.google.android.material.R.id.design_bottom_sheet

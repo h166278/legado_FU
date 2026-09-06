@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -35,8 +36,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,13 +49,22 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -65,12 +77,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.design.components.NgButtonVariant
 import io.legado.app.ui.design.theme.NgTheme
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 data class NgFormSelectOption(
     val label: String,
@@ -89,7 +108,6 @@ fun NgFormGroup(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = title,
@@ -102,28 +120,203 @@ fun NgFormGroup(
             fontWeight = FontWeight.Medium,
             textAlign = androidx.compose.ui.text.style.TextAlign.Start,
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(colorResource(R.color.ng_surface_card))
-                .border(
-                    width = 0.6.dp,
-                    color = Color(NgTheme.colors.outlineVariant).copy(alpha = 0.22f),
-                    shape = shape,
-                ),
-            content = content,
+        NgFormPanel(content = content)
+    }
+}
+
+/** 不附带外部标题的连续亮白表单底板。 */
+@Composable
+fun NgFormPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(ngDrawerContentCardColor())
+            .border(
+                width = 0.6.dp,
+                color = Color(NgTheme.colors.outlineVariant).copy(alpha = 0.22f),
+                shape = shape,
+            ),
+        content = content,
+    )
+}
+
+/** 连续表单底板内部的紧凑分区标题。 */
+@Composable
+fun NgFormPanelSectionTitle(
+    title: String,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = 14.sp,
+    fontWeight: FontWeight = FontWeight.Medium,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(34.dp)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = title,
+            color = Color(NgTheme.colors.primary),
+            fontSize = fontSize,
+            lineHeight = 18.sp,
+            fontWeight = fontWeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
 @Composable
-fun NgFormGroupDivider(modifier: Modifier = Modifier) {
+fun NgFormGroupDivider(
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 12.dp,
+) {
     HorizontalDivider(
-        modifier = modifier.padding(horizontal = 12.dp),
+        modifier = modifier.padding(horizontal = horizontalPadding),
         thickness = 0.6.dp,
         color = Color(NgTheme.colors.outlineVariant).copy(alpha = 0.22f),
     )
+}
+
+/** 分组内的紧凑单行文本字段；分组容器负责白底、圆角与行间分隔。 */
+@Composable
+fun NgFormInlineTextRow(
+    title: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
+    valueMuted: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+) {
+    val colors = NgTheme.colors
+    val contentAlpha = if (enabled) 1f else 0.45f
+    val interactionSource = remember { MutableInteractionSource() }
+    val valueColor = when {
+        !enabled -> Color(colors.onSurfaceVariant).copy(alpha = contentAlpha)
+        valueMuted -> Color(colors.onSurfaceVariant).copy(alpha = 0.58f)
+        else -> Color(colors.onSurface)
+    }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(0.38f),
+            color = Color(colors.onSurface).copy(alpha = contentAlpha),
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .weight(0.62f)
+                .height(36.dp)
+                .semantics { contentDescription = title },
+            enabled = enabled,
+            readOnly = readOnly,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = valueColor,
+                fontSize = 15.sp,
+                lineHeight = 19.sp,
+                textAlign = TextAlign.End,
+            ),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            cursorBrush = SolidColor(
+                if (readOnly) Color.Transparent else Color(colors.primary)
+            ),
+            interactionSource = interactionSource,
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(36.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    if (value.isEmpty() && !placeholder.isNullOrBlank()) {
+                        Text(
+                            text = placeholder,
+                            color = Color(colors.onSurfaceVariant).copy(alpha = 0.72f),
+                            fontSize = 15.sp,
+                            lineHeight = 19.sp,
+                            textAlign = TextAlign.End,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    innerTextField()
+                }
+            },
+        )
+    }
+}
+
+/** 分组内打开独立页面或弹层的紧凑当前值行。 */
+@Composable
+fun NgFormNavigationRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    arrowIcon: Painter,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val contentAlpha = if (enabled) 1f else 0.45f
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics {
+                role = Role.Button
+                contentDescription = title
+                stateDescription = value
+            }
+            .padding(start = 14.dp, end = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = Color(NgTheme.colors.onSurface).copy(alpha = contentAlpha),
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = value,
+            color = Color(NgTheme.colors.onSurfaceVariant).copy(alpha = contentAlpha),
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Icon(
+            painter = arrowIcon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = Color(NgTheme.colors.onSurfaceVariant).copy(alpha = contentAlpha),
+        )
+    }
 }
 
 /** 分组内的紧凑下拉设置行。 */
@@ -206,7 +399,7 @@ fun NgFormSelectRow(
             modifier = Modifier.width(menuWidth),
             offset = menuOffset,
             shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp),
-            containerColor = colorResource(R.color.ng_surface_card),
+            containerColor = ngDrawerContentCardColor(),
             tonalElevation = 0.dp,
             shadowElevation = 4.dp,
         ) {
@@ -290,12 +483,76 @@ private fun NgStepperButton(
     contentDescription: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    onLongPressStep: (() -> Boolean)? = null,
+    onLongPressFinished: (() -> Unit)? = null,
 ) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val currentEnabled by rememberUpdatedState(enabled)
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnLongPressStep by rememberUpdatedState(onLongPressStep)
+    val currentOnLongPressFinished by rememberUpdatedState(onLongPressFinished)
+    val repeatEnabled = onLongPressStep != null && onLongPressFinished != null
     Box(
         modifier = Modifier
             .size(34.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .then(
+                if (repeatEnabled) {
+                    Modifier
+                        .semantics {
+                            role = Role.Button
+                            if (!enabled) disabled()
+                            onClick {
+                                if (currentEnabled) {
+                                    currentOnClick()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            var longPressHandled = false
+                            detectTapGestures(
+                                onPress = press@{
+                                    if (!currentEnabled) return@press
+                                    longPressHandled = false
+                                    coroutineScope {
+                                        val repeatJob = launch {
+                                            delay(NG_FORM_NUMBER_LONG_PRESS_DELAY_MS)
+                                            if (!currentEnabled) return@launch
+                                            longPressHandled = true
+                                            hapticFeedback.performHapticFeedback(
+                                                HapticFeedbackType.LongPress
+                                            )
+                                            while (
+                                                isActive &&
+                                                currentOnLongPressStep?.invoke() == true
+                                            ) {
+                                                delay(NG_FORM_NUMBER_REPEAT_INTERVAL_MS)
+                                            }
+                                        }
+                                        tryAwaitRelease()
+                                        repeatJob.cancelAndJoin()
+                                    }
+                                    if (longPressHandled) {
+                                        currentOnLongPressFinished?.invoke()
+                                    }
+                                },
+                                onTap = {
+                                    if (currentEnabled && !longPressHandled) currentOnClick()
+                                    longPressHandled = false
+                                },
+                            )
+                        }
+                } else {
+                    Modifier.clickable(
+                        enabled = enabled,
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
+                }
+            )
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
@@ -406,9 +663,188 @@ fun NgFormSwitchSettingRow(
     }
 }
 
+/** 分组内左侧标题／摘要、右侧短输入框的紧凑数字设置行。 */
+@Composable
+fun NgFormNumberSettingRow(
+    title: String,
+    summary: String? = null,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    valueWidth: Dp = 96.dp,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(
+        keyboardType = KeyboardType.Number,
+        imeAction = ImeAction.Done,
+    ),
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    onFocusLost: () -> Unit = {},
+    valueRange: IntRange? = null,
+    onStepValueChange: ((Int) -> Unit)? = null,
+    onStepValueChangeFinished: (() -> Unit)? = null,
+) {
+    val colors = NgTheme.colors
+    val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    var wasFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(focused) {
+        if (focused) {
+            wasFocused = true
+        } else if (wasFocused) {
+            wasFocused = false
+            onFocusLost()
+        }
+    }
+    val contentAlpha = if (enabled) 1f else 0.45f
+    val borderColor = Color(if (focused) colors.primary else colors.outline)
+    val stepControlsVisible = valueRange != null &&
+        onStepValueChange != null &&
+        onStepValueChangeFinished != null
+    val parsedValue = value.toIntOrNull()?.takeIf { current ->
+        valueRange?.let { current in it } ?: true
+    }
+    var repeatedValue by remember { mutableIntStateOf(parsedValue ?: 0) }
+    var repeating by remember { mutableStateOf(false) }
+
+    fun stepValue(delta: Int, repeat: Boolean): Boolean {
+        val range = valueRange ?: return false
+        val base = if (repeat) {
+            if (!repeating) {
+                val current = parsedValue ?: return false
+                repeatedValue = current
+                repeating = true
+            }
+            repeatedValue
+        } else {
+            parsedValue ?: return false
+        }
+        val next = (base + delta).coerceIn(range)
+        if (next == base) return false
+        if (repeat) repeatedValue = next
+        onStepValueChange?.invoke(next)
+        return true
+    }
+
+    fun finishRepeatedValue() {
+        repeating = false
+        onStepValueChangeFinished?.invoke()
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = if (summary.isNullOrBlank()) 48.dp else 56.dp)
+            .alpha(contentAlpha)
+            .padding(start = 14.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                text = title,
+                color = Color(colors.onSurface),
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!summary.isNullOrBlank()) {
+                Text(
+                    text = summary,
+                    color = Color(colors.onSurfaceVariant),
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        if (stepControlsVisible) {
+            NgStepperButton(
+                text = "−",
+                contentDescription = "${stringResource(R.string.reduce)} $title",
+                enabled = enabled && parsedValue != null && parsedValue > valueRange.first,
+                onClick = {
+                    if (stepValue(delta = -1, repeat = false)) {
+                        onStepValueChangeFinished()
+                    }
+                },
+                onLongPressStep = { stepValue(delta = -1, repeat = true) },
+                onLongPressFinished = ::finishRepeatedValue,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .width(if (stepControlsVisible && valueWidth > 80.dp) 80.dp else valueWidth)
+                .height(34.dp)
+                .semantics { contentDescription = title },
+            enabled = enabled,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = Color(colors.onSurface),
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                textAlign = TextAlign.Center,
+            ),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            cursorBrush = SolidColor(Color(colors.primary)),
+            interactionSource = interactionSource,
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                        .clip(shape)
+                        .background(Color(colors.inputContainer))
+                        .border(
+                            width = if (focused) 1.5.dp else 1.dp,
+                            color = borderColor,
+                            shape = shape,
+                        )
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    innerTextField()
+                }
+            },
+        )
+        if (stepControlsVisible) {
+            Spacer(Modifier.width(4.dp))
+            NgStepperButton(
+                text = "+",
+                contentDescription = "${stringResource(R.string.plus)} $title",
+                enabled = enabled && parsedValue != null && parsedValue < valueRange.last,
+                onClick = {
+                    if (stepValue(delta = 1, repeat = false)) {
+                        onStepValueChangeFinished()
+                    }
+                },
+                onLongPressStep = { stepValue(delta = 1, repeat = true) },
+                onLongPressFinished = ::finishRepeatedValue,
+            )
+        }
+    }
+}
+
+private const val NG_FORM_NUMBER_LONG_PRESS_DELAY_MS = 400L
+private const val NG_FORM_NUMBER_REPEAT_INTERVAL_MS = 90L
+
 enum class NgFormDensity {
     REGULAR,
     COMPACT,
+}
+
+enum class NgFormSwitchRowVariant {
+    DEFAULT,
+    GROUPED,
 }
 
 enum class NgFormFieldVariant {
@@ -416,14 +852,16 @@ enum class NgFormFieldVariant {
     PLAIN_UNDERLINE,
     INLINE_UNDERLINE,
     LABELED_UNDERLINE,
+    DIALOG_UNDERLINE,
 }
 
 /**
  * NG 紧凑表单字段。
  *
  * OUTLINED 保持既有 34dp 容器和焦点描边；PLAIN_UNDERLINE 提供不显示标签的
- * 单行输入线；INLINE_UNDERLINE 将标签与 32dp 无容器输入线并排。业务页面只
- * 提供字段含义和值，不再自行拼装输入外观。
+ * 32dp 单行输入线；DIALOG_UNDERLINE 提供旧网络导入弹窗同款 44dp 输入线；
+ * INLINE_UNDERLINE 将标签与输入线并排。业务页面只提供字段含义和值，不再
+ * 自行拼装输入外观。
  */
 @Composable
 fun NgFormField(
@@ -443,10 +881,13 @@ fun NgFormField(
     trailingContent: (@Composable () -> Unit)? = null,
     density: NgFormDensity = NgFormDensity.REGULAR,
     variant: NgFormFieldVariant = NgFormFieldVariant.OUTLINED,
+    autoFocus: Boolean = false,
 ) {
     val colors = NgTheme.colors
     val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
     val interactionSource = remember { MutableInteractionSource() }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val focused by interactionSource.collectIsFocusedAsState()
     var wasFocused by remember { mutableStateOf(false) }
     LaunchedEffect(focused) {
@@ -457,6 +898,12 @@ fun NgFormField(
             onFocusLost()
         }
     }
+    LaunchedEffect(autoFocus) {
+        if (autoFocus) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
     val borderColor = when {
         isError -> Color(colors.error)
         focused -> Color(colors.primary)
@@ -465,12 +912,21 @@ fun NgFormField(
     val contentAlpha = if (enabled) 1f else 0.45f
     val compact = density == NgFormDensity.COMPACT
     val inlineUnderlined = variant == NgFormFieldVariant.INLINE_UNDERLINE
-    val plainUnderlined = variant == NgFormFieldVariant.PLAIN_UNDERLINE
+    val dialogUnderlined = variant == NgFormFieldVariant.DIALOG_UNDERLINE
+    val plainUnderlined = variant == NgFormFieldVariant.PLAIN_UNDERLINE || dialogUnderlined
     val labeledUnderlined = variant == NgFormFieldVariant.LABELED_UNDERLINE
     val underlined = inlineUnderlined || plainUnderlined || labeledUnderlined
-    val fieldHeight = if (underlined || compact) 32.dp else 34.dp
+    val fieldHeight = when {
+        dialogUnderlined -> 44.dp
+        underlined || compact -> 32.dp
+        else -> 34.dp
+    }
     val labelFontSize = if (inlineUnderlined) 13.sp else if (compact) 12.sp else 13.sp
-    val valueFontSize = if (underlined) 15.sp else 13.sp
+    val valueFontSize = when {
+        dialogUnderlined -> 16.sp
+        underlined -> 15.sp
+        else -> 13.sp
+    }
     val valueTextAlign = if (inlineUnderlined) TextAlign.Center else TextAlign.Start
 
     val inputField: @Composable (Modifier) -> Unit = { inputModifier ->
@@ -479,6 +935,7 @@ fun NgFormField(
             onValueChange = onValueChange,
             modifier = inputModifier
                 .fillMaxWidth()
+                .focusRequester(focusRequester)
                 .height(fieldHeight),
             enabled = enabled,
             readOnly = readOnly,
@@ -486,7 +943,11 @@ fun NgFormField(
             textStyle = TextStyle(
                 color = Color(colors.onSurface).copy(alpha = contentAlpha),
                 fontSize = valueFontSize,
-                lineHeight = if (underlined) 19.sp else 16.sp,
+                lineHeight = when {
+                    dialogUnderlined -> 22.sp
+                    underlined -> 19.sp
+                    else -> 16.sp
+                },
                 textAlign = valueTextAlign,
             ),
             keyboardOptions = keyboardOptions,
@@ -511,6 +972,13 @@ fun NgFormField(
                                 strokeWidth = strokeWidth,
                             )
                         }
+                        .then(
+                            if (dialogUnderlined) {
+                                Modifier.padding(horizontal = 2.dp)
+                            } else {
+                                Modifier
+                            }
+                        )
                 } else {
                     Modifier
                         .fillMaxWidth()
@@ -621,7 +1089,17 @@ fun NgFormField(
     }
 }
 
-/** NG 多行编辑字段，供简介、说明等正文型表单复用。 */
+enum class NgFormMultilineFieldVariant {
+    OUTLINED,
+    DIALOG_UNDERLINE,
+}
+
+/**
+ * NG 多行编辑字段，供简介、说明等正文型表单复用。
+ *
+ * DIALOG_UNDERLINE 保留旧规则弹窗的浮动标签与底部输入线，不将脚本正文改成
+ * 大圆角输入框。
+ */
 @Composable
 fun NgFormMultilineField(
     value: String,
@@ -635,6 +1113,8 @@ fun NgFormMultilineField(
     minLines: Int = 4,
     maxLines: Int = 12,
     containerColor: Color? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    variant: NgFormMultilineFieldVariant = NgFormMultilineFieldVariant.OUTLINED,
 ) {
     val colors = NgTheme.colors
     val shape = RoundedCornerShape(NgTheme.shapes.smallDp.dp)
@@ -642,12 +1122,15 @@ fun NgFormMultilineField(
     val focused by interactionSource.collectIsFocusedAsState()
     val borderColor = Color(if (focused) colors.primary else colors.outline)
     val contentAlpha = if (enabled) 1f else 0.45f
+    val underlined = variant == NgFormMultilineFieldVariant.DIALOG_UNDERLINE
     Column(modifier = modifier.fillMaxWidth()) {
         label?.takeIf { it.isNotBlank() }?.let {
             Text(
                 text = it,
                 modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
-                color = Color(colors.onSurfaceVariant).copy(alpha = contentAlpha),
+                color = Color(
+                    if (underlined) colors.primary else colors.onSurfaceVariant
+                ).copy(alpha = contentAlpha),
                 fontSize = 13.sp,
                 lineHeight = 16.sp,
                 maxLines = 1,
@@ -670,9 +1153,25 @@ fun NgFormMultilineField(
             interactionSource = interactionSource,
             minLines = minLines,
             maxLines = maxLines,
+            visualTransformation = visualTransformation,
             decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier
+                val decorationModifier = if (underlined) {
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = minHeight, max = maxHeight)
+                        .drawBehind {
+                            val strokeWidth = (if (focused) 1.5.dp else 1.dp).toPx()
+                            val y = size.height - strokeWidth / 2f
+                            drawLine(
+                                color = borderColor.copy(alpha = contentAlpha),
+                                start = Offset(0f, y),
+                                end = Offset(size.width, y),
+                                strokeWidth = strokeWidth,
+                            )
+                        }
+                        .padding(horizontal = 2.dp, vertical = 8.dp)
+                } else {
+                    Modifier
                         .fillMaxWidth()
                         .heightIn(min = minHeight, max = maxHeight)
                         .clip(shape)
@@ -687,7 +1186,10 @@ fun NgFormMultilineField(
                             color = borderColor.copy(alpha = contentAlpha),
                             shape = shape,
                         )
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                }
+                Box(
+                    modifier = decorationModifier,
                 ) {
                     if (value.isEmpty() && !placeholder.isNullOrBlank()) {
                         Text(
@@ -853,7 +1355,7 @@ fun NgFormSelectField(
                     with(layoutDensity) { fieldWidthPx.toDp() }
                 ),
                 shape = shape,
-                containerColor = colorResource(R.color.ng_surface_card),
+                containerColor = ngDrawerContentCardColor(),
                 tonalElevation = 0.dp,
                 shadowElevation = 4.dp
             ) {
@@ -885,6 +1387,72 @@ fun NgFormSelectField(
     }
 }
 
+/**
+ * 高对比背景上的连续紧凑表单承载面。
+ *
+ * 透明玻璃使用高不透明中性承载面保证可读性；液态玻璃由公共视觉路由切换为
+ * CONTROL 材质，业务页面无需判断当前视觉体系。
+ */
+@Composable
+fun NgFormControlGroup(
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val snapshot = NgTheme.snapshot
+    val cornerRadius = NgTheme.shapes.mediumDp.dp
+    val shape = RoundedCornerShape(cornerRadius)
+    val style = NgGlassDefaults.neutralStyle(
+        containerAlpha = if (snapshot.isEInk) 1f else 0.92f
+    ).copy(
+        borderColor = Color(NgTheme.colors.outlineVariant).copy(
+            alpha = if (snapshot.isEInk) 1f else 0.22f
+        ),
+        shadowElevation = 0.dp,
+        borderWidth = if (snapshot.isEInk) 1.dp else 0.6.dp,
+    )
+    NgVisualSurface(
+        modifier = modifier.fillMaxWidth(),
+        role = NgMaterialRole.CONTROL,
+        cornerRadius = cornerRadius,
+        shape = shape,
+        style = style,
+        contentPadding = contentPadding,
+        content = content,
+    )
+}
+
+/** Provider 与 TTS 编辑页的连续字段玻璃承载面。 */
+@Composable
+fun NgFormFieldGroup(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    NgFormControlGroup(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content,
+        )
+    }
+}
+
+/** Provider 等开关区沿用原有 12×4dp 几何。 */
+@Composable
+fun NgFormSwitchGroup(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    NgFormControlGroup(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+        content = content,
+    )
+}
+
 @Composable
 fun NgFormSwitchRow(
     title: String,
@@ -893,12 +1461,29 @@ fun NgFormSwitchRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     density: NgFormDensity = NgFormDensity.REGULAR,
+    variant: NgFormSwitchRowVariant = NgFormSwitchRowVariant.DEFAULT,
 ) {
     val compact = density == NgFormDensity.COMPACT
+    val grouped = variant == NgFormSwitchRowVariant.GROUPED
+    val minHeight = when {
+        compact -> 36.dp
+        grouped -> 40.dp
+        else -> 42.dp
+    }
+    val fontSize = when {
+        compact -> 14.sp
+        grouped -> 16.sp
+        else -> 17.sp
+    }
+    val lineHeight = when {
+        compact -> 18.sp
+        grouped -> 20.sp
+        else -> 21.sp
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = if (compact) 36.dp else 42.dp)
+            .heightIn(min = minHeight)
             .alpha(if (enabled) 1f else 0.45f),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -906,8 +1491,8 @@ fun NgFormSwitchRow(
             text = title,
             modifier = Modifier.weight(1f),
             color = Color(NgTheme.colors.onSurface),
-            fontSize = if (compact) 14.sp else 17.sp,
-            lineHeight = if (compact) 18.sp else 21.sp,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -951,6 +1536,8 @@ fun NgFormActionRow(
 
 enum class NgFormActionButtonAppearance {
     DEFAULT,
+    SURFACE_CARD,
+    SURFACE_CARD_BORDERLESS,
     DIALOG,
 }
 
@@ -962,27 +1549,39 @@ fun NgFormActionButton(
     enabled: Boolean = true,
     variant: NgButtonVariant = NgButtonVariant.OUTLINE,
     appearance: NgFormActionButtonAppearance = NgFormActionButtonAppearance.DEFAULT,
+    buttonHeight: Dp = 36.dp,
+    minimumWidth: Dp = 76.dp,
+    textSize: TextUnit = 14.sp,
+    textLineHeight: TextUnit = 17.sp,
 ) {
     val colors = NgTheme.colors
     val primary = Color(colors.primary)
     val shape = RoundedCornerShape(NgTheme.shapes.mediumDp.dp)
-    val dialogAppearance = appearance == NgFormActionButtonAppearance.DIALOG
+    val surfaceCardAppearance = appearance == NgFormActionButtonAppearance.DIALOG ||
+        appearance == NgFormActionButtonAppearance.SURFACE_CARD ||
+        appearance == NgFormActionButtonAppearance.SURFACE_CARD_BORDERLESS
+    val borderlessSurfaceAppearance =
+        appearance == NgFormActionButtonAppearance.SURFACE_CARD_BORDERLESS
     val containerColor = when (variant) {
         NgButtonVariant.PRIMARY,
         NgButtonVariant.PRIMARY_LIGHT_CONTENT -> primary
         NgButtonVariant.TONAL -> Color(colors.selectedContainer)
+        NgButtonVariant.NEUTRAL -> Color(colors.surfaceContainerHigh).copy(
+            alpha = if (NgTheme.snapshot.isEInk) 1f else 0.38f
+        )
         NgButtonVariant.DANGER -> Color(colors.error)
         NgButtonVariant.ON_IMAGE -> Color.Black.copy(alpha = 0.56f)
-        NgButtonVariant.OUTLINE -> if (dialogAppearance) {
-            colorResource(R.color.ng_surface_card)
+        NgButtonVariant.OUTLINE -> if (surfaceCardAppearance) {
+            ngDrawerContentCardColor()
         } else {
             Color(colors.surface)
         }
     }
     val contentColor = when (variant) {
-        NgButtonVariant.PRIMARY -> if (dialogAppearance) Color.White else Color(colors.onPrimary)
+        NgButtonVariant.PRIMARY -> Color.White
         NgButtonVariant.PRIMARY_LIGHT_CONTENT -> Color.White
-        NgButtonVariant.TONAL -> Color(colors.onSurface)
+        NgButtonVariant.TONAL,
+        NgButtonVariant.NEUTRAL -> Color(colors.onSurface)
         NgButtonVariant.DANGER -> Color.White
         NgButtonVariant.ON_IMAGE -> Color.White
         NgButtonVariant.OUTLINE -> primary
@@ -990,8 +1589,8 @@ fun NgFormActionButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .height(36.dp)
-            .widthIn(min = 76.dp),
+            .height(buttonHeight)
+            .widthIn(min = minimumWidth),
         enabled = enabled,
         shape = shape,
         colors = ButtonDefaults.buttonColors(
@@ -1000,7 +1599,7 @@ fun NgFormActionButton(
             disabledContainerColor = containerColor.copy(alpha = 0.45f),
             disabledContentColor = contentColor.copy(alpha = 0.55f)
         ),
-        border = if (variant == NgButtonVariant.OUTLINE) {
+        border = if (variant == NgButtonVariant.OUTLINE && !borderlessSurfaceAppearance) {
             BorderStroke(1.dp, primary)
         } else {
             null
@@ -1016,8 +1615,8 @@ fun NgFormActionButton(
     ) {
         Text(
             text = text,
-            fontSize = 14.sp,
-            lineHeight = 17.sp,
+            fontSize = textSize,
+            lineHeight = textLineHeight,
             fontWeight = FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

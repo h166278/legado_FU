@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import io.legado.app.R
 import io.legado.app.ui.design.components.NgDialogVariant
 import io.legado.app.ui.design.theme.NgTheme
@@ -31,15 +34,19 @@ import io.legado.app.ui.design.theme.NgTheme
 /** Compose NG 居中弹窗内容外壳；窗口尺寸与遮罩仍由 applyNgDialogWindow 统一处理。 */
 @Composable
 fun NgDialog(
-    title: String,
+    title: String?,
     modifier: Modifier = Modifier,
     variant: NgDialogVariant = NgDialogVariant.STANDARD,
+    titleFontSize: TextUnit? = null,
+    titleFontWeight: FontWeight = FontWeight.Bold,
     actions: @Composable RowScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val metrics = dialogMetrics(variant)
     val cornerRadius = when (variant) {
         NgDialogVariant.COMPACT_CONFIRMATION -> NgTheme.shapes.largeDp
+        NgDialogVariant.CLASSIC_CONFIRMATION -> NgTheme.shapes.mediumDp
+        NgDialogVariant.FORM_EDITOR -> NgTheme.shapes.dialogDp
         else -> NgTheme.shapes.extraLargeDp
     }
     Surface(
@@ -56,18 +63,20 @@ fun NgDialog(
                 bottom = metrics.bottomPadding,
             ),
         ) {
-            Text(
-                text = title,
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(NgTheme.colors.onSurface),
-                fontSize = metrics.titleSize,
-                lineHeight = metrics.titleLineHeight,
-                fontWeight = FontWeight.Bold,
-                textAlign = metrics.titleAlignment,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(metrics.titleSpacing))
+            if (title != null) {
+                Text(
+                    text = title,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(NgTheme.colors.onSurface),
+                    fontSize = titleFontSize ?: metrics.titleSize,
+                    lineHeight = metrics.titleLineHeight,
+                    fontWeight = titleFontWeight,
+                    textAlign = metrics.titleAlignment,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(metrics.titleSpacing))
+            }
             content()
             Spacer(Modifier.height(metrics.actionSpacing))
             Row(
@@ -80,6 +89,38 @@ fun NgDialog(
     }
 }
 
+/** 提示／确认弹窗使用的纯文字操作，保留触控面积但不绘制大按钮容器。 */
+@Composable
+fun NgDialogTextActionButton(
+    text: String,
+    onClick: () -> Unit,
+    danger: Boolean = false,
+    enabled: Boolean = true,
+    secondary: Boolean = false,
+) {
+    val contentColor = Color(
+        when {
+            danger -> NgTheme.colors.error
+            secondary -> NgTheme.colors.onSurfaceVariant
+            else -> NgTheme.colors.primary
+        }
+    ).let { if (enabled) it else it.copy(alpha = 0.45f) }
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 16.dp),
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            fontSize = 16.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.Normal,
+            maxLines = 1,
+        )
+    }
+}
+
 /**
  * 顶栏承载保存操作的紧凑输入弹窗。
  *
@@ -89,6 +130,9 @@ fun NgDialog(
 fun NgCompactEditorDialog(
     title: String,
     modifier: Modifier = Modifier,
+    titleFontSize: TextUnit = 18.sp,
+    titleLineHeight: TextUnit = 22.sp,
+    titleFontWeight: FontWeight = FontWeight.Medium,
     titleAction: @Composable RowScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -110,9 +154,9 @@ fun NgCompactEditorDialog(
                     text = title,
                     modifier = Modifier.weight(1f),
                     color = Color(NgTheme.colors.onSurface),
-                    fontSize = 18.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = titleFontSize,
+                    lineHeight = titleLineHeight,
+                    fontWeight = titleFontWeight,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -133,6 +177,7 @@ fun NgDialogValueRow(
     value: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -156,15 +201,21 @@ fun NgDialogValueRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = value,
-                modifier = Modifier.padding(start = 12.dp),
-                color = Color(NgTheme.colors.onSurfaceVariant),
-                fontSize = 15.sp,
-                lineHeight = 19.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (value.isNotEmpty()) {
+                Text(
+                    text = value,
+                    modifier = Modifier.padding(start = 12.dp),
+                    color = Color(NgTheme.colors.onSurfaceVariant),
+                    fontSize = 15.sp,
+                    lineHeight = 19.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            trailingContent?.let {
+                Spacer(Modifier.width(10.dp))
+                it()
+            }
         }
     }
 }
@@ -223,6 +274,17 @@ private fun dialogMetrics(variant: NgDialogVariant): NgDialogMetrics = when (var
         titleAlignment = TextAlign.Center,
     )
 
+    NgDialogVariant.CLASSIC_CONFIRMATION -> NgDialogMetrics(
+        horizontalPadding = 24.dp,
+        topPadding = 18.dp,
+        bottomPadding = 10.dp,
+        titleSize = 20.sp,
+        titleLineHeight = 26.sp,
+        titleSpacing = 12.dp,
+        actionSpacing = 6.dp,
+        titleAlignment = TextAlign.Start,
+    )
+
     NgDialogVariant.EDITOR -> NgDialogMetrics(
         horizontalPadding = 16.dp,
         topPadding = 18.dp,
@@ -231,6 +293,17 @@ private fun dialogMetrics(variant: NgDialogVariant): NgDialogMetrics = when (var
         titleLineHeight = 26.sp,
         titleSpacing = 24.dp,
         actionSpacing = 18.dp,
+        titleAlignment = TextAlign.Start,
+    )
+
+    NgDialogVariant.FORM_EDITOR -> NgDialogMetrics(
+        horizontalPadding = 16.dp,
+        topPadding = 16.dp,
+        bottomPadding = 16.dp,
+        titleSize = 24.sp,
+        titleLineHeight = 30.sp,
+        titleSpacing = 16.dp,
+        actionSpacing = 16.dp,
         titleAlignment = TextAlign.Start,
     )
 

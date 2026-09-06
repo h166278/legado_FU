@@ -63,6 +63,7 @@ import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.ReadAloud
+import io.legado.app.model.BookCacheManager
 import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
@@ -118,7 +119,7 @@ import io.legado.app.ui.dict.DictDialog
 import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.replace.edit.ReplaceEditActivity
+import io.legado.app.ui.replace.edit.ReplaceRuleEditDialog
 import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.ui.widget.NgActionPopup
 import io.legado.app.ui.widget.NgMenuPopup
@@ -187,6 +188,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     ReadBook.CallBack,
     AutoReadDialog.CallBack,
     TxtTocRuleDialog.CallBack,
+    ReplaceRuleEditDialog.Callback,
     ColorPickerDialogListener,
     LayoutProgressListener {
 
@@ -246,6 +248,12 @@ class ReadBookActivity : BaseReadBookActivity(),
     private val timeBatteryReceiver = TimeBatteryReceiver()
     private var screenTimeOut: Long = 0
     private var loadStates: Boolean = false
+    private var replaceRuleRenderBatchDepth = 0
+    private var replaceRuleRenderPending = false
+    private var replaceRuleRenderResetPageOffset = false
+    private var replaceRuleRenderFlushScheduled = false
+    private val replaceRuleRenderSuccessActions = arrayListOf<() -> Unit>()
+    private val replaceRuleRenderFlushRunnable = Runnable { flushReplaceRuleRender() }
     override val pageFactory get() = binding.readView.pageFactory
     override val pageDelegate get() = binding.readView.pageDelegate
     override val headerHeight: Int get() = binding.readView.curPage.headerHeight
@@ -322,7 +330,11 @@ class ReadBookActivity : BaseReadBookActivity(),
         super.onWindowFocusChanged(hasFocus)
         upSystemUiVisibility()
         if (hasFocus) {
-            binding.readMenu.upBrightnessState()
+            if (ReadBookConfig.syncFollowSystemTheme()) {
+                onReadThemeChanged()
+            } else {
+                binding.readMenu.upBrightnessState()
+            }
         } else if (!menuLayoutIsVisible) {
             ReadBook.cancelPreDownloadTask()
         }
@@ -530,7 +542,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_edit_content -> showDialogFragment(ContentEditDialog())
             R.id.menu_update_toc -> ReadBook.book?.let {
                 if (it.isEpub) {
-                    BookHelp.clearCache(it)
+                    BookCacheManager.clear(it)
                     EpubFile.clear()
                 }
                 if (it.isMobi) {
@@ -922,11 +934,10 @@ class ReadBookActivity : BaseReadBookActivity(),
                     scopes.add(it)
                 }
                 val text = selectedText.lineSequence().map { it.trim() }.joinToString("\n")
-                replaceActivity.launch(
-                    ReplaceEditActivity.startIntent(
-                        this,
+                showDialogFragment(
+                    ReplaceRuleEditDialog.newRule(
                         pattern = text,
-                        scope = scopes.joinToString(";")
+                        scope = scopes.joinToString(";"),
                     )
                 )
                 return true
@@ -2362,6 +2373,68 @@ class ReadBookActivity : BaseReadBookActivity(),
         viewModel.loadChapterList(book)
     }
 
+    override fun beginReplaceRuleRenderBatch() {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            if (replaceRuleRenderFlushScheduled) {
+                binding.root.removeCallbacks(replaceRuleRenderFlushRunnable)
+                replaceRuleRenderFlushScheduled = false
+            }
+            replaceRuleRenderBatchDepth++
+        }
+    }
+
+    override fun endReplaceRuleRenderBatch() {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            if (replaceRuleRenderBatchDepth > 0) {
+                replaceRuleRenderBatchDepth--
+            }
+            scheduleReplaceRuleRenderFlush()
+        }
+    }
+
+    private fun deferReplaceRuleRender(
+        resetPageOffset: Boolean,
+        success: (() -> Unit)? = null
+    ): Boolean {
+        if (replaceRuleRenderBatchDepth == 0 && !replaceRuleRenderFlushScheduled) {
+            return false
+        }
+        replaceRuleRenderPending = true
+        replaceRuleRenderResetPageOffset =
+            replaceRuleRenderResetPageOffset || resetPageOffset
+        success?.let(replaceRuleRenderSuccessActions::add)
+        loadStates = false
+        return true
+    }
+
+    private fun scheduleReplaceRuleRenderFlush() {
+        if (replaceRuleRenderBatchDepth != 0 ||
+            !replaceRuleRenderPending ||
+            replaceRuleRenderFlushScheduled
+        ) {
+            return
+        }
+        replaceRuleRenderFlushScheduled = true
+        binding.root.postOnAnimation(replaceRuleRenderFlushRunnable)
+    }
+
+    private fun flushReplaceRuleRender() {
+        replaceRuleRenderFlushScheduled = false
+        if (replaceRuleRenderBatchDepth != 0 || !replaceRuleRenderPending) {
+            return
+        }
+        val resetPageOffset = replaceRuleRenderResetPageOffset
+        val successActions = replaceRuleRenderSuccessActions.toList()
+        replaceRuleRenderPending = false
+        replaceRuleRenderResetPageOffset = false
+        replaceRuleRenderSuccessActions.clear()
+        binding.readView.upContent(0, resetPageOffset)
+        upSeekBarProgress()
+        successActions.forEach { it.invoke() }
+    }
+
     /**
      * 内容加载完成
      */
@@ -2384,6 +2457,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         success: (() -> Unit)?
     ) {
         lifecycleScope.launch {
+            if (deferReplaceRuleRender(resetPageOffset, success)) {
+                return@launch
+            }
             binding.readView.upContent(relativePosition, resetPageOffset)
             if (relativePosition == 0) {
                 upSeekBarProgress()
@@ -2398,6 +2474,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         resetPageOffset: Boolean,
         success: (() -> Unit)?
     ) = withContext(Main.immediate) {
+        if (deferReplaceRuleRender(resetPageOffset)) {
+            return@withContext
+        }
         binding.readView.upContent(relativePosition, resetPageOffset)
         if (relativePosition == 0) {
             upSeekBarProgress()
@@ -2810,7 +2889,12 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
-    override fun onTextHighlightClick(bookmark: Bookmark, top: Float, bottom: Float) {
+    override fun onTextHighlightClick(
+        bookmark: Bookmark,
+        anchorX: Float,
+        top: Float,
+        bottom: Float,
+    ) {
         binding.readView.cancelSelect()
         activeTextHighlight = bookmark
         val navigationBarHeight =
@@ -2822,6 +2906,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         textActionMenu.showTextHighlight(
             view = binding.textMenuPosition,
             windowHeight = binding.root.height + navigationBarHeight,
+            anchorX = anchorX.toInt(),
             anchorTopY = top.toInt(),
             anchorBottomY = bottom.toInt(),
             textHighlight = bookmark,
@@ -3005,10 +3090,12 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onMenuShow() {
         binding.readView.autoPager.pause()
+        binding.readView.upTipVisibility(true)
     }
 
     override fun onMenuHide() {
         binding.readView.autoPager.resume()
+        binding.readView.upTipVisibility(false)
     }
 
     override fun onLayoutPageCompleted(index: Int, page: TextPage) {
@@ -3141,6 +3228,7 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onDestroy() {
         super.onDestroy()
+        binding.root.removeCallbacks(replaceRuleRenderFlushRunnable)
         aiPurifyJob?.cancel()
         tts?.clearTts()
         textActionMenu.dismiss()
@@ -3159,6 +3247,11 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun observeLiveBus() = binding.run {
         observeEvent<String>(EventBus.TIME_CHANGED) { readView.upTime() }
         observeEvent<Int>(EventBus.BATTERY_CHANGED) { readView.upBattery(it) }
+        observeEvent<Boolean>(EventBus.SYSTEM_UI_MODE_CHANGED) { systemNightMode ->
+            if (ReadBookConfig.syncFollowSystemTheme(systemNightMode)) {
+                onReadThemeChanged()
+            }
+        }
         observeEvent<Boolean>(EventBus.MEDIA_BUTTON) {
             if (it) {
                 toggleReadAloud()
@@ -3278,6 +3371,10 @@ class ReadBookActivity : BaseReadBookActivity(),
                 keepScreenOn(false)
             }
         }
+    }
+
+    override fun onReplaceRuleSaved() {
+        viewModel.replaceRuleChanged()
     }
 
     companion object {

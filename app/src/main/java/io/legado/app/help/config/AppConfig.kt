@@ -28,6 +28,13 @@ internal fun normalizeReadAloudWorkerCount(value: String?): Int {
     return value?.toIntOrNull()?.coerceIn(1, 5) ?: 3
 }
 
+internal const val THREAD_COUNT_MIN = 1
+internal const val THREAD_COUNT_MAX = 128
+internal const val THREAD_COUNT_DEFAULT = 32
+
+internal fun normalizeThreadCount(value: Int): Int =
+    value.coerceIn(THREAD_COUNT_MIN, THREAD_COUNT_MAX)
+
 internal fun normalizeThemeMode(value: String?): String {
     return when (value) {
         "0", "1", "2", "3" -> value
@@ -74,13 +81,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     var isEInkMode = getThemeModePref() == "3"
     var clickActionTL = appCtx.getPrefInt(PreferKey.clickActionTL, 2)
-    var clickActionTC = appCtx.getPrefInt(PreferKey.clickActionTC, 0)
+    var clickActionTC = appCtx.getPrefInt(PreferKey.clickActionTC, 2)
     var clickActionTR = appCtx.getPrefInt(PreferKey.clickActionTR, 1)
-    var clickActionML = appCtx.getPrefInt(PreferKey.clickActionML, 0)
+    var clickActionML = appCtx.getPrefInt(PreferKey.clickActionML, 2)
     var clickActionMC = appCtx.getPrefInt(PreferKey.clickActionMC, 0)
-    var clickActionMR = appCtx.getPrefInt(PreferKey.clickActionMR, 0)
+    var clickActionMR = appCtx.getPrefInt(PreferKey.clickActionMR, 1)
     var clickActionBL = appCtx.getPrefInt(PreferKey.clickActionBL, 2)
-    var clickActionBC = appCtx.getPrefInt(PreferKey.clickActionBC, 0)
+    var clickActionBC = appCtx.getPrefInt(PreferKey.clickActionBC, 1)
     var clickActionBR = appCtx.getPrefInt(PreferKey.clickActionBR, 1)
     var themeMode = getThemeModePref()
     var useDefaultCover = appCtx.getPrefBoolean(PreferKey.useDefaultCover, false)
@@ -113,25 +120,25 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                 appCtx.getPrefInt(PreferKey.clickActionTL, 2)
 
             PreferKey.clickActionTC -> clickActionTC =
-                appCtx.getPrefInt(PreferKey.clickActionTC, 0)
+                appCtx.getPrefInt(PreferKey.clickActionTC, 2)
 
             PreferKey.clickActionTR -> clickActionTR =
                 appCtx.getPrefInt(PreferKey.clickActionTR, 1)
 
             PreferKey.clickActionML -> clickActionML =
-                appCtx.getPrefInt(PreferKey.clickActionML, 0)
+                appCtx.getPrefInt(PreferKey.clickActionML, 2)
 
             PreferKey.clickActionMC -> clickActionMC =
                 appCtx.getPrefInt(PreferKey.clickActionMC, 0)
 
             PreferKey.clickActionMR -> clickActionMR =
-                appCtx.getPrefInt(PreferKey.clickActionMR, 0)
+                appCtx.getPrefInt(PreferKey.clickActionMR, 1)
 
             PreferKey.clickActionBL -> clickActionBL =
                 appCtx.getPrefInt(PreferKey.clickActionBL, 2)
 
             PreferKey.clickActionBC -> clickActionBC =
-                appCtx.getPrefInt(PreferKey.clickActionBC, 0)
+                appCtx.getPrefInt(PreferKey.clickActionBC, 1)
 
             PreferKey.clickActionBR -> clickActionBR =
                 appCtx.getPrefInt(PreferKey.clickActionBR, 1)
@@ -621,9 +628,11 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var threadCount: Int
-        get() = appCtx.getPrefInt(PreferKey.threadCount, 32)
+        get() = normalizeThreadCount(
+            appCtx.getPrefInt(PreferKey.threadCount, THREAD_COUNT_DEFAULT)
+        )
         set(value) {
-            appCtx.putPrefInt(PreferKey.threadCount, value)
+            appCtx.putPrefInt(PreferKey.threadCount, normalizeThreadCount(value))
         }
 
     var remoteServerId: Long
@@ -676,6 +685,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val readAloudMultiRole: Boolean
         get() = readAloudScenarioMode == 1
+
+    val showListeningCapsuleOnMain: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showListeningCapsuleOnMain, false)
 
     var chineseConverterType: Int
         get() = appCtx.getPrefInt(PreferKey.chineseConverterType)
@@ -827,36 +839,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.tocCountWords, true)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.tocCountWords, value)
-        }
-
-    var tocShowOriginalIndex: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.tocShowOriginalIndex)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.tocShowOriginalIndex, value)
-        }
-
-    var tocTitleMaxLines: Int
-        get() = appCtx.getPrefInt(PreferKey.tocTitleMaxLines, 1)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.tocTitleMaxLines, value)
-        }
-
-    var tocLooseSpacing: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.tocLooseSpacing)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.tocLooseSpacing, value)
-        }
-
-    var tocInfoDisplay: Int
-        get() = appCtx.getPrefInt(PreferKey.tocInfoDisplay)
-        set(value) {
-            appCtx.putPrefInt(PreferKey.tocInfoDisplay, value)
-        }
-
-    var tocInfoBelowTitle: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.tocInfoBelowTitle)
-        set(value) {
-            appCtx.putPrefBoolean(PreferKey.tocInfoBelowTitle, value)
         }
 
     var enableReadRecord: Boolean
@@ -1048,18 +1030,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.readBarStyleFollowPage, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.readBarStyleFollowPage, value)
-        }
-
-    var sourceEditMaxLine: Int
-        get() {
-            val maxLine = appCtx.getPrefInt(PreferKey.sourceEditMaxLine, Int.MAX_VALUE)
-            if (maxLine < 10) {
-                return Int.MAX_VALUE
-            }
-            return maxLine
-        }
-        set(value) {
-            appCtx.putPrefInt(PreferKey.sourceEditMaxLine, value)
         }
 
     var audioPlayUseWakeLock: Boolean

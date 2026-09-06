@@ -21,9 +21,19 @@ import io.legado.app.help.config.BookshelfFloatingDockConfig
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.help.config.BookshelfTopBarStyle
 import io.legado.app.help.config.FloatingBottomBarConfig
+import io.legado.app.help.config.ListeningCartoonType
+import io.legado.app.help.config.NgDynamicSceneTheme
 import io.legado.app.help.config.NgDrawerAppearanceConfig
+import io.legado.app.help.config.NgSoftGradientColorMode
+import io.legado.app.help.config.NgSoftGradientColorPreset
+import io.legado.app.help.config.NgSoftGradientLightFieldPreset
+import io.legado.app.help.config.NgSoftGradientTheme
+import io.legado.app.help.config.NgThemeModeGroup
+import io.legado.app.help.config.NgThemeModeStore
+import io.legado.app.help.config.NgThemePresentationMode
+import io.legado.app.help.config.NgVisualSystem
+import io.legado.app.help.config.NgVisualSystemStore
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.help.config.normalizeThemeMode
 import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
@@ -58,6 +68,7 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     private val requestCodeBgLight = 121
     private val requestCodeBgDark = 122
     private var screenState by mutableStateOf(ThemeConfigScreenState())
+    private var launcherIconSelection by mutableStateOf<String?>(null)
     private var backgroundEditorState by mutableStateOf<ThemeBackgroundEditorState?>(null)
     private var fontScaleEditorState by mutableStateOf<ThemeFontScaleEditorState?>(null)
 
@@ -76,7 +87,7 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        activity?.setTitle(R.string.theme_setting)
+        activity?.setTitle(titleRes())
         refreshContent()
         (view as ComposeView).apply {
             setViewCompositionStrategy(
@@ -86,7 +97,15 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                 NgAppTheme {
                     ThemeConfigScreen(
                         state = screenState,
-                        onThemeModeSelected = ::selectThemeMode,
+                        section = screenSection(),
+                        onThemeModeGroupSelected = ::selectThemeModeGroup,
+                        onStandardThemeModeSelected = ::selectStandardThemeMode,
+                        onInternalThemeModeSelected = ::selectInternalThemeMode,
+                        onSoftGradientColorSelected = ::selectSoftGradientColor,
+                        onSoftGradientCustomColorSelected = ::selectSoftGradientCustomColor,
+                        onSoftGradientLightFieldSelected = ::selectSoftGradientLightField,
+                        onDynamicScenePresetSelected = ::selectDynamicScenePreset,
+                        onVisualSystemSelected = ::setVisualSystem,
                         onLauncherIconClick = ::showLauncherIconSelection,
                         onFloatingBottomBarChanged = ::setFloatingBottomBar,
                         onFloatingBottomBarBottomDistanceChanged =
@@ -117,6 +136,12 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                         onBookshelfFloatingDockSearchPositionSelected =
                             ::setBookshelfFloatingDockSearchPosition,
                         onTransparentAppBarsChanged = ::setTransparentAppBars,
+                        onAutoRefreshChanged = ::setAutoRefresh,
+                        onOnlyUpdateReadChanged = ::setOnlyUpdateRead,
+                        onDefaultToReadChanged = ::setDefaultToRead,
+                        onShowDiscoveryChanged = ::setShowDiscovery,
+                        onShowRssChanged = ::setShowRss,
+                        onDefaultHomePageSelected = ::setDefaultHomePage,
                         onOpenCustomColors = {
                             (activity as? ConfigActivity)?.openThemeColorConfigPage()
                         },
@@ -132,6 +157,13 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
                         onOpenDayBackground = { openBackgroundEditor(false) },
                         onOpenNightBackground = { openBackgroundEditor(true) }
                     )
+                    launcherIconSelection?.let { currentValue ->
+                        LauncherIconSelectionSheet(
+                            currentValue = currentValue,
+                            onDismissRequest = { launcherIconSelection = null },
+                            onSelected = ::selectLauncherIcon,
+                        )
+                    }
                     backgroundEditorState?.let { editorState ->
                         ThemeBackgroundEditorSheet(
                             state = editorState,
@@ -172,8 +204,24 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
 
     override fun onResume() {
         super.onResume()
-        activity?.setTitle(R.string.theme_setting)
+        activity?.setTitle(titleRes())
         if (view != null) refreshContent()
+    }
+
+    private fun screenSection(): ThemeConfigSection {
+        return when (activity?.intent?.getStringExtra("configTag")) {
+            ConfigTag.APPEARANCE_CONFIG -> ThemeConfigSection.APPEARANCE
+            ConfigTag.INTERFACE_CONFIG -> ThemeConfigSection.INTERFACE
+            else -> ThemeConfigSection.ALL
+        }
+    }
+
+    private fun titleRes(): Int {
+        return when (screenSection()) {
+            ThemeConfigSection.APPEARANCE -> R.string.appearance_setting
+            ThemeConfigSection.INTERFACE -> R.string.interface_layout_setting
+            ThemeConfigSection.ALL -> R.string.theme_setting
+        }
     }
 
     private fun refreshContent() {
@@ -182,7 +230,16 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
         val displayMetrics = resources.displayMetrics
         val statusBarHeightPx = requireContext().statusBarHeight
         screenState = ThemeConfigScreenState(
-            themeMode = normalizeThemeMode(AppConfig.themeMode),
+            themeModeGroup = NgThemeModeStore.currentGroup(requireContext()),
+            presentationMode = NgThemeModeStore.current(requireContext()),
+            standardThemeMode = NgThemeModeStore.standardThemeMode(requireContext()),
+            internalThemeMode = NgThemeModeStore.lastInternalMode(requireContext()),
+            softGradientColorMode = NgSoftGradientTheme.colorMode(requireContext()),
+            softGradientColor = NgSoftGradientTheme.colorPreset(requireContext()),
+            softGradientCustomColor = NgSoftGradientTheme.customColor(requireContext()),
+            softGradientLightField = NgSoftGradientTheme.lightFieldPreset(requireContext()),
+            dynamicScenePreset = NgDynamicSceneTheme.current(requireContext()),
+            visualSystem = NgVisualSystemStore.current(requireContext()),
             showLauncherIcon = Build.VERSION.SDK_INT >= 26,
             launcherIconRes = launcherIconResource(launcherIcon),
             floatingBottomBar = getPrefBoolean(PreferKey.useFloatingBottomBar, false),
@@ -211,17 +268,23 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
             bookshelfFloatingDockSearchPosition =
                 AppConfig.bookshelfFloatingDockSearchPosition,
             transparentAppBars = getPrefBoolean(PreferKey.tNavBar, false),
+            autoRefresh = AppConfig.autoRefreshBook,
+            onlyUpdateRead = AppConfig.onlyUpdateRead,
+            defaultToRead = getPrefBoolean(PreferKey.defaultToRead, false),
+            showDiscovery = AppConfig.showDiscovery,
+            showRss = AppConfig.showRSS,
+            defaultHomePage = AppConfig.defaultHomePage ?: "bookshelf",
             fontScaleSummary = getString(
                 R.string.font_scale_summary,
                 AppContextWrapper.getFontScale(requireContext())
             ),
             dayBackgroundSummary = backgroundSummary(
-                PreferKey.bgImage,
-                PreferKey.bgImageBlurring
+                imageKey = PreferKey.bgImage,
+                blurKey = PreferKey.bgImageBlurring
             ),
             nightBackgroundSummary = backgroundSummary(
-                PreferKey.bgImageN,
-                PreferKey.bgImageNBlurring
+                imageKey = PreferKey.bgImageN,
+                blurKey = PreferKey.bgImageNBlurring
             )
         )
     }
@@ -243,23 +306,104 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
         )
     }
 
-    private fun selectThemeMode(mode: String) {
-        val normalized = normalizeThemeMode(mode)
-        if (normalized == screenState.themeMode) return
-        screenState = screenState.copy(themeMode = normalized)
-        ThemeConfig.applyThemeMode(requireContext(), normalized)
+    private fun selectThemeModeGroup(group: NgThemeModeGroup) {
+        if (group == screenState.themeModeGroup) return
+        val presentationMode = if (group == NgThemeModeGroup.STANDARD) {
+            NgThemePresentationMode.STANDARD
+        } else {
+            screenState.internalThemeMode
+        }
+        screenState = screenState.copy(
+            themeModeGroup = group,
+            presentationMode = presentationMode,
+        )
+        NgThemeModeStore.activateGroup(requireContext(), group)
+    }
+
+    private fun selectStandardThemeMode(mode: String) {
+        if (
+            screenState.themeModeGroup == NgThemeModeGroup.STANDARD &&
+            mode == screenState.standardThemeMode
+        ) {
+            return
+        }
+        screenState = screenState.copy(
+            themeModeGroup = NgThemeModeGroup.STANDARD,
+            presentationMode = NgThemePresentationMode.STANDARD,
+            standardThemeMode = mode,
+        )
+        NgThemeModeStore.activateStandard(requireContext(), mode)
+    }
+
+    private fun selectInternalThemeMode(mode: NgThemePresentationMode) {
+        if (
+            screenState.themeModeGroup == NgThemeModeGroup.INTERNAL &&
+            mode == screenState.presentationMode
+        ) {
+            return
+        }
+        screenState = screenState.copy(
+            themeModeGroup = NgThemeModeGroup.INTERNAL,
+            presentationMode = mode,
+            internalThemeMode = mode,
+        )
+        NgThemeModeStore.activateInternal(requireContext(), mode)
+    }
+
+    private fun selectSoftGradientColor(preset: NgSoftGradientColorPreset) {
+        if (
+            screenState.softGradientColorMode == NgSoftGradientColorMode.PRESET &&
+            preset == screenState.softGradientColor
+        ) return
+        screenState = screenState.copy(
+            softGradientColorMode = NgSoftGradientColorMode.PRESET,
+            softGradientColor = preset,
+        )
+        NgSoftGradientTheme.selectColor(requireContext(), preset)
+    }
+
+    private fun selectSoftGradientCustomColor(color: Int) {
+        val normalizedColor = color or 0xFF000000.toInt()
+        if (
+            screenState.softGradientColorMode == NgSoftGradientColorMode.CUSTOM &&
+            normalizedColor == screenState.softGradientCustomColor
+        ) return
+        screenState = screenState.copy(
+            softGradientColorMode = NgSoftGradientColorMode.CUSTOM,
+            softGradientCustomColor = normalizedColor,
+        )
+        NgSoftGradientTheme.selectCustomColor(requireContext(), normalizedColor)
+    }
+
+    private fun selectSoftGradientLightField(preset: NgSoftGradientLightFieldPreset) {
+        if (preset == screenState.softGradientLightField) return
+        screenState = screenState.copy(softGradientLightField = preset)
+        NgSoftGradientTheme.selectLightField(requireContext(), preset)
+    }
+
+    private fun selectDynamicScenePreset(preset: ListeningCartoonType) {
+        if (preset == screenState.dynamicScenePreset) return
+        screenState = screenState.copy(dynamicScenePreset = preset)
+        NgDynamicSceneTheme.select(requireContext(), preset)
+    }
+
+    private fun setVisualSystem(visualSystem: NgVisualSystem) {
+        if (visualSystem == screenState.visualSystem) return
+        NgVisualSystemStore.update(requireContext(), visualSystem)
+        screenState = screenState.copy(visualSystem = visualSystem)
     }
 
     private fun showLauncherIconSelection() {
-        LauncherIconSelectionSheet.show(
-            context = requireContext(),
-            currentValue = getPrefString(PreferKey.launcherIcon, DEFAULT_LAUNCHER_ICON)
-                ?: DEFAULT_LAUNCHER_ICON
-        ) { value ->
-            putPrefString(PreferKey.launcherIcon, value)
-            LauncherIconHelp.changeIcon(value)
-            screenState = screenState.copy(launcherIconRes = launcherIconResource(value))
-        }
+        launcherIconSelection = getPrefString(
+            PreferKey.launcherIcon,
+            DEFAULT_LAUNCHER_ICON,
+        ) ?: DEFAULT_LAUNCHER_ICON
+    }
+
+    private fun selectLauncherIcon(value: String) {
+        putPrefString(PreferKey.launcherIcon, value)
+        LauncherIconHelp.changeIcon(value)
+        screenState = screenState.copy(launcherIconRes = launcherIconResource(value))
     }
 
     private fun setFloatingBottomBar(enabled: Boolean) {
@@ -372,6 +516,38 @@ class ThemeConfigFragment : BaseFragment(R.layout.fragment_theme_config) {
         screenState = screenState.copy(transparentAppBars = enabled)
         ThemeConfig.applyTheme(requireContext())
         recreateActivities()
+    }
+
+    private fun setAutoRefresh(enabled: Boolean) {
+        putPrefBoolean(PreferKey.autoRefresh, enabled)
+        screenState = screenState.copy(autoRefresh = enabled)
+    }
+
+    private fun setOnlyUpdateRead(enabled: Boolean) {
+        putPrefBoolean(PreferKey.onlyUpdateRead, enabled)
+        screenState = screenState.copy(onlyUpdateRead = enabled)
+    }
+
+    private fun setDefaultToRead(enabled: Boolean) {
+        putPrefBoolean(PreferKey.defaultToRead, enabled)
+        screenState = screenState.copy(defaultToRead = enabled)
+    }
+
+    private fun setShowDiscovery(enabled: Boolean) {
+        putPrefBoolean(PreferKey.showDiscovery, enabled)
+        screenState = screenState.copy(showDiscovery = enabled)
+        postEvent(EventBus.NOTIFY_MAIN, true)
+    }
+
+    private fun setShowRss(enabled: Boolean) {
+        putPrefBoolean(PreferKey.showRss, enabled)
+        screenState = screenState.copy(showRss = enabled)
+        postEvent(EventBus.NOTIFY_MAIN, true)
+    }
+
+    private fun setDefaultHomePage(value: String) {
+        putPrefString(PreferKey.defaultHomePage, value)
+        screenState = screenState.copy(defaultHomePage = value)
     }
 
     private fun openFontScaleEditor() {

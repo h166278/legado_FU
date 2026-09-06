@@ -1,17 +1,17 @@
 package io.legado.app.ui.config
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,18 +25,30 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.legado.app.R
 import io.legado.app.help.config.NgCoverAlbum
+import io.legado.app.ui.design.components.NgDialogVariant
 import io.legado.app.ui.design.components.NgSettingsTrailing
+import io.legado.app.ui.design.components.compose.NgBottomDrawerSurface
+import io.legado.app.ui.design.components.compose.NgDrawerContentCardStyle
+import io.legado.app.ui.design.components.compose.NgCompactSettingsDivider
+import io.legado.app.ui.design.components.compose.NgCompactSettingsGroup
+import io.legado.app.ui.design.components.compose.NgCompactSettingsItem
+import io.legado.app.ui.design.components.compose.NgDialog
+import io.legado.app.ui.design.components.compose.NgDialogTextActionButton
 import io.legado.app.ui.design.components.compose.NgSettingsGroup
 import io.legado.app.ui.design.components.compose.NgSettingsItem
+import io.legado.app.ui.design.components.compose.NgSettingsItemAppearance
 import io.legado.app.ui.design.components.compose.NgSettingsSectionLabel
+import io.legado.app.ui.design.components.compose.NgSwipeToDelete
 import io.legado.app.ui.design.theme.NgTheme
 
 internal data class CoverConfigScreenState(
@@ -60,6 +72,7 @@ internal fun CoverConfigScreen(
     onOpenCoverRule: () -> Unit,
     onUseDefaultCoverChanged: (Boolean) -> Unit,
     onCoverAlbumSelected: (String?) -> Unit,
+    onCoverAlbumDelete: (NgCoverAlbum) -> Unit,
     onOpenDayCover: () -> Unit,
     onDayShowNameChanged: (Boolean) -> Unit,
     onDayShowAuthorChanged: (Boolean) -> Unit,
@@ -68,6 +81,7 @@ internal fun CoverConfigScreen(
     onNightShowAuthorChanged: (Boolean) -> Unit
 ) {
     var showCoverAlbumSelector by remember { mutableStateOf(false) }
+    var pendingDeleteAlbum by remember { mutableStateOf<NgCoverAlbum?>(null) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -75,8 +89,8 @@ internal fun CoverConfigScreen(
             .padding(horizontal = 16.dp)
             .padding(top = 16.dp, bottom = 24.dp)
     ) {
-        NgSettingsGroup {
-            NgSettingsItem(
+        NgCompactSettingsGroup {
+            NgCompactSettingsItem(
                 title = stringResource(R.string.only_wifi),
                 summary = stringResource(R.string.only_wifi_summary),
                 trailing = NgSettingsTrailing.SWITCH,
@@ -84,12 +98,14 @@ internal fun CoverConfigScreen(
                 onCheckedChange = onLoadCoverOnlyWifiChanged,
                 onClick = { onLoadCoverOnlyWifiChanged(!state.loadCoverOnlyWifi) }
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.cover_rule),
                 summary = stringResource(R.string.cover_rule_summary),
                 onClick = onOpenCoverRule
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.use_default_cover),
                 summary = stringResource(R.string.use_default_cover_s),
                 trailing = NgSettingsTrailing.SWITCH,
@@ -97,7 +113,8 @@ internal fun CoverConfigScreen(
                 onCheckedChange = onUseDefaultCoverChanged,
                 onClick = { onUseDefaultCoverChanged(!state.useDefaultCover) }
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.ng_cover_album),
                 summary = state.coverAlbumSummary,
                 enabled = state.coverAlbums.isNotEmpty(),
@@ -105,15 +122,16 @@ internal fun CoverConfigScreen(
             )
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(20.dp))
         NgSettingsSectionLabel(stringResource(R.string.day))
-        NgSettingsGroup {
-            NgSettingsItem(
+        NgCompactSettingsGroup {
+            NgCompactSettingsItem(
                 title = stringResource(R.string.default_cover),
                 summary = state.dayCoverSummary,
                 onClick = onOpenDayCover
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.cover_show_name),
                 summary = stringResource(R.string.cover_show_name_summary),
                 trailing = NgSettingsTrailing.SWITCH,
@@ -121,7 +139,8 @@ internal fun CoverConfigScreen(
                 onCheckedChange = onDayShowNameChanged,
                 onClick = { onDayShowNameChanged(!state.dayShowName) }
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.cover_show_author),
                 summary = stringResource(R.string.cover_show_author_summary),
                 enabled = state.dayShowName,
@@ -132,14 +151,16 @@ internal fun CoverConfigScreen(
             )
         }
 
+        Spacer(Modifier.height(20.dp))
         NgSettingsSectionLabel(stringResource(R.string.night))
-        NgSettingsGroup {
-            NgSettingsItem(
+        NgCompactSettingsGroup {
+            NgCompactSettingsItem(
                 title = stringResource(R.string.default_cover),
                 summary = state.nightCoverSummary,
                 onClick = onOpenNightCover
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.cover_show_name),
                 summary = stringResource(R.string.cover_show_name_summary),
                 trailing = NgSettingsTrailing.SWITCH,
@@ -147,7 +168,8 @@ internal fun CoverConfigScreen(
                 onCheckedChange = onNightShowNameChanged,
                 onClick = { onNightShowNameChanged(!state.nightShowName) }
             )
-            NgSettingsItem(
+            NgCompactSettingsDivider()
+            NgCompactSettingsItem(
                 title = stringResource(R.string.cover_show_author),
                 summary = stringResource(R.string.cover_show_author_summary),
                 enabled = state.nightShowName,
@@ -167,7 +189,18 @@ internal fun CoverConfigScreen(
                 onCoverAlbumSelected(albumId)
                 showCoverAlbumSelector = false
             },
+            onDelete = { pendingDeleteAlbum = it },
             onDismissRequest = { showCoverAlbumSelector = false },
+        )
+    }
+    pendingDeleteAlbum?.let { album ->
+        NgCoverAlbumDeleteConfirmDialog(
+            album = album,
+            onDismiss = { pendingDeleteAlbum = null },
+            onConfirm = {
+                pendingDeleteAlbum = null
+                onCoverAlbumDelete(album)
+            },
         )
     }
 }
@@ -178,54 +211,67 @@ private fun NgCoverAlbumSelectionSheet(
     albums: List<NgCoverAlbum>,
     selectedAlbumId: String?,
     onSelect: (String?) -> Unit,
+    onDelete: (NgCoverAlbum) -> Unit,
     onDismissRequest: () -> Unit,
 ) {
-    val snapshot = NgTheme.snapshot
-    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val baseSnapshot = NgTheme.snapshot
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         dragHandle = null,
         containerColor = Color.Transparent,
-        contentColor = Color(snapshot.colors.onSurface),
-        shape = shape,
+        contentColor = Color(baseSnapshot.colors.onSurface),
+        shape = RectangleShape,
     ) {
-        Column(
+        NgBottomDrawerSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.52f)
-                .clip(shape)
-                .background(Color(snapshot.colors.drawerContainer))
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .fillMaxHeight(0.52f),
+            contentCardStyle = NgDrawerContentCardStyle.ADAPTIVE,
         ) {
-            Text(
-                text = stringResource(R.string.ng_cover_album),
-                color = Color(snapshot.colors.onSurface),
-                fontSize = 21.sp,
-                lineHeight = 25.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            NgSettingsGroup(modifier = Modifier.padding(top = 8.dp)) {
-                NgCoverAlbumSelectionItem(
-                    title = stringResource(R.string.ng_cover_album_none),
-                    summary = stringResource(R.string.ng_cover_album_none_summary),
-                    selected = selectedAlbumId == null,
-                    onClick = { onSelect(null) },
+            val snapshot = NgTheme.snapshot
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.ng_cover_album),
+                    color = Color(snapshot.colors.onSurface),
+                    fontSize = 21.sp,
+                    lineHeight = 25.sp,
+                    fontWeight = FontWeight.Bold,
                 )
-                albums.forEach { album ->
+                NgSettingsGroup(modifier = Modifier.padding(top = 8.dp)) {
                     NgCoverAlbumSelectionItem(
-                        title = album.name,
-                        summary = stringResource(
-                            R.string.ng_cover_album_count,
-                            album.lightImages.size,
-                            album.darkImages.size,
-                        ),
-                        selected = album.id == selectedAlbumId,
-                        onClick = { onSelect(album.id) },
+                        title = stringResource(R.string.ng_cover_album_none),
+                        summary = stringResource(R.string.ng_cover_album_none_summary),
+                        selected = selectedAlbumId == null,
+                        onClick = { onSelect(null) },
+                        appearance = NgSettingsItemAppearance.SURFACE_CARD,
                     )
+                    albums.forEach { album ->
+                        NgSwipeToDelete(
+                            deletable = true,
+                            reordering = false,
+                            onDeleteRequested = { onDelete(album) },
+                        ) {
+                            NgCoverAlbumSelectionItem(
+                                title = album.name,
+                                summary = stringResource(
+                                    R.string.ng_cover_album_count,
+                                    album.lightImages.size,
+                                    album.darkImages.size,
+                                ),
+                                selected = album.id == selectedAlbumId,
+                                onClick = { onSelect(album.id) },
+                                appearance = NgSettingsItemAppearance.SURFACE_CARD,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -238,6 +284,7 @@ private fun NgCoverAlbumSelectionItem(
     summary: String,
     selected: Boolean,
     onClick: () -> Unit,
+    appearance: NgSettingsItemAppearance,
 ) {
     val snapshot = NgTheme.snapshot
     NgSettingsItem(
@@ -254,5 +301,47 @@ private fun NgCoverAlbumSelectionItem(
             }
         },
         onClick = onClick,
+        appearance = appearance,
     )
+}
+
+@Composable
+private fun NgCoverAlbumDeleteConfirmDialog(
+    album: NgCoverAlbum,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        NgDialog(
+            title = stringResource(R.string.delete),
+            modifier = Modifier
+                .padding(horizontal = 10.dp)
+                .widthIn(max = 520.dp)
+                .heightIn(min = 156.dp),
+            variant = NgDialogVariant.CLASSIC_CONFIRMATION,
+            titleFontWeight = FontWeight.Normal,
+            actions = {
+                NgDialogTextActionButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = onDismiss,
+                    secondary = true,
+                )
+                NgDialogTextActionButton(
+                    text = stringResource(R.string.delete),
+                    onClick = onConfirm,
+                    danger = true,
+                )
+            },
+        ) {
+            Text(
+                text = stringResource(R.string.ng_cover_album_delete_message, album.name),
+                color = Color(NgTheme.colors.onSurface),
+                fontSize = 17.sp,
+                lineHeight = 23.sp,
+            )
+        }
+    }
 }

@@ -2,7 +2,6 @@ package io.legado.app.ui.book.toc
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,22 +18,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,7 +47,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
@@ -97,25 +89,7 @@ internal data class TocUiState(
     val loadWordCount: Boolean = false,
     val splitLongChapter: Boolean = false,
     val isLocalTxt: Boolean = false,
-    val tocCollapsed: Boolean = false,
-    val tocReversed: Boolean = false,
-    val tocStyle: TocStyle = TocStyle(),
 )
-
-internal data class TocStyle(
-    val showOriginalIndex: Boolean = false,
-    val titleMaxLines: Int = 1,
-    val looseSpacing: Boolean = false,
-    val infoDisplay: Int = TOC_INFO_DEFAULT,
-    val infoBelowTitle: Boolean = false,
-)
-
-internal const val TOC_INFO_DEFAULT = -1
-internal const val TOC_INFO_NONE = 0
-internal const val TOC_INFO_WORD_COUNT = 1
-internal const val TOC_INFO_PAGE = 2
-internal const val TOC_INFO_PERCENT = 3
-internal const val TOC_INFO_WORD_COUNT_AND_PAGE = 4
 
 internal enum class TocMenuAction(val itemId: Int) {
     TocRegex(0x7501),
@@ -127,8 +101,6 @@ internal enum class TocMenuAction(val itemId: Int) {
     ExportMarkdown(0x7507),
     Log(0x7508),
     NetworkLog(0x7509),
-    ToggleCollapsedToc(0x7510),
-    TocStyle(0x7511),
     ;
 
     companion object {
@@ -144,7 +116,6 @@ internal sealed interface TocUiEvent {
     data class SearchExpandedChange(val expanded: Boolean) : TocUiEvent
     data class QueryChange(val query: String) : TocUiEvent
     data class Menu(val action: TocMenuAction) : TocUiEvent
-    data class TocStyleChange(val style: TocStyle) : TocUiEvent
     data class ChapterClick(val chapter: BookChapter) : TocUiEvent
     data class ChapterLongClick(val title: String) : TocUiEvent
     data class BookmarkClick(val bookmark: Bookmark) : TocUiEvent
@@ -295,7 +266,7 @@ private fun TocToolbarIcon(
     contentDescription: String,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
@@ -311,10 +282,9 @@ private fun TocMoreMenu(
     onEvent: (TocUiEvent) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var showStyleDialog by remember { mutableStateOf(false) }
     Box {
         TocToolbarIcon(
-            iconRes = R.drawable.ic_more_horiz,
+            iconRes = R.drawable.ic_more_vert,
             contentDescription = stringResource(R.string.more),
             onClick = { expanded = true },
         )
@@ -328,22 +298,9 @@ private fun TocMoreMenu(
             properties = PopupProperties(focusable = true, clippingEnabled = false),
             onItemClick = { item ->
                 expanded = false
-                val action = TocMenuAction.fromItemId(item.itemId)
-                when (action) {
-                    TocMenuAction.TocStyle -> showStyleDialog = true
-                    null -> Unit
-                    else -> onEvent(TocUiEvent.Menu(action))
+                TocMenuAction.fromItemId(item.itemId)?.let {
+                    onEvent(TocUiEvent.Menu(it))
                 }
-            },
-        )
-    }
-    if (showStyleDialog) {
-        TocStyleDialog(
-            style = state.tocStyle,
-            onDismiss = { showStyleDialog = false },
-            onConfirm = {
-                onEvent(TocUiEvent.TocStyleChange(it))
-                showStyleDialog = false
             },
         )
     }
@@ -355,27 +312,6 @@ private fun tocMenuItems(state: TocUiState): List<NgExpandableActionMenuItem> = 
         add(TocMenuAction.ExportBookmark.item(R.string.export, R.drawable.ic_export))
         add(TocMenuAction.ExportMarkdown.item(R.string.export_md, R.drawable.ic_code))
     } else {
-        if (state.chapters.any { it.chapter.isVolume }) {
-            add(
-                TocMenuAction.ToggleCollapsedToc.item(
-                    if (state.tocCollapsed) R.string.expand_toc else R.string.collapse_toc,
-                    if (state.tocCollapsed) R.drawable.ic_catalog_expand else R.drawable.ic_catalog_collapse,
-                ),
-            )
-        }
-        add(
-            TocMenuAction.ReverseToc.item(
-                if (state.tocReversed) R.string.forward_toc else R.string.reverse_toc,
-                if (state.tocReversed) R.drawable.ic_catalog_sort_ascending else R.drawable.ic_catalog_sort_descending,
-                dividerBefore = isNotEmpty(),
-            ),
-        )
-        add(
-            TocMenuAction.TocStyle.item(
-                R.string.toc_style,
-                R.drawable.ic_catalog_style,
-            ),
-        )
         if (state.isLocalTxt) {
             add(TocMenuAction.TocRegex.item(R.string.txt_toc_rule, R.drawable.ic_code))
             add(
@@ -386,6 +322,13 @@ private fun tocMenuItems(state: TocUiState): List<NgExpandableActionMenuItem> = 
                 ),
             )
         }
+        add(
+            TocMenuAction.ReverseToc.item(
+                R.string.reverse_toc,
+                R.drawable.ic_catalog_sort_descending,
+                dividerBefore = isNotEmpty(),
+            ),
+        )
         add(
             TocMenuAction.UseReplace.item(
                 R.string.use_replace,
@@ -431,15 +374,9 @@ private fun TocChapterPage(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val chapters = remember(state.chapters, state.tocCollapsed) {
-        if (!state.tocCollapsed) state.chapters else state.chapters.filterCollapsedToc()
-    }
-    LaunchedEffect(state.chapterScrollToken, state.tocCollapsed) {
-        if (chapters.isNotEmpty()) {
-            val currentIndex = chapters.indexOfLast {
-                it.chapter.index < (state.book?.durChapterIndex ?: -1)
-            }.coerceAtLeast(0)
-            listState.scrollToItem(currentIndex)
+    LaunchedEffect(state.chapterScrollToken) {
+        if (state.chapters.isNotEmpty()) {
+            listState.scrollToItem(state.chapterScrollIndex.coerceIn(state.chapters.indices))
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -449,7 +386,7 @@ private fun TocChapterPage(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(
-                    items = chapters,
+                    items = state.chapters,
                     key = { it.chapter.primaryStr() },
                 ) { item ->
                     TocChapterRow(
@@ -459,8 +396,6 @@ private fun TocChapterPage(
                             item.chapter.isVolume ||
                             item.chapter.getFileName() in state.cachedFileNames,
                         showWordCount = state.loadWordCount,
-                        style = state.tocStyle,
-                        chapterCount = state.chapters.count { !it.chapter.isVolume },
                         onClick = { onEvent(TocUiEvent.ChapterClick(item.chapter)) },
                         onLongClick = {
                             onEvent(TocUiEvent.ChapterLongClick(item.displayTitle))
@@ -470,171 +405,29 @@ private fun TocChapterPage(
             }
             NgLazyListFastScroller(
                 state = listState,
-                itemCount = chapters.size,
+                itemCount = state.chapters.size,
                 variant = NgLazyListFastScrollerVariant.TRACK,
                 modifier = Modifier.align(Alignment.CenterEnd),
-            )
-            TocChapterFloatingActions(
-                atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
-                onCurrent = {
-                    if (chapters.isNotEmpty()) {
-                        scope.launch {
-                            val currentIndex = chapters.indexOfLast {
-                                it.chapter.index < (state.book?.durChapterIndex ?: -1)
-                            }.coerceAtLeast(0)
-                            listState.animateScrollToItem(currentIndex)
-                        }
-                    }
-                },
-                onTopOrBottom = {
-                    if (chapters.isNotEmpty()) scope.launch {
-                        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
-                            listState.animateScrollToItem(chapters.lastIndex)
-                        } else {
-                            listState.animateScrollToItem(0)
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp),
             )
         }
         TocChapterBottomBar(
             book = state.book,
             onCurrent = {
-                if (chapters.isNotEmpty()) {
+                if (state.chapters.isNotEmpty()) {
                     scope.launch {
-                        val currentIndex = chapters.indexOfLast {
-                            it.chapter.index < (state.book?.durChapterIndex ?: -1)
-                        }.coerceAtLeast(0)
-                        listState.scrollToItem(currentIndex)
+                        listState.scrollToItem(state.chapterScrollIndex.coerceIn(state.chapters.indices))
                     }
                 }
             },
-        )
-    }
-}
-
-private fun List<TocChapterUiItem>.filterCollapsedToc(): List<TocChapterUiItem> {
-    var hasVolume = false
-    return filter { item ->
-        if (item.chapter.isVolume) {
-            hasVolume = true
-            true
-        } else {
-            !hasVolume
-        }
-    }
-}
-
-private fun BookChapter.tocInfoText(
-    style: TocStyle,
-    chapterCount: Int,
-    showWordCount: Boolean,
-): String? {
-    if (isVolume) return null
-    val wordCount = wordCount?.takeIf { showWordCount && it.isNotBlank() }
-    val page = (index + 1).toString()
-    val percent = if (chapterCount > 0) "${((index + 1) * 100 / chapterCount).coerceIn(0, 100)}%" else null
-    return when (style.infoDisplay) {
-        TOC_INFO_DEFAULT -> null
-        TOC_INFO_NONE -> null
-        TOC_INFO_WORD_COUNT -> wordCount
-        TOC_INFO_PAGE -> page
-        TOC_INFO_PERCENT -> percent
-        TOC_INFO_WORD_COUNT_AND_PAGE -> listOfNotNull(wordCount, page).joinToString(" · ")
-        else -> null
-    }
-}
-
-@Composable
-private fun TocStyleDialog(
-    style: TocStyle,
-    onDismiss: () -> Unit,
-    onConfirm: (TocStyle) -> Unit,
-) {
-    var draft by remember(style) { mutableStateOf(style) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.widthIn(min = 320.dp, max = 520.dp),
-        title = { Text(stringResource(R.string.toc_style)) },
-        text = {
-            Column {
-                Text("调整目录标题、统计信息和显示密度。", color = colorResource(R.color.secondaryText))
-                TocStyleSwitchRow(
-                    title = "显示原始章节序号",
-                    checked = draft.showOriginalIndex,
-                    onCheckedChange = { draft = draft.copy(showOriginalIndex = it) },
-                )
-                Text("标题最大行数", modifier = Modifier.padding(top = 16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = {
-                        draft = draft.copy(titleMaxLines = (draft.titleMaxLines - 1).coerceAtLeast(1))
-                    }) { Text("−") }
-                    Text(
-                        text = draft.titleMaxLines.toString(),
-                        modifier = Modifier.width(56.dp).wrapContentWidth(Alignment.CenterHorizontally),
-                    )
-                    OutlinedButton(onClick = {
-                        draft = draft.copy(titleMaxLines = (draft.titleMaxLines + 1).coerceAtMost(3))
-                    }) { Text("+") }
+            onTop = {
+                if (state.chapters.isNotEmpty()) scope.launch { listState.scrollToItem(0) }
+            },
+            onBottom = {
+                if (state.chapters.isNotEmpty()) {
+                    scope.launch { listState.scrollToItem(state.chapters.lastIndex) }
                 }
-                TocStyleSwitchRow(
-                    title = "宽松模式",
-                    checked = draft.looseSpacing,
-                    onCheckedChange = { draft = draft.copy(looseSpacing = it) },
-                )
-                Text("信息显示", modifier = Modifier.padding(top = 16.dp))
-                TocStyleChoiceRow(
-                    labels = listOf("默认", "不显示", "字数", "页码", "百分比", "字数和页码"),
-                    selected = draft.infoDisplay + 1,
-                    onSelected = { draft = draft.copy(infoDisplay = it - 1) },
-                )
-                TocStyleSwitchRow(
-                    title = "信息显示在标题下方",
-                    checked = draft.infoBelowTitle,
-                    onCheckedChange = { draft = draft.copy(infoBelowTitle = it) },
-                )
-            }
-        },
-        confirmButton = { Button(onClick = { onConfirm(draft) }) { Text(stringResource(R.string.ok)) } },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
-}
-
-@Composable
-private fun TocStyleChoiceRow(
-    labels: List<String>,
-    selected: Int,
-    onSelected: (Int) -> Unit,
-) {
-    Column(modifier = Modifier.padding(top = 8.dp)) {
-        labels.forEachIndexed { index, label ->
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { onSelected(index) }.padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(if (index == selected) "✓" else "", modifier = Modifier.width(24.dp))
-                Text(label)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TocStyleSwitchRow(
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+            },
+        )
     }
 }
 
@@ -645,185 +438,103 @@ private fun TocChapterRow(
     current: Boolean,
     cached: Boolean,
     showWordCount: Boolean,
-    style: TocStyle,
-    chapterCount: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val chapter = item.chapter
-    val infoText = chapter.tocInfoText(style, chapterCount, showWordCount)
-    val themePrimary = Color(NgTheme.colors.primary)
-    val rowBackground = when {
-        chapter.isVolume -> Color(NgTheme.colors.surfaceContainerHigh)
-        current -> themePrimary.copy(alpha = 0.18f)
-        else -> themePrimary.copy(alpha = 0.05f)
-    }
-    val titleColor = if (current) themePrimary else Color(NgTheme.colors.onSurface)
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(rowBackground)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .background(
+                if (chapter.isVolume) colorResource(R.color.btn_bg_press)
+                else Color.Transparent,
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(12.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = if (style.looseSpacing) 18.dp else 12.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (chapter.isVip && !chapter.isPay) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_lock_outline),
-                        contentDescription = "VIP",
-                        modifier = Modifier.size(16.dp),
-                        tint = Color(NgTheme.colors.onSurfaceVariant),
-                    )
-                    Spacer(Modifier.width(8.dp))
+            if (chapter.isVip && !chapter.isPay) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_lock_outline),
+                    contentDescription = "VIP",
+                    modifier = Modifier.size(16.dp),
+                    tint = colorResource(R.color.secondaryText),
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.displayTitle,
+                    color = if (current) {
+                        Color(NgTheme.colors.primary)
+                    } else {
+                        colorResource(R.color.primaryText)
+                    },
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val tag = chapter.tag?.takeIf { it.isNotBlank() }
+                val wordCount = chapter.wordCount?.takeIf {
+                    showWordCount && !chapter.isVolume && it.isNotBlank()
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = buildString {
-                            if (style.showOriginalIndex) append("${chapter.index + 1}. ")
-                            append(item.displayTitle)
-                        },
-                        color = titleColor,
-                        fontSize = 16.sp,
-                        lineHeight = 20.sp,
-                        maxLines = style.titleMaxLines,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val tag = chapter.tag?.takeIf { it.isNotBlank() }
-                    val wordCount = chapter.wordCount?.takeIf {
-                        showWordCount && !chapter.isVolume && it.isNotBlank()
-                    }
-                    if (style.infoBelowTitle && infoText != null) {
-                        Text(
-                            text = infoText,
-                            modifier = Modifier.padding(top = 4.dp),
-                            color = Color(NgTheme.colors.onSurfaceVariant),
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp,
-                        )
-                    } else if (tag != null || wordCount != null) {
-                        Row(modifier = Modifier.padding(top = 4.dp)) {
-                            tag?.let {
-                                Text(
-                                    text = it,
-                                    color = Color(NgTheme.colors.onSurfaceVariant),
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            if (tag != null && wordCount != null) Spacer(Modifier.width(18.dp))
-                            wordCount?.let {
-                                Text(
-                                    text = it,
-                                    color = Color(NgTheme.colors.onSurfaceVariant),
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    maxLines = 1,
-                                )
-                            }
+                if (tag != null || wordCount != null) {
+                    Row(modifier = Modifier.padding(top = 4.dp)) {
+                        tag?.let {
+                            Text(
+                                text = it,
+                                color = colorResource(R.color.secondaryText),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (tag != null && wordCount != null) Spacer(Modifier.width(18.dp))
+                        wordCount?.let {
+                            Text(
+                                text = it,
+                                color = colorResource(R.color.secondaryText),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                maxLines = 1,
+                            )
                         }
                     }
                 }
-                if (!style.infoBelowTitle && infoText != null) {
-                    Text(
-                        text = infoText,
-                        modifier = Modifier.padding(start = 12.dp),
-                        color = Color(NgTheme.colors.onSurfaceVariant),
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        maxLines = 1,
-                    )
-                }
-                when {
-                    current -> Icon(
-                        painter = painterResource(R.drawable.ic_check),
-                        contentDescription = stringResource(R.string.success),
-                        modifier = Modifier.size(16.dp),
-                        tint = Color(NgTheme.colors.onSurfaceVariant),
-                    )
-                    !cached -> Icon(
-                        painter = painterResource(R.drawable.ic_outline_cloud_24),
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color(NgTheme.colors.onSurfaceVariant),
-                    )
-                }
             }
-        }
-        if (current && !chapter.isVolume) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .width(4.dp)
-                    .matchParentSize()
-                    .background(themePrimary),
-            )
+            when {
+                current -> Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = stringResource(R.string.success),
+                    modifier = Modifier.size(16.dp),
+                    tint = colorResource(R.color.secondaryText),
+                )
+                !cached -> Icon(
+                    painter = painterResource(R.drawable.ic_outline_cloud_24),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = colorResource(R.color.secondaryText),
+                )
+            }
         }
     }
     HorizontalDivider(
         thickness = 0.6.dp,
-        color = Color(NgTheme.colors.outlineVariant),
+        color = colorResource(R.color.bg_divider_line),
     )
-}
-
-@Composable
-private fun TocChapterFloatingActions(
-    atTop: Boolean,
-    onCurrent: () -> Unit,
-    onTopOrBottom: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        TocFloatingIcon(
-            iconRes = R.drawable.ic_gps_fixed,
-            contentDescription = "定位当前章节",
-            onClick = onCurrent,
-        )
-        TocFloatingIcon(
-            iconRes = if (atTop) R.drawable.ic_arrow_down else R.drawable.ic_arrow_drop_up,
-            contentDescription = if (atTop) "滚动到底部" else "滚动到顶部",
-            onClick = onTopOrBottom,
-        )
-    }
-}
-
-@Composable
-private fun TocFloatingIcon(
-    iconRes: Int,
-    contentDescription: String,
-    onClick: () -> Unit,
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(52.dp)
-            .background(colorResource(R.color.primaryText), CircleShape),
-    ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(28.dp),
-            tint = colorResource(R.color.ng_surface_card),
-        )
-    }
 }
 
 @Composable
 private fun TocChapterBottomBar(
     book: Book?,
     onCurrent: () -> Unit,
+    onTop: () -> Unit,
+    onBottom: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -853,7 +564,33 @@ private fun TocChapterBottomBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            TocBottomIcon(
+                iconRes = R.drawable.ic_arrow_drop_up,
+                contentDescription = stringResource(R.string.go_to_top),
+                onClick = onTop,
+            )
+            TocBottomIcon(
+                iconRes = R.drawable.ic_arrow_drop_down,
+                contentDescription = stringResource(R.string.go_to_bottom),
+                onClick = onBottom,
+            )
         }
+    }
+}
+
+@Composable
+private fun TocBottomIcon(
+    iconRes: Int,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(36.dp),
+            tint = colorResource(R.color.primaryText),
+        )
     }
 }
 

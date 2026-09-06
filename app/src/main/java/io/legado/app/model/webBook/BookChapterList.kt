@@ -23,7 +23,7 @@ import io.legado.app.utils.isTrue
 import io.legado.app.utils.mapAsync
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.flow
-import org.mozilla.javascript.Context
+import org.htmlunit.corejs.javascript.Context
 import splitties.init.appCtx
 import io.legado.app.constant.AppPattern
 import kotlinx.coroutines.currentCoroutineContext
@@ -155,6 +155,14 @@ object BookChapterList {
                 }
             }
         }
+        updateBookTocInfo(book, list)
+        return list
+    }
+
+    /**
+     * 统一提交声明式书源与单文件 JS 书源的目录元数据。
+     */
+    suspend fun updateBookTocInfo(book: Book, list: ArrayList<BookChapter>) {
         val replaceRules = ContentProcessor.get(book).getTitleReplaceRules()
         val replaceBook = book.toReplaceBook()
         book.durChapterTitle = list.getOrElse(book.durChapterIndex) { list.last() }
@@ -178,7 +186,6 @@ object BookChapterList {
                 )
         currentCoroutineContext().ensureActive()
         upChapterInfo(list, book)
-        return list
     }
 
     private suspend fun analyzeChapterList(

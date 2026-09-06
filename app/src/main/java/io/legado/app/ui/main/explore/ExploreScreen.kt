@@ -72,7 +72,12 @@ import io.legado.app.help.source.isSupportedExploreKind
 import io.legado.app.help.source.renderRole
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
+import io.legado.app.ui.design.components.compose.NgGlassStyle
+import io.legado.app.ui.design.components.compose.NgMaterialRole
+import io.legado.app.ui.design.components.compose.NgVisualSurface
 import io.legado.app.ui.design.theme.NgTheme
+import io.legado.app.ui.design.theme.ngBackdropPrimaryTextStyle
+import io.legado.app.ui.design.theme.ngBackdropSecondaryTextStyle
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.utils.InfoMap
 import kotlinx.coroutines.Dispatchers.IO
@@ -97,6 +102,7 @@ internal fun ExploreScreen(
     onQueryChange: (String) -> Unit,
     onGroupSelected: (String?) -> Unit,
     onLayoutModeChange: (ExploreLayoutMode) -> Unit,
+    onManageSources: () -> Unit,
     onToggleSource: (BookSourcePart) -> Unit,
     onOpenSource: (BookSourcePart) -> Unit,
     onOpenKind: (BookSourcePart, ExploreKind) -> Unit,
@@ -118,7 +124,8 @@ internal fun ExploreScreen(
             layoutMode = layoutMode,
             onQueryChange = onQueryChange,
             onGroupSelected = onGroupSelected,
-            onLayoutModeChange = onLayoutModeChange
+            onLayoutModeChange = onLayoutModeChange,
+            onManageSources = onManageSources,
         )
 
         Box(
@@ -129,8 +136,11 @@ internal fun ExploreScreen(
             if (sources.isEmpty()) {
                 Text(
                     text = stringResource(R.string.explore_empty),
-                    color = Color(NgTheme.colors.onSurfaceVariant),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.merge(
+                        ngBackdropSecondaryTextStyle(
+                            fallbackColor = Color(NgTheme.colors.onSurfaceVariant),
+                        ),
+                    ),
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else {
@@ -266,7 +276,9 @@ internal fun ExploreGridSourceItem(
             Spacer(Modifier.height(12.dp))
             Text(
                 text = source.bookSourceName,
-                color = Color(NgTheme.colors.onSurfaceVariant),
+                style = ngBackdropPrimaryTextStyle(
+                    fallbackColor = Color(NgTheme.colors.onSurfaceVariant),
+                ),
                 fontSize = 13.sp,
                 lineHeight = 17.sp,
                 maxLines = 2,
@@ -345,53 +357,82 @@ private fun ExploreListSourceItem(
     onRefreshSource: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val cardShape = RoundedCornerShape(12.dp)
+    val cardContainer = if (expanded) {
+        Color(NgTheme.colors.cardContainer).copy(alpha = 0.82f)
+    } else {
+        colorResource(R.color.ng_settings_item)
+    }
+    val contentColor = Color(NgTheme.colors.onSurface)
+    val isEInk = NgTheme.snapshot.isEInk
+    val cardStyle = remember(cardContainer, contentColor, isEInk) {
+        NgGlassStyle(
+            containerTop = cardContainer,
+            containerBottom = cardContainer,
+            accentGlow = Color.Transparent,
+            borderColor = Color.Transparent,
+            edgeHighlight = if (isEInk) {
+                Color.Transparent
+            } else {
+                Color.White.copy(alpha = 0.60f)
+            },
+            surfaceGloss = Color.Transparent,
+            depthEdge = Color.Transparent,
+            contentColor = contentColor,
+            blurRadius = 0.dp,
+            shadowElevation = 0.dp,
+            borderWidth = 0.dp,
+            highlightWidth = 0.dp,
+        )
+    }
     Box(
         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Column {
-            Row(
+            NgVisualSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (expanded) {
-                            Color(NgTheme.colors.cardContainer).copy(alpha = 0.82f)
-                        } else {
-                            colorResource(R.color.ng_settings_item)
-                        }
-                    )
                     .combinedClickable(
                         onClick = onToggle,
                         onLongClick = { menuExpanded = true }
-                    )
-                    .padding(start = 14.dp, end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = source.bookSourceName,
-                    color = Color(NgTheme.colors.onSurface),
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = Color(NgTheme.colors.primary),
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
-                Icon(
-                    painter = painterResource(
-                        if (expanded) R.drawable.ic_arrow_down else R.drawable.ic_arrow_right
                     ),
-                    contentDescription = null,
-                    tint = Color(NgTheme.colors.onSurfaceVariant),
-                    modifier = Modifier.size(20.dp)
-                )
+                role = NgMaterialRole.CONTROL,
+                cornerRadius = 12.dp,
+                shape = cardShape,
+                style = cardStyle,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 14.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = source.bookSourceName,
+                        color = Color(NgTheme.colors.onSurface),
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color(NgTheme.colors.primary),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Icon(
+                        painter = painterResource(
+                            if (expanded) R.drawable.ic_arrow_down else R.drawable.ic_arrow_right
+                        ),
+                        contentDescription = null,
+                        tint = Color(NgTheme.colors.onSurfaceVariant),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             if (expanded && kinds != null) {
                 ExploreKindRows(

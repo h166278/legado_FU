@@ -3,6 +3,7 @@ package io.legado.app.help.http
 import okhttp3.Headers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,6 +16,7 @@ class NetworkLogTest {
             "Cookie", "session=abc; uid=1",
             "Set-Cookie", "sid=response-secret; Path=/",
             "X-Api-Key", "api-key-secret",
+            "X-Goog-Api-Key", "gemini-key-secret",
             "User-Agent", "Legado"
         )
 
@@ -24,11 +26,27 @@ class NetworkLogTest {
         assertTrue(formatted.contains("Cookie: [已脱敏]"))
         assertTrue(formatted.contains("Set-Cookie: [已脱敏]"))
         assertTrue(formatted.contains("X-Api-Key: [已脱敏]"))
+        assertTrue(formatted.contains("X-Goog-Api-Key: [已脱敏]"))
         assertTrue(formatted.contains("User-Agent: Legado"))
         assertFalse(formatted.contains("sk-test-secret"))
         assertFalse(formatted.contains("session=abc"))
         assertFalse(formatted.contains("response-secret"))
         assertFalse(formatted.contains("api-key-secret"))
+        assertFalse(formatted.contains("gemini-key-secret"))
+    }
+
+    @Test
+    fun formatHeaderMapRedactsGeminiApiKey() {
+        val formatted = NetworkLog.formatHeaders(
+            mapOf(
+                "x-goog-api-key" to "gemini-map-secret",
+                "Content-Type" to "application/json"
+            )
+        )
+
+        assertTrue(formatted.contains("x-goog-api-key: [已脱敏]"))
+        assertTrue(formatted.contains("Content-Type: application/json"))
+        assertFalse(formatted.contains("gemini-map-secret"))
     }
 
     @Test
@@ -61,6 +79,41 @@ class NetworkLogTest {
             "https://example.com/api?access_token=[已脱敏]&name=reader&api_key=[已脱敏]#frag",
             redacted
         )
+    }
+
+    @Test
+    fun redactUrlForLogRedactsOpaqueKeysAndKeepsSearchKeyword() {
+        val opaqueKey = "k".repeat(64)
+        val protectedUrl = "https://example.com/api?key=$opaqueKey&lang=zh"
+        val searchUrl = "https://example.com/search?key=三体&page=1"
+
+        assertEquals(
+            "https://example.com/api?key=[已脱敏]&lang=zh",
+            NetworkLog.redactUrlForLog(protectedUrl),
+        )
+        assertEquals(searchUrl, NetworkLog.redactUrlForLog(searchUrl))
+    }
+
+    @Test
+    fun redactThrowableForLogDropsUrlKeyCookieAndOriginalCause() {
+        val opaqueKey = "k".repeat(64)
+        val cookieValue = "fixture-cookie-secret"
+        val error = IllegalStateException(
+            "request failed https://example.com/api?key=$opaqueKey " +
+                "headers={\"Cookie\":\"session=$cookieValue; lang=zh\"}"
+        ).apply {
+            stackTrace = arrayOf(StackTraceElement("Fixture", "call", "Fixture.kt", 12))
+        }
+
+        val redacted = NetworkLog.redactThrowableForLog(error)
+        val text = redacted.stackTraceToString()
+
+        assertFalse(text.contains(opaqueKey))
+        assertFalse(text.contains(cookieValue))
+        assertTrue(text.contains("key=[已脱敏]"))
+        assertTrue(text.contains("\"Cookie\":\"[已脱敏]\""))
+        assertTrue(text.contains("Fixture.call(Fixture.kt:12)"))
+        assertNull(redacted.cause)
     }
 
     @Test

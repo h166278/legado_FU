@@ -25,6 +25,7 @@ import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.ImageProvider
+import io.legado.app.model.BookCacheManager
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
@@ -199,8 +200,8 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                     "章节: ${ReadBook.curTextChapter?.title}\n" +
                     "触发: $reason"
         )
-        execute {
-            val curBook = ReadBook.book ?: return@execute
+        executeReplaceRuleRefresh {
+            val curBook = ReadBook.book ?: return@executeReplaceRuleRefresh
             enterReplaceRuleResetScheduled = false
             if (enterReplaceRuleResetBookUrl != curBook.bookUrl || !curBook.getUseReplaceRule()) {
                 AppLog.putDebug(
@@ -209,7 +210,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                             "书源: ${curBook.origin}\n" +
                             "触发: $reason"
                 )
-                return@execute
+                return@executeReplaceRuleRefresh
             }
             enterReplaceRuleResetDone = true
             AppLog.putDebug(
@@ -219,7 +220,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                         "章节: ${ReadBook.curTextChapter?.title}\n" +
                         "触发: $reason"
             )
-            replaceRuleChanged()
+            replaceRuleChangedAwait(curBook.bookUrl)
         }
     }
 
@@ -458,7 +459,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
 
     fun refreshContentAll(book: Book) {
         execute {
-            BookHelp.clearCache(book)
+            BookCacheManager.clear(book)
             ReadBook.loadContent(false)
         }
     }
@@ -612,23 +613,42 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     /**
      * 替换规则变化
      */
-    fun replaceRuleChanged() {
+    fun replaceRuleChanged(expectedBookUrl: String? = null) {
+        executeReplaceRuleRefresh {
+            replaceRuleChangedAwait(expectedBookUrl)
+        }
+    }
+
+    private fun executeReplaceRuleRefresh(block: suspend () -> Unit) {
+        val callback = ReadBook.callBack
+        callback?.beginReplaceRuleRenderBatch()
         execute {
-            ReadBook.book?.let { book ->
-                val useReplaceRule = book.getUseReplaceRule()
-                val contentProcessor = ContentProcessor.get(book.name, book.origin)
-                contentProcessor.upReplaceRules()
-                if (useReplaceRule) {
-                    try {
-                        book.setUseReplaceRule(false)
-                        ReadBook.reloadContentForReplaceRuleChangedAwait(resetPageOffset = false)
-                    } finally {
-                        book.setUseReplaceRule(true)
-                    }
-                }
-                ReadBook.reloadContentForReplaceRuleChangedAwait(resetPageOffset = false)
+            try {
+                block()
+            } finally {
+                callback?.endReplaceRuleRenderBatch()
             }
         }
+    }
+
+    private suspend fun replaceRuleChangedAwait(expectedBookUrl: String? = null) {
+        val book = ReadBook.book ?: return
+        val bookUrl = expectedBookUrl ?: book.bookUrl
+        if (book.bookUrl != bookUrl) return
+        val useReplaceRule = book.getUseReplaceRule()
+        val contentProcessor = ContentProcessor.get(book.name, book.origin)
+        contentProcessor.upReplaceRules()
+        if (useReplaceRule) {
+            try {
+                book.setUseReplaceRule(false)
+                if (ReadBook.book?.bookUrl != bookUrl) return
+                ReadBook.reloadContentForReplaceRuleChangedAwait(resetPageOffset = false)
+            } finally {
+                book.setUseReplaceRule(true)
+            }
+        }
+        if (ReadBook.book?.bookUrl != bookUrl) return
+        ReadBook.reloadContentForReplaceRuleChangedAwait(resetPageOffset = false)
     }
 
     fun setSourceEnabled(enabled: Boolean) {

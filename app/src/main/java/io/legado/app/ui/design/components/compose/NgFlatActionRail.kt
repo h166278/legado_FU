@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -40,7 +39,7 @@ import io.legado.app.ui.design.theme.NgTheme
 
 @Immutable
 data class NgFlatActionRailItem(
-    @param:DrawableRes val iconRes: Int,
+    @param:DrawableRes val iconRes: Int? = null,
     val label: String? = null,
     val contentDescription: String? = label,
     val enabled: Boolean = true,
@@ -52,6 +51,10 @@ enum class NgFlatActionRailVariant {
     COMPACT_SEGMENTED,
     SPACED_COMPACT,
     MODE_PICKER,
+    TEXT_MODE_PICKER,
+    INLINE_MODE_PICKER,
+    INLINE_DIVIDED,
+    FORM_TEXT_PICKER,
 }
 
 /**
@@ -77,6 +80,11 @@ fun NgFlatActionRail(
 
     val compactSegmented = variant == NgFlatActionRailVariant.COMPACT_SEGMENTED
     val modePicker = variant == NgFlatActionRailVariant.MODE_PICKER
+    val textModePicker = variant == NgFlatActionRailVariant.TEXT_MODE_PICKER
+    val inlineModePicker = variant == NgFlatActionRailVariant.INLINE_MODE_PICKER
+    val inlineDivided = variant == NgFlatActionRailVariant.INLINE_DIVIDED
+    val formTextPicker = variant == NgFlatActionRailVariant.FORM_TEXT_PICKER
+    val picker = modePicker || textModePicker || inlineModePicker || formTextPicker
     val segmented = variant != NgFlatActionRailVariant.SPACED_COMPACT
     val dividerColor = Color(NgTheme.colors.outlineVariant).copy(
         alpha = if (NgTheme.snapshot.isEInk) 1f else 0.32f
@@ -87,18 +95,20 @@ fun NgFlatActionRail(
             .height(
                 when {
                     modePicker -> 58.dp
+                    textModePicker || formTextPicker -> 44.dp
+                    inlineModePicker || inlineDivided -> 36.dp
                     compactSegmented -> 28.dp
                     else -> 36.dp
                 }
             )
             .then(
-                if (compactSegmented || modePicker) {
-                    val railShape = RoundedCornerShape(if (modePicker) 12.dp else 8.dp)
+                if (compactSegmented || (picker && !formTextPicker && !inlineModePicker)) {
+                    val railShape = RoundedCornerShape(if (picker) 12.dp else 8.dp)
                     Modifier
                         .clip(railShape)
                         .background(
-                            if (modePicker) {
-                                colorResource(R.color.ng_surface_card)
+                            if (picker) {
+                                ngDrawerContentCardColor()
                             } else {
                                 Color(NgTheme.colors.surfaceContainerHigh).copy(
                                     alpha = if (NgTheme.snapshot.isEInk) 1f else 0.38f
@@ -130,7 +140,7 @@ fun NgFlatActionRail(
             Box(
                 modifier = slotModifier.fillMaxHeight()
             ) {
-                if (index > 0 && segmented && !modePicker) {
+                if (index > 0 && segmented && (!picker || formTextPicker)) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterStart)
@@ -163,11 +173,18 @@ private fun NgFlatActionRailSegment(
     val primaryColor = Color(NgTheme.colors.primary)
     val disabledColor = Color(NgTheme.colors.onSurfaceVariant).copy(alpha = 0.48f)
     val neutralColor = Color(NgTheme.colors.onSurfaceVariant).copy(alpha = 0.90f)
+    val textModePicker = variant == NgFlatActionRailVariant.TEXT_MODE_PICKER
+    val inlineModePicker = variant == NgFlatActionRailVariant.INLINE_MODE_PICKER
+    val inlineDivided = variant == NgFlatActionRailVariant.INLINE_DIVIDED
+    val formTextPicker = variant == NgFlatActionRailVariant.FORM_TEXT_PICKER
+    val textOnlyPicker = textModePicker || formTextPicker
+    val picker = variant == NgFlatActionRailVariant.MODE_PICKER || inlineModePicker || textOnlyPicker
     val contentColor = when {
         !item.enabled -> disabledColor
-        variant == NgFlatActionRailVariant.MODE_PICKER -> {
+        picker -> {
             if (item.emphasized) primaryColor else neutralColor
         }
+        inlineDivided -> if (item.emphasized) primaryColor else neutralColor
         variant == NgFlatActionRailVariant.COMPACT_SEGMENTED -> neutralColor
         else -> primaryColor
     }
@@ -179,7 +196,6 @@ private fun NgFlatActionRailSegment(
         }
     )
     val compactSegmented = variant == NgFlatActionRailVariant.COMPACT_SEGMENTED
-    val modePicker = variant == NgFlatActionRailVariant.MODE_PICKER
     val shape = RoundedCornerShape(if (compactSegmented) 8.dp else 10.dp)
     val interactionModifier = Modifier
         .clickable(
@@ -190,45 +206,109 @@ private fun NgFlatActionRailSegment(
         .semantics(mergeDescendants = true) {
             item.contentDescription?.let { contentDescription = it }
         }
-    if (modePicker) {
+    if (picker) {
         Box(
             modifier = modifier
                 .fillMaxHeight()
                 .then(interactionModifier),
             contentAlignment = Alignment.Center,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(4.dp)
-                    .clip(shape)
-                    .then(
-                        if (item.emphasized) {
-                            Modifier.background(selectedContainer, shape)
-                        } else {
-                            Modifier
-                        }
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    painter = painterResource(item.iconRes),
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(20.dp),
-                )
-                item.label?.let { label ->
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = label,
-                        color = contentColor,
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+            if (inlineModePicker) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    item.iconRes?.let { iconRes ->
+                        Icon(
+                            painter = painterResource(iconRes),
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(18.dp)
+                            .height(2.dp)
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(
+                                if (item.emphasized) primaryColor else Color.Transparent
+                            )
                     )
+                }
+            } else if (formTextPicker) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.width(21.dp))
+                    item.label?.let { label ->
+                        Text(
+                            text = label,
+                            color = contentColor,
+                            fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier.size(15.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (item.emphasized) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp)
+                        .clip(shape)
+                        .then(
+                            if (item.emphasized) {
+                                Modifier.background(selectedContainer, shape)
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    item.iconRes?.let { iconRes ->
+                        Icon(
+                            painter = painterResource(iconRes),
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    item.label?.let { label ->
+                        if (item.iconRes != null) Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = label,
+                            color = contentColor,
+                            fontSize = if (textOnlyPicker) 14.sp else 12.sp,
+                            lineHeight = if (textOnlyPicker) 18.sp else 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -248,14 +328,18 @@ private fun NgFlatActionRailSegment(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                painter = painterResource(item.iconRes),
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(if (compactSegmented) 16.dp else 19.dp)
-            )
+            item.iconRes?.let { iconRes ->
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(if (compactSegmented) 16.dp else 19.dp)
+                )
+            }
             item.label?.let { label ->
-                Spacer(Modifier.width(if (compactSegmented) 4.dp else 5.dp))
+                if (item.iconRes != null) {
+                    Spacer(Modifier.width(if (compactSegmented) 4.dp else 5.dp))
+                }
                 Text(
                     text = label,
                     color = contentColor,

@@ -4,13 +4,15 @@ enum class NgSurfaceVariant {
     CANVAS,
     CARD,
     PANEL,
-    OVERLAY
+    OVERLAY,
+    BORDERLESS_CARD,
 }
 
 enum class NgButtonVariant {
     PRIMARY,
     PRIMARY_LIGHT_CONTENT,
     TONAL,
+    NEUTRAL,
     OUTLINE,
     DANGER,
     ON_IMAGE
@@ -19,6 +21,7 @@ enum class NgButtonVariant {
 enum class NgButtonShapeVariant {
     PILL,
     ROUNDED,
+    SMALL_ROUNDED,
 }
 
 enum class NgSettingsTrailing {
@@ -33,7 +36,9 @@ enum class NgDialogVariant {
     STANDARD,
     CONFIRMATION,
     COMPACT_CONFIRMATION,
+    CLASSIC_CONFIRMATION,
     EDITOR,
+    FORM_EDITOR,
     LONG_CONTENT
 }
 
@@ -49,6 +54,7 @@ enum class NgStatusTagVariant {
 enum class NgStatusTagStyle {
     REGULAR,
     COMPACT,
+    TTS_ROLE,
     INLINE
 }
 
@@ -60,7 +66,8 @@ enum class NgManagementTrailing {
 
 enum class NgManagementListCardVariant {
     DEFAULT,
-    COMPACT_GRID
+    COMPACT_GRID,
+    MULTILINE_SUMMARY,
 }
 
 enum class NgFilterChipGroupVariant {

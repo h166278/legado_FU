@@ -1,52 +1,14 @@
 package io.legado.app.help.config
 
 import io.legado.app.ui.design.theme.NgColorMath
+import io.legado.app.ui.design.theme.NgColorGenerationMode
 import io.legado.app.ui.design.theme.NgTopBarTextMode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 class NgBuiltInThemePresetTest {
-
-    @Test
-    fun `warm and bamboo presets only provide light backgrounds`() {
-        assertEquals(
-            "asset://bg/暖色渐变.webp",
-            NgBuiltInThemes.warm.lightBackground.path,
-        )
-        assertNull(NgBuiltInThemes.warm.darkBackground.path)
-        assertEquals(
-            "asset://bg/竹影之韵.webp",
-            NgBuiltInThemes.bamboo.lightBackground.path,
-        )
-        assertNull(NgBuiltInThemes.bamboo.darkBackground.path)
-    }
-
-    @Test
-    fun `mist preset provides both backgrounds and light top bar text`() {
-        val expectedBackground = "asset://bg/灰色雾霭.webp"
-
-        assertEquals(expectedBackground, NgBuiltInThemes.mist.lightBackground.path)
-        assertEquals(expectedBackground, NgBuiltInThemes.mist.darkBackground.path)
-        assertEquals(
-            NgTopBarTextMode.LIGHT,
-            NgBuiltInThemes.mist.colors.lightTopBarTextMode,
-        )
-        assertEquals(
-            NgTopBarTextMode.LIGHT,
-            NgBuiltInThemes.mist.colors.darkTopBarTextMode,
-        )
-        assertEquals(
-            NgBuiltInThemes.mist.colors.manualLight,
-            NgBuiltInThemes.mist.colors.manualDark,
-        )
-        assertEquals(
-            NgBuiltInThemes.mist.colors.lightSeed,
-            NgBuiltInThemes.mist.colors.darkSeed,
-        )
-    }
 
     @Test
     fun `legacy bundled background paths resolve to reading background assets`() {
@@ -125,7 +87,7 @@ class NgBuiltInThemePresetTest {
     }
 
     @Test
-    fun `built in themes exclude classic and non autumn presets use shared floating bars`() {
+    fun `managed theme library exposes completed seasons in calendar order`() {
         val expected = NgThemeBarProfile(
             useFloatingBottomBar = true,
             floatingBottomBarBottomDistancePx = 40,
@@ -139,17 +101,124 @@ class NgBuiltInThemePresetTest {
 
         assertEquals(
             listOf(
-                "builtin.ng.warm",
-                "builtin.ng.bamboo",
-                "builtin.ng.mist",
+                "builtin.ng.summer_childhood",
                 "builtin.ng.autumn_mountains",
             ),
             NgBuiltInThemes.all.map { it.id },
         )
         assertEquals(
-            listOf(expected, expected, expected),
-            NgBuiltInThemes.all.dropLast(1).map { it.barProfile },
+            listOf(expected, expected),
+            listOf(
+                NgBuiltInThemes.sakura,
+                NgBuiltInThemes.cats,
+            ).map { it.barProfile },
         )
+    }
+
+    @Test
+    fun `summer preset provides paired day and night artwork`() {
+        val summer = NgBuiltInThemes.summer
+        val dark = summer.colors.manualDark
+
+        assertEquals("夏日童趣", summer.name)
+        assertTrue(summer.isBuiltIn)
+        assertEquals(0xFF008B71.toInt(), summer.colors.manualLight.primary)
+        assertEquals(0xFF5CCBFF.toInt(), dark.primary)
+        assertEquals(0xFF153A5B.toInt(), dark.secondary)
+        assertEquals(0xFFF2F7FF.toInt(), dark.primaryText)
+        assertEquals(0xFFB8D4E8.toInt(), dark.secondaryText)
+        assertEquals(0xFF06182D.toInt(), dark.background)
+        assertEquals(0xFF12314D.toInt(), dark.labelContainer)
+        assertEquals(NgTopBarTextMode.DARK, summer.colors.lightTopBarTextMode)
+        assertEquals(NgTopBarTextMode.LIGHT, summer.colors.darkTopBarTextMode)
+        assertEquals(
+            "asset://defaultData/theme/reading_ng_summer_childhood.webp",
+            summer.lightBackground.path,
+        )
+        assertEquals(
+            "asset://defaultData/theme/reading_ng_summer_childhood_dark.webp",
+            summer.darkBackground.path,
+        )
+        assertEquals(null, summer.sceneProfile)
+        assertTrue(summer in NgBuiltInThemes.all)
+    }
+
+    @Test
+    fun `cartoon scenes are exposed as two stable internal presets`() {
+        val expected = listOf(
+            Triple(
+                NgBuiltInThemes.sakura,
+                ListeningCartoonType.SAKURA,
+                "asset://listening_motion/cartoon/sakura/background.webp",
+            ),
+            Triple(
+                NgBuiltInThemes.cats,
+                ListeningCartoonType.CATS,
+                "asset://listening_motion/cartoon/cats/poster.webp",
+            ),
+        )
+
+        expected.forEach { (theme, type, background) ->
+            assertTrue(theme.isBuiltIn)
+            assertEquals(type, theme.sceneProfile?.sceneType())
+            assertEquals(NgThemeSceneProfile.DEFAULT_INTENSITY, theme.sceneProfile?.intensity)
+            assertEquals(background, theme.lightBackground.path)
+            assertEquals(background, theme.darkBackground.path)
+            assertEquals(NgTopBarTextMode.LIGHT, theme.colors.lightTopBarTextMode)
+            assertEquals(NgTopBarTextMode.LIGHT, theme.colors.darkTopBarTextMode)
+            assertEquals(NgColorGenerationMode.MANUAL, theme.colors.mode)
+        }
+        assertEquals("湖畔樱花", NgBuiltInThemes.sakura.name)
+        assertEquals(0xFFFF61FF.toInt(), NgBuiltInThemes.sakura.colors.manualLight.primary)
+        assertEquals(0xFFFF61FF.toInt(), NgBuiltInThemes.sakura.colors.manualDark.primary)
+        assertEquals("好奇猫咪", NgBuiltInThemes.cats.name)
+        assertEquals(0xFF4E900C.toInt(), NgBuiltInThemes.cats.colors.manualLight.primary)
+        assertEquals(0xFF4E900C.toInt(), NgBuiltInThemes.cats.colors.manualDark.primary)
+        assertEquals(
+            listOf(ListeningCartoonType.SAKURA, ListeningCartoonType.CATS),
+            NgDynamicSceneTheme.presets,
+        )
+        assertEquals(
+            ListeningCartoonType.SAKURA,
+            NgDynamicSceneTheme.fromLegacyThemeId("builtin.ng.sakura"),
+        )
+        assertEquals(
+            ListeningCartoonType.CATS,
+            NgDynamicSceneTheme.fromLegacyThemeId("builtin.ng.cats"),
+        )
+        assertEquals(null, NgDynamicSceneTheme.fromLegacyThemeId("builtin.ng.autumn_mountains"))
+    }
+
+    @Test
+    fun `dynamic scene profile clamps percentages and drops unknown ids`() {
+        assertEquals(
+            NgThemeSceneProfile(
+                sceneId = ListeningCartoonType.CATS.storageValue,
+                intensity = NgThemeSceneProfile.MAX_INTENSITY,
+            ),
+            NgThemeSceneProfile(
+                sceneId = ListeningCartoonType.CATS.storageValue,
+                intensity = Int.MAX_VALUE,
+            ).normalized(),
+        )
+        assertEquals(
+            null,
+            NgManagedTheme(
+                id = "local.scene-test",
+                name = "scene-test",
+                colors = NgBuiltInThemes.autumn.colors,
+                sceneProfile = NgThemeSceneProfile(sceneId = "future_scene"),
+            ).normalized().sceneProfile,
+        )
+    }
+
+    @Test
+    fun `dynamic scene profile keeps stable json field names`() {
+        val json = GSON.toJson(NgBuiltInThemes.cats)
+
+        assertTrue(json.contains("\"sceneProfile\""))
+        assertTrue(json.contains("\"sceneId\":\"cats\""))
+        assertTrue(json.contains("\"intensity\":100"))
     }
 
     @Test
@@ -159,8 +228,8 @@ class NgBuiltInThemePresetTest {
 
         assertEquals("秋山书意", autumn.name)
         assertTrue(autumn.isBuiltIn)
-        assertEquals(NgBuiltInThemes.warm.colors.manualLight, autumn.colors.manualLight)
-        assertEquals(NgBuiltInThemes.mist.colors.darkSeed, autumn.colors.darkSeed)
+        assertEquals(0xFFF78E66.toInt(), autumn.colors.manualLight.primary)
+        assertEquals(0xFF758DB4.toInt(), autumn.colors.darkSeed)
         assertEquals(0xFF758DB4.toInt(), dark.primary)
         assertEquals(0xFF2F3B4B.toInt(), dark.secondary)
         assertEquals(0xFFF2F5F8.toInt(), dark.primaryText)
@@ -193,7 +262,7 @@ class NgBuiltInThemePresetTest {
             ),
             autumn.barProfile,
         )
-        assertEquals(autumn, NgBuiltInThemes.all.last())
+        assertTrue(autumn in NgBuiltInThemes.all)
         assertEquals(autumn, NgBuiltInThemes.defaultTheme)
     }
 

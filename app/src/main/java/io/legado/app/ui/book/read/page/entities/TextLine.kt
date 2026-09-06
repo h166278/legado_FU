@@ -18,6 +18,7 @@ import android.util.LruCache
 import android.text.TextPaint
 import androidx.annotation.Keep
 import androidx.core.graphics.PathParser
+import androidx.core.graphics.withSave
 import io.legado.app.help.PaintPool
 import io.legado.app.help.book.isImage
 import io.legado.app.help.config.AppConfig
@@ -168,7 +169,10 @@ data class TextLine(
     }
 
     fun draw(view: ContentTextView, canvas: Canvas) {
-        if (AppConfig.optimizeRender) {
+        val inlineNoteSpacers = view.textHighlightNoteSpacerPositions(this)
+        if (inlineNoteSpacers.isNotEmpty()) {
+            drawTextLineWithInlineNoteSpacers(view, canvas, inlineNoteSpacers)
+        } else if (AppConfig.optimizeRender) {
             canvasRecorder.recordIfNeededThenDraw(canvas, view.width, height.toInt()) {
                 drawTextLine(view, this)
             }
@@ -205,14 +209,56 @@ data class TextLine(
         }
     }
 
+    private fun drawTextLineWithInlineNoteSpacers(
+        view: ContentTextView,
+        canvas: Canvas,
+        spacerPositions: List<Float>,
+    ) {
+        var sourceStart = 0f
+        var inlineOffset = 0f
+        spacerPositions.forEach { spacerX ->
+            drawTextLineSegment(
+                view = view,
+                canvas = canvas,
+                clipStart = sourceStart + inlineOffset,
+                clipEnd = spacerX + inlineOffset,
+                inlineOffset = inlineOffset,
+            )
+            sourceStart = spacerX
+            inlineOffset += view.textHighlightNoteSpacerWidthPx
+        }
+        drawTextLineSegment(
+            view = view,
+            canvas = canvas,
+            clipStart = sourceStart + inlineOffset,
+            clipEnd = view.width.toFloat(),
+            inlineOffset = inlineOffset,
+        )
+    }
+
+    private fun drawTextLineSegment(
+        view: ContentTextView,
+        canvas: Canvas,
+        clipStart: Float,
+        clipEnd: Float,
+        inlineOffset: Float,
+    ) {
+        if (clipEnd <= clipStart) return
+        val underlineOverflow = 10.dpToPx().toFloat()
+        canvas.withSave {
+            clipRect(clipStart, -underlineOverflow, clipEnd, height + underlineOverflow)
+            translate(inlineOffset, 0f)
+            drawTextLine(view, this)
+        }
+    }
+
     private fun drawHighlightBackgrounds(canvas: Canvas) {
         if (!hasReadStyle) return
         val columns = textColumns.filterIsInstance<TextColumn>()
-        val isNight = ReadBookConfig.isNightTheme
         var index = 0
         while (index < columns.size) {
             val column = columns[index]
-            val color = column.readStyle?.resolveBackgroundColor(isNight)
+            val color = column.readStyle?.bgColor
             if (color == null) {
                 index++
                 continue
@@ -221,7 +267,7 @@ data class TextLine(
             var next = index + 1
             while (
                 next < columns.size &&
-                columns[next].readStyle?.resolveBackgroundColor(isNight) == color
+                columns[next].readStyle?.bgColor == color
             ) {
                 end = columns[next].end
                 next++
@@ -373,8 +419,8 @@ data class TextLine(
             val paint = PaintPool.obtain()
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = style.underlineWidth.dpToPx()
-            paint.color = style.resolveUnderlineColor(ReadBookConfig.isNightTheme)
-                ?: style.resolveTextColor(ReadBookConfig.isNightTheme)
+            paint.color = style.underlineColor
+                ?: style.textColor
                 ?: ReadBookConfig.textColor
             val lineY = height + style.underlineOffset.dpToPx()
             when (style.underlineMode) {

@@ -5,16 +5,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.LibraryAddCheck
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
@@ -24,8 +28,14 @@ import io.legado.app.ui.design.theme.NgTheme
 /** 文件浏览列表中的固定语义图标，业务页面只传文件类型。 */
 enum class NgFileEntryIconKind {
     DIRECTORY,
+    FILE,
     ARCHIVE,
     ON_BOOKSHELF,
+}
+
+enum class NgFileSelectionCheckboxVariant {
+    STANDARD,
+    COMPACT,
 }
 
 /**
@@ -42,16 +52,19 @@ fun NgFileEntryIcon(
     val colors = NgTheme.colors
     val containerColor = when (kind) {
         NgFileEntryIconKind.DIRECTORY -> Color(colors.primaryContainer)
+        NgFileEntryIconKind.FILE -> Color(colors.surfaceContainerLow)
         NgFileEntryIconKind.ARCHIVE -> colorResource(R.color.ng_warning_container)
         NgFileEntryIconKind.ON_BOOKSHELF -> colorResource(R.color.ng_success_container)
     }
     val iconColor = when (kind) {
         NgFileEntryIconKind.DIRECTORY -> Color(colors.primary)
+        NgFileEntryIconKind.FILE -> Color(colors.onSurfaceVariant)
         NgFileEntryIconKind.ARCHIVE -> colorResource(R.color.ng_warning)
         NgFileEntryIconKind.ON_BOOKSHELF -> colorResource(R.color.ng_success)
     }
     val icon = when (kind) {
         NgFileEntryIconKind.DIRECTORY -> Icons.Rounded.Folder
+        NgFileEntryIconKind.FILE -> Icons.AutoMirrored.Rounded.InsertDriveFile
         NgFileEntryIconKind.ARCHIVE -> Icons.Rounded.FolderZip
         NgFileEntryIconKind.ON_BOOKSHELF -> Icons.Rounded.LibraryAddCheck
     }
@@ -79,20 +92,35 @@ fun NgFileSelectionCheckbox(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    variant: NgFileSelectionCheckboxVariant = NgFileSelectionCheckboxVariant.STANDARD,
 ) {
     val colors = NgTheme.colors
-    Checkbox(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        enabled = enabled,
-        modifier = modifier,
-        colors = CheckboxDefaults.colors(
-            checkedColor = Color(colors.primary),
-            checkmarkColor = Color.White,
-            uncheckedColor = Color(colors.onSurfaceVariant).copy(alpha = 0.62f),
-            disabledCheckedColor = Color(colors.primary).copy(alpha = 0.38f),
-            disabledUncheckedColor = Color(colors.onSurfaceVariant).copy(alpha = 0.28f),
-            disabledIndeterminateColor = Color(colors.primary).copy(alpha = 0.38f),
-        ),
-    )
+    val checkbox: @Composable (Modifier) -> Unit = { checkboxModifier ->
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            modifier = checkboxModifier,
+            colors = CheckboxDefaults.colors(
+                checkedColor = Color(colors.primary),
+                checkmarkColor = Color.White,
+                uncheckedColor = Color(colors.onSurfaceVariant).copy(alpha = 0.62f),
+                disabledCheckedColor = Color(colors.primary).copy(alpha = 0.38f),
+                disabledUncheckedColor = Color(colors.onSurfaceVariant).copy(alpha = 0.28f),
+                disabledIndeterminateColor = Color(colors.primary).copy(alpha = 0.38f),
+            ),
+        )
+    }
+    when (variant) {
+        NgFileSelectionCheckboxVariant.STANDARD -> checkbox(modifier)
+        NgFileSelectionCheckboxVariant.COMPACT -> {
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                checkbox(
+                    modifier
+                        .size(32.dp)
+                        .scale(0.85f)
+                )
+            }
+        }
+    }
 }

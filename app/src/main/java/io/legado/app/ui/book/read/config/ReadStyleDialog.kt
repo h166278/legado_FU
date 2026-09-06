@@ -25,9 +25,12 @@ import io.legado.app.R
 import io.legado.app.base.BaseComposeDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
+import io.legado.app.help.DefaultData
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadHighlightRule
+import io.legado.app.help.config.ReadHighlightRulePackageManager
+import io.legado.app.help.config.ReadHighlightRuleStore
 import io.legado.app.help.config.ReadStylePackageManager
 import io.legado.app.help.config.ReadFloatingAppearanceConfig
 import io.legado.app.model.ReadBook
@@ -73,7 +76,9 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     private var backgroundColorPickerDialog: ComponentDialog? = null
     private var editingHighlightIndex: Int? = null
     private var highlightDraft: ReadHighlightRule? = null
-    private var highlightColorMode = 0
+    private var highlightSelectionMode = HighlightSelectionMode.NONE
+    private var selectedHighlightIds: Set<String> = emptySet()
+    private var pendingHighlightExportRules: List<ReadHighlightRule> = emptyList()
     private val configFileName = "readConfig.zip"
     private val selectExportDocument = registerForActivityResult(
         CreateDocumentContract("application/zip")
@@ -81,6 +86,16 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     private val selectImportDocument = registerForActivityResult(
         SelectFileContract()
     ) { uri -> uri?.let(::importConfig) }
+    private val selectHighlightExportDocument = registerForActivityResult(
+        CreateDocumentContract("application/zip")
+    ) { uri ->
+        val rules = pendingHighlightExportRules
+        pendingHighlightExportRules = emptyList()
+        uri?.let { exportHighlightRules(it, rules) }
+    }
+    private val selectHighlightImportDocument = registerForActivityResult(
+        SelectFileContract()
+    ) { uri -> uri?.let(::importHighlightRules) }
     private val selectBackgroundImage = registerForActivityResult(
         SelectFileContract()
     ) { uri -> uri?.let(::setBackgroundFromUri) }
@@ -175,10 +190,23 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             refreshUi()
             postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
         },
-        onOpenHighlights = {
-            page = ReadStylePage.HIGHLIGHT
+        onGlobalFloatingFollowAppChanged = { checked ->
+            ReadBookConfig.readFloatingFollowAppGlobally = checked
             refreshUi()
+            notifyFloatingAppearanceChanged()
         },
+        onImportHighlights = {
+            selectHighlightImportDocument.launch(
+                arrayOf("application/zip", "application/json", "text/plain", "application/octet-stream")
+            )
+        },
+        onExportHighlights = { beginHighlightSelection(HighlightSelectionMode.EXPORT) },
+        onRestoreBuiltInHighlights = ::confirmRestoreBuiltInHighlights,
+        onDeleteHighlights = { beginHighlightSelection(HighlightSelectionMode.DELETE) },
+        onToggleHighlightSelection = ::toggleHighlightSelection,
+        onToggleAllHighlightSelection = ::toggleAllHighlightSelection,
+        onCancelHighlightSelection = ::clearHighlightSelection,
+        onConfirmHighlightSelection = ::confirmHighlightSelection,
         onBack = ::navigateBack,
         onPresetNameChanged = { value ->
             ReadBookConfig.durConfig.name = value
@@ -214,7 +242,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             ReadFloatingAppearanceState.update(
                 config.curReadFloatingTransparency(),
                 config.curReadFloatingPrimaryStrength(),
-                config.curReadFloatingColorStyle(),
+                ReadBookConfig.effectiveReadFloatingColor(config).colorStyle,
             )
         },
         onFloatingPrimaryStrengthChanged = { value ->
@@ -226,19 +254,23 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             ReadFloatingAppearanceState.update(
                 config.curReadFloatingTransparency(),
                 config.curReadFloatingPrimaryStrength(),
-                config.curReadFloatingColorStyle(),
+                ReadBookConfig.effectiveReadFloatingColor(config).colorStyle,
             )
         },
         onFloatingColorStyleChanged = { style ->
             val config = ReadBookConfig.durConfig
-            config.readFloatingColorStyle = style
+            if (ReadBookConfig.readFloatingFollowAppGlobally) {
+                ReadBookConfig.readFloatingGlobalColorStyle = style
+            } else {
+                config.readFloatingColorStyle = style
+            }
             updateEditorState { copy(editorFloatingColorStyle = style) }
             ReadFloatingAppearanceState.update(
                 config.curReadFloatingTransparency(),
                 config.curReadFloatingPrimaryStrength(),
-                config.curReadFloatingColorStyle(),
+                ReadBookConfig.effectiveReadFloatingColor(config).colorStyle,
             )
-            ReadBookConfig.save()
+            if (!ReadBookConfig.readFloatingFollowAppGlobally) ReadBookConfig.save()
             notifyFloatingAppearanceChanged()
         },
         onFloatingAppearanceChangeFinished = {
@@ -321,10 +353,6 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             highlightDraft = draft
             updateEditorState { copy(highlightDraft = draft) }
         },
-        onHighlightColorModeChanged = { mode ->
-            highlightColorMode = mode.coerceIn(0, 1)
-            updateEditorState { copy(highlightColorMode = highlightColorMode) }
-        },
         onSelectHighlightBackground = {
             selectHighlightBackground.launch(arrayOf("image/*"))
         },
@@ -354,11 +382,8 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
                 applyHighlightRules(rules)
             }
         },
-        onMoveHighlight = { from, to ->
-            val rules = currentRules().toMutableList()
-            if (from in rules.indices && to in rules.indices && from != to) {
-                val moved = rules.removeAt(from)
-                rules.add(to, moved)
+        onReorderHighlights = { rules ->
+            if (rules.map(ReadHighlightRule::id) != currentRules().map(ReadHighlightRule::id)) {
                 applyHighlightRules(rules)
             }
         },
@@ -394,6 +419,8 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             }.getOrNull()
         }
         val rules = currentRules()
+        val effectiveFloatingColor = ReadBookConfig.effectiveReadFloatingColor(config)
+        selectedHighlightIds = selectedHighlightIds.intersect(rules.mapTo(hashSetOf()) { it.id })
         screenState = ReadStyleUiState(
             presets = ReadBookConfig.configList.mapIndexed { index, item ->
                 ReadStylePresetUi(
@@ -414,12 +441,15 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
                 rules.size,
             ),
             shareLayout = ReadBookConfig.shareLayout,
+            globalFloatingFollowApp = ReadBookConfig.readFloatingFollowAppGlobally,
             textSize = ReadBookConfig.textSize,
             letterSpacing = ReadBookConfig.letterSpacing,
             lineSpacingExtra = ReadBookConfig.lineSpacingExtra,
             paragraphSpacing = ReadBookConfig.paragraphSpacing,
             pageAnim = ReadBook.pageAnim().coerceIn(0, 4),
             highlightRules = rules,
+            highlightSelectionMode = highlightSelectionMode,
+            selectedHighlightIds = selectedHighlightIds,
             editorMode = mode,
             editorModeLabel = modeLabel,
             editorPreviewBackground = previewBackground,
@@ -430,15 +460,14 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             editorBackgroundColor = backgroundColor,
             editorTextAccentColor = config.curTextAccentColor(),
             editorBackgroundAlpha = ReadBookConfig.bgAlpha.coerceIn(0, 100),
-            editorFloatingColorSeed = config.curReadFloatingSeed(),
-            editorFloatingColorFromBackground = config.curReadFloatingSeed() != 0,
+            editorFloatingColorSeed = effectiveFloatingColor.seed,
+            editorFloatingColorFromBackground = !effectiveFloatingColor.followsApplication,
             editorFloatingTransparency = config.curReadFloatingTransparency(),
             editorFloatingPrimaryStrength = config.curReadFloatingPrimaryStrength(),
-            editorFloatingColorStyle = config.curReadFloatingColorStyle(),
+            editorFloatingColorStyle = effectiveFloatingColor.colorStyle,
             fullLineUnderline = currentFullLineUnderlineState(),
             highlightDraft = highlightDraft,
             editingHighlightIndex = editingHighlightIndex,
-            highlightColorMode = highlightColorMode,
             editorInitialColor = null,
             editorInitialColorWasUnset = false,
             editorInitialBackgroundType = null,
@@ -448,7 +477,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun currentRules(): List<ReadHighlightRule> =
-        ReadBookConfig.config.highlightRules.sortedBy(ReadHighlightRule::position)
+        ReadHighlightRuleStore.allRules().sortedBy(ReadHighlightRule::position)
 
     private fun changeBgTextConfig(index: Int) {
         val oldIndex = ReadBookConfig.styleSelect
@@ -467,36 +496,31 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun navigateTo(target: ReadStylePage) {
+        if (target != ReadStylePage.HIGHLIGHT && highlightSelectionMode != HighlightSelectionMode.NONE) {
+            clearHighlightSelection(refresh = false)
+        }
         if (target.isAnyColorEditorPage()) {
             val state = screenState ?: return
-            val highlightNight = state.highlightColorMode == 1
             val initialNullableColor = when (target) {
                 ReadStylePage.EDIT_TEXT_COLOR -> state.editorTextColor
                 ReadStylePage.EDIT_BACKGROUND_COLOR -> state.editorBackgroundColor
                 ReadStylePage.EDIT_ACCENT_COLOR -> state.editorTextAccentColor
                 ReadStylePage.EDIT_UNDERLINE_COLOR -> state.fullLineUnderline.color
-                ReadStylePage.HIGHLIGHT_TEXT_COLOR -> state.highlightDraft?.let {
-                    if (highlightNight) it.textColorNight else it.textColor
-                }
-                ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> state.highlightDraft?.let {
-                    if (highlightNight) it.bgColorNight else it.bgColor
-                }
-                ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> state.highlightDraft?.let {
-                    if (highlightNight) it.underlineColorNight else it.underlineColor
-                }
+                ReadStylePage.HIGHLIGHT_TEXT_COLOR -> state.highlightDraft?.textColor
+                ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> state.highlightDraft?.bgColor
+                ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> state.highlightDraft?.underlineColor
                 else -> null
             }
             val fallbackColor = when (target) {
                 ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR ->
-                    state.highlightDraft?.resolveBackgroundColor(highlightNight)
+                    state.highlightDraft?.bgColor
                         ?: ((state.editorTextAccentColor and 0x00FFFFFF) or 0x33000000)
                 ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR ->
-                    state.highlightDraft?.resolveUnderlineColor(highlightNight)
-                        ?: state.highlightDraft?.resolveTextColor(highlightNight)
+                    state.highlightDraft?.underlineColor
+                        ?: state.highlightDraft?.textColor
                         ?: state.editorTextAccentColor
                 ReadStylePage.HIGHLIGHT_TEXT_COLOR ->
-                    state.highlightDraft?.resolveTextColor(highlightNight)
-                        ?: state.editorTextAccentColor
+                    state.highlightDraft?.textColor ?: state.editorTextAccentColor
                 else -> state.editorTextAccentColor
             }
             screenState = state.copy(
@@ -526,6 +550,10 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun navigateBack() {
+        if (highlightSelectionMode != HighlightSelectionMode.NONE) {
+            clearHighlightSelection()
+            return
+        }
         when {
             page.isPresetColorEditorPage() -> {
                 page = ReadStylePage.EDIT
@@ -550,7 +578,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
                 refreshUi()
             }
 
-            page == ReadStylePage.EDIT || page == ReadStylePage.HIGHLIGHT -> {
+            page == ReadStylePage.EDIT -> {
                 page = ReadStylePage.PRESET
                 refreshUi()
             }
@@ -610,33 +638,13 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
                 refreshFullLineUnderlineState()
             }
             ReadStylePage.HIGHLIGHT_TEXT_COLOR -> updateHighlightDraft {
-                if (state.highlightColorMode == 1) {
-                    copy(textColorNight = if (state.editorInitialColorWasUnset) null else initialColor)
-                } else {
-                    copy(textColor = if (state.editorInitialColorWasUnset) null else initialColor)
-                }
+                copy(textColor = if (state.editorInitialColorWasUnset) null else initialColor)
             }
             ReadStylePage.HIGHLIGHT_BACKGROUND_COLOR -> updateHighlightDraft {
-                if (state.highlightColorMode == 1) {
-                    copy(bgColorNight = if (state.editorInitialColorWasUnset) null else initialColor)
-                } else {
-                    copy(bgColor = if (state.editorInitialColorWasUnset) null else initialColor)
-                }
+                copy(bgColor = if (state.editorInitialColorWasUnset) null else initialColor)
             }
             ReadStylePage.HIGHLIGHT_UNDERLINE_COLOR -> updateHighlightDraft {
-                if (state.highlightColorMode == 1) {
-                    copy(
-                        underlineColorNight = if (state.editorInitialColorWasUnset) {
-                            null
-                        } else {
-                            initialColor
-                        }
-                    )
-                } else {
-                    copy(
-                        underlineColor = if (state.editorInitialColorWasUnset) null else initialColor
-                    )
-                }
+                copy(underlineColor = if (state.editorInitialColorWasUnset) null else initialColor)
             }
             else -> return
         }
@@ -708,6 +716,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun setFloatingColorSource(fromBackground: Boolean) {
+        if (ReadBookConfig.readFloatingFollowAppGlobally) return
         val config = ReadBookConfig.durConfig
         if (fromBackground) {
             updateEditorState { copy(editorFloatingColorFromBackground = true) }
@@ -722,6 +731,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun pickFloatingColor() {
+        if (ReadBookConfig.readFloatingFollowAppGlobally) return
         val config = ReadBookConfig.durConfig
         if (config.curBgType() == 0) {
             runCatching { config.curBgStr().toColorInt() }
@@ -750,6 +760,7 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun applyFloatingColor(color: Int) {
+        if (ReadBookConfig.readFloatingFollowAppGlobally) return
         ReadBookConfig.durConfig.setCurReadFloatingSeed(color)
         ReadBookConfig.save()
         refreshUi()
@@ -989,18 +1000,90 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun applyHighlightRules(rules: List<ReadHighlightRule>) {
-        ReadBookConfig.config.highlightRules = ArrayList(
+        ReadHighlightRuleStore.replace(
             rules.mapIndexed { index, rule -> rule.copy(position = index) }
         )
-        ReadBookConfig.save()
         refreshUi()
         postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+    }
+
+    private fun beginHighlightSelection(mode: HighlightSelectionMode) {
+        val rules = currentRules()
+        if (rules.isEmpty()) {
+            toastOnUi(R.string.empty)
+            return
+        }
+        highlightSelectionMode = mode
+        selectedHighlightIds = if (mode == HighlightSelectionMode.EXPORT) {
+            rules.mapTo(linkedSetOf()) { it.id }
+        } else {
+            emptySet()
+        }
+        refreshUi()
+    }
+
+    private fun toggleHighlightSelection(id: String) {
+        if (highlightSelectionMode == HighlightSelectionMode.NONE) return
+        selectedHighlightIds = selectedHighlightIds.toMutableSet().apply {
+            if (!add(id)) remove(id)
+        }
+        refreshUi()
+    }
+
+    private fun toggleAllHighlightSelection() {
+        if (highlightSelectionMode == HighlightSelectionMode.NONE) return
+        val allIds = currentRules().mapTo(linkedSetOf()) { it.id }
+        selectedHighlightIds = if (allIds.isNotEmpty() && selectedHighlightIds.containsAll(allIds)) {
+            emptySet()
+        } else {
+            allIds
+        }
+        refreshUi()
+    }
+
+    private fun clearHighlightSelection(refresh: Boolean = true) {
+        highlightSelectionMode = HighlightSelectionMode.NONE
+        selectedHighlightIds = emptySet()
+        if (refresh) refreshUi()
+    }
+
+    private fun confirmHighlightSelection() {
+        val selectedRules = currentRules().filter { it.id in selectedHighlightIds }
+        if (selectedRules.isEmpty()) return
+        when (highlightSelectionMode) {
+            HighlightSelectionMode.EXPORT -> {
+                pendingHighlightExportRules = selectedRules
+                clearHighlightSelection(refresh = false)
+                refreshUi()
+                selectHighlightExportDocument.launch("highlightRules.zip")
+            }
+
+            HighlightSelectionMode.DELETE -> {
+                val selectedIds = selectedRules.mapTo(hashSetOf()) { it.id }
+                showReadConfirmDialog(
+                    context = requireContext(),
+                    title = getString(R.string.delete),
+                    message = getString(
+                        R.string.read_highlight_delete_selected_confirm,
+                        selectedIds.size,
+                    ),
+                    confirmLabel = getString(R.string.delete),
+                    cancelLabel = getString(R.string.cancel),
+                    onConfirm = {
+                        val remaining = currentRules().filterNot { it.id in selectedIds }
+                        clearHighlightSelection(refresh = false)
+                        applyHighlightRules(remaining)
+                    },
+                )
+            }
+
+            HighlightSelectionMode.NONE -> Unit
+        }
     }
 
     private fun openHighlightEditor(position: Int? = null) {
         val oldRule = position?.let(currentRules()::getOrNull)
         editingHighlightIndex = position
-        highlightColorMode = if (ReadBookConfig.isNightTheme) 1 else 0
         highlightDraft = oldRule ?: ReadHighlightRule(
             id = UUID.randomUUID().toString(),
             name = getString(R.string.highlight_rule_default_name),
@@ -1047,12 +1130,47 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
     }
 
     private fun deleteHighlightDraft() {
-        val position = editingHighlightIndex ?: return
-        val updated = currentRules().toMutableList()
-        if (position in updated.indices) updated.removeAt(position)
-        clearHighlightDraft()
-        page = ReadStylePage.HIGHLIGHT
-        applyHighlightRules(updated)
+        val draft = highlightDraft ?: return
+        if (editingHighlightIndex == null) return
+        showReadConfirmDialog(
+            context = requireContext(),
+            title = getString(R.string.delete),
+            message = getString(R.string.sure_del_any, draft.name),
+            confirmLabel = getString(R.string.delete),
+            cancelLabel = getString(R.string.cancel),
+            onConfirm = {
+                val updated = currentRules().filterNot { it.id == draft.id }
+                clearHighlightDraft()
+                page = ReadStylePage.HIGHLIGHT
+                applyHighlightRules(updated)
+            },
+        )
+    }
+
+    private fun confirmRestoreBuiltInHighlights() {
+        showReadConfirmDialog(
+            context = requireContext(),
+            title = getString(R.string.read_highlight_restore_built_in),
+            message = getString(R.string.read_highlight_restore_built_in_confirm),
+            confirmLabel = getString(R.string.menu_restore),
+            cancelLabel = getString(R.string.cancel),
+            onConfirm = {
+                val result = ReadHighlightRuleStore.restoreBuiltIn(DefaultData.readHighlightRules)
+                refreshUi()
+                if (result.addedCount > 0 || result.updatedCount > 0) {
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+                    toastOnUi(
+                        getString(
+                            R.string.read_highlight_restore_built_in_done,
+                            result.addedCount,
+                            result.updatedCount,
+                        )
+                    )
+                } else {
+                    toastOnUi(R.string.read_highlight_restore_built_in_unchanged)
+                }
+            },
+        )
     }
 
     private fun installHighlightResource(uri: Uri, kind: String) {
@@ -1121,16 +1239,29 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
         } else {
             result.config
         }
-        val importedIndex = ReadBookConfig.appendImportedConfig(config, replaceIndex)
-        ReadBookConfig.styleSelect = importedIndex
+        val appendResult =
+            ReadBookConfig.appendImportedConfigWithReport(config, replaceIndex)
+        ReadBookConfig.styleSelect = appendResult.index
         editorBackgroundCache = null
         refreshUi()
-        postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+        postEvent(
+            EventBus.UP_CONFIG,
+            if (appendResult.highlightRuleMerge == null) {
+                arrayListOf(1, 2, 5)
+            } else {
+                arrayListOf(1, 2, 5, 8)
+            },
+        )
         notifyFloatingAppearanceChanged()
-        if (result.warnings.isEmpty()) {
+        val messages = result.warnings.toMutableList().apply {
+            appendResult.highlightRuleMerge?.let {
+                add("已合并 ${it.addedCount} 条高亮规则，跳过 ${it.skippedCount} 条重复规则")
+            }
+        }
+        if (messages.isEmpty()) {
             toastOnUi("导入成功")
         } else {
-            longToast("导入成功\n${result.warnings.joinToString("\n")}")
+            longToast("导入成功\n${messages.joinToString("\n")}")
         }
     }
 
@@ -1150,6 +1281,45 @@ class ReadStyleDialog : BaseComposeDialogFragment(),
             it.printOnDebug()
             AppLog.put("导出失败:${it.localizedMessage}", it)
             longToast("导出失败:${it.localizedMessage}")
+        }
+    }
+
+    private fun importHighlightRules(uri: Uri) {
+        execute {
+            ReadHighlightRulePackageManager.import(uri.readBytes(requireContext()))
+        }.onSuccess { result ->
+            val merge = ReadHighlightRuleStore.merge(
+                importedRules = result.rules,
+                replaceMatchingIds = true,
+            )
+            refreshUi()
+            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+            val messages = buildList {
+                add("新增 ${merge.addedCount} 条，更新 ${merge.updatedCount} 条，跳过 ${merge.skippedCount} 条")
+                addAll(result.warnings)
+            }
+            longToast("高亮规则导入成功\n${messages.joinToString("\n")}")
+        }.onError {
+            it.printOnDebug()
+            longToast("高亮规则导入失败:${it.localizedMessage}")
+        }
+    }
+
+    private fun exportHighlightRules(uri: Uri, rules: List<ReadHighlightRule>) {
+        if (rules.isEmpty()) return
+        execute {
+            uri.outputStream(requireContext()).getOrThrow().use { output ->
+                ReadHighlightRulePackageManager.export(rules, output)
+            }
+        }.onSuccess { result ->
+            if (result.warnings.isEmpty()) {
+                toastOnUi("高亮规则导出成功")
+            } else {
+                longToast("高亮规则导出成功\n${result.warnings.joinToString("\n")}")
+            }
+        }.onError {
+            it.printOnDebug()
+            longToast("高亮规则导出失败:${it.localizedMessage}")
         }
     }
 

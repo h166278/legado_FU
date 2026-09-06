@@ -25,6 +25,7 @@ object NetworkLog {
         "set-cookie",
         "x-api-key",
         "api-key",
+        "x-goog-api-key",
         "x-auth-token",
         "x-access-token",
         "x-csrf-token",
@@ -34,12 +35,16 @@ object NetworkLog {
         "([?&](?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|apikey|auth|authorization|token|secret|password|passwd|pwd|session(?:id)?)=)[^&#\\s]*",
         setOf(RegexOption.IGNORE_CASE)
     )
+    private val opaqueKeyQueryPattern = Regex(
+        "([?&]key=)[^&#\\s]{32,}",
+        setOf(RegexOption.IGNORE_CASE)
+    )
     private val quotedCredentialPattern = Regex(
-        "(\"(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|apikey|auth|authorization|token|secret|password|passwd|pwd|session(?:id)?)\"\\s*:\\s*\")[^\"]*(\")",
+        "(\"(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|apikey|auth|authorization|token|secret|password|passwd|pwd|session(?:id)?|cookie|set[_-]?cookie)\"\\s*:\\s*\")[^\"]*(\")",
         setOf(RegexOption.IGNORE_CASE)
     )
     private val formCredentialPattern = Regex(
-        "((?:^|[&\\s])(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|apikey|auth|authorization|token|secret|password|passwd|pwd|session(?:id)?)=)[^&\\s]*",
+        "((?:^|[&\\s])(?:access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|apikey|auth|authorization|token|secret|password|passwd|pwd|session(?:id)?|cookie|set[_-]?cookie)=)[^&\\s]*",
         setOf(RegexOption.IGNORE_CASE)
     )
     private val bearerCredentialPattern = Regex(
@@ -88,7 +93,7 @@ object NetworkLog {
                 requestBody = requestBodyText(request),
                 responseHeaders = response?.headers?.let { formatHeaders(it) },
                 responseBody = response?.previewBodyText(),
-                error = error?.stackTraceToString()
+                error = error?.let { redactThrowableForLog(it).stackTraceToString() }
             )
         )
     }
@@ -121,7 +126,7 @@ object NetworkLog {
                 requestBody = requestBody?.limitPreview()?.redactedForNetworkLog(),
                 responseHeaders = responseHeaders?.redactHeaderBlockCredentials(),
                 responseBody = responseBody?.limitPreview()?.redactedForNetworkLog(),
-                error = error?.stackTraceToString()
+                error = error?.let { redactThrowableForLog(it).stackTraceToString() }
             )
         )
     }
@@ -212,8 +217,25 @@ object NetworkLog {
     }
 
     fun redactUrlForLog(url: String): String {
-        return url.replace(credentialQueryPattern) { match ->
+        val redacted = url
+            .replace(credentialQueryPattern) { match ->
+                match.groupValues[1] + REDACTED
+            }
+        return redacted.replace(opaqueKeyQueryPattern) { match ->
             match.groupValues[1] + REDACTED
+        }
+    }
+
+    fun redactFreeTextForLog(text: String): String = text.redactedForNetworkLog()
+
+    fun redactThrowableForLog(error: Throwable): Throwable {
+        val safeMessage = redactUrlForLog(
+            redactFreeTextForLog(error.localizedMessage.orEmpty())
+        )
+        return IllegalStateException(
+            "${error.javaClass.simpleName}: $safeMessage"
+        ).apply {
+            stackTrace = error.stackTrace
         }
     }
 

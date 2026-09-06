@@ -34,7 +34,13 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
             return
         }
         when (val configTag = intent.getStringExtra("configTag")) {
-            ConfigTag.OTHER_CONFIG -> replaceFragment<OtherConfigFragment>(configTag)
+            ConfigTag.SETTINGS_CONFIG -> replaceFragment<SettingsMenuFragment>(configTag)
+            ConfigTag.APPEARANCE_CONFIG,
+            ConfigTag.INTERFACE_CONFIG -> replaceFragment<ThemeConfigFragment>(configTag)
+            ConfigTag.GENERAL_CONFIG -> replaceFragment<GeneralConfigFragment>(configTag)
+            ConfigTag.STORAGE_CONFIG -> replaceFragment<StorageConfigFragment>(configTag)
+            ConfigTag.ADVANCED_CONFIG -> replaceFragment<AdvancedConfigFragment>(configTag)
+            ConfigTag.RULE_CONFIG -> replaceFragment<RuleConfigMenuFragment>(configTag)
             ConfigTag.SERVICE_CONFIG -> replaceFragment<ServiceConfigFragment>(configTag)
             ConfigTag.AI_CONFIG -> {
                 if (intent.hasExtra(AiConfigFragment.EXTRA_INITIAL_PAGE)) {

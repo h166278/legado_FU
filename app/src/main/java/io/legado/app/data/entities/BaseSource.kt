@@ -13,9 +13,12 @@ import io.legado.app.help.ConcurrentRateLimiter.Companion.updateConcurrentRate
 import io.legado.app.help.JsExtensions
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.crypto.SymmetricCryptoAndroid
-import io.legado.app.help.http.CookieStore
+import io.legado.app.help.http.BookSourceCookieStore
+import io.legado.app.help.source.scriptCacheObject
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.getShareScope
+import io.legado.app.help.source.withBookSourceClassPolicy
+import io.legado.app.model.SharedJsScope
 import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -69,7 +72,7 @@ interface BaseSource : JsExtensions {
         return this
     }
 
-    fun getLoginJs(): String? {
+    open fun getLoginJs(): String? {
         val loginJs = loginUrl
         return when {
             loginJs == null -> null
@@ -152,14 +155,14 @@ interface BaseSource : JsExtensions {
         val headerMap = GSON.fromJsonObject<Map<String, String>>(header).getOrNull()
         val cookie = headerMap?.get("Cookie") ?: headerMap?.get("cookie")
         cookie?.let {
-            CookieStore.replaceCookie(getKey(), it)
+            BookSourceCookieStore.forSource(this).replaceCookie(getKey(), it)
         }
         CacheManager.put("loginHeader_${getKey()}", header)
     }
 
     fun removeLoginHeader() {
         CacheManager.delete("loginHeader_${getKey()}")
-        CookieStore.removeCookie(getKey())
+        BookSourceCookieStore.forSource(this).removeCookie(getKey())
     }
 
     /**
@@ -323,22 +326,30 @@ interface BaseSource : JsExtensions {
      */
     @Throws(Exception::class)
     fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["source"] = this
-            bindings["baseUrl"] = getKey()
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings.apply(bindingsConfig)
-        }
-        val sharedScope = getShareScope()
-        val scope = if (sharedScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings)
-        } else {
-            bindings.apply {
-                prototype = sharedScope
+        return this.withBookSourceClassPolicy {
+            val bindings = buildScriptBindings { bindings ->
+                bindings["java"] = this
+                bindings["source"] = this
+                bindings["sourceApi"] = this
+                bindings["baseUrl"] = getKey()
+                bindings["cookie"] = BookSourceCookieStore.forSource(this)
+                bindings["cache"] = this.scriptCacheObject()
+                bindings.apply(bindingsConfig)
             }
+            val sharedScope = getShareScope() ?: SharedJsScope.getCryptoScope(
+                scopeNamespace = getKey(),
+                coroutineContext = null,
+                bookSourceClassPolicy = this is BookSource,
+                bookSourceLabel = getTag(),
+            )
+            val scope = if (sharedScope == null) {
+                RhinoScriptEngine.getRuntimeScope(bindings)
+            } else {
+                bindings.apply {
+                    chainTo(sharedScope)
+                }
+            }
+            RhinoScriptEngine.eval(jsStr, scope)
         }
-        return RhinoScriptEngine.eval(jsStr, scope)
     }
 }

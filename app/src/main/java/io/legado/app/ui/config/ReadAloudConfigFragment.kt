@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
+import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.tts.TtsEngineSetting
 import io.legado.app.help.tts.TtsEngineStore
@@ -19,6 +20,7 @@ import io.legado.app.help.tts.TtsEngineType
 import io.legado.app.model.ReadAloud
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,8 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
     private var screenState by mutableStateOf(ReadAloudConfigScreenState())
     private val cardClickDebouncer = TtsSheetLaunchDebouncer()
     private var summaryJob: Job? = null
+    private var multiRoleSheetJob: Job? = null
+    private var multiRoleSheet: TtsEngineSelectionSheet? = null
     private var skipNextResumeRefresh = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -60,7 +64,11 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
                                     putExtra("configTag", ConfigTag.DEFAULT_TTS_VOICE_CONFIG)
                                 }
                             }
-                        }
+                        },
+                        onShowListeningCapsuleOnMainChanged = ::setShowListeningCapsuleOnMain,
+                        onMediaButtonOnExitChanged = ::setMediaButtonOnExit,
+                        onReadAloudByMediaButtonChanged = ::setReadAloudByMediaButton,
+                        onIgnoreAudioFocusChanged = ::setIgnoreAudioFocus
                     )
                 }
             }
@@ -80,12 +88,42 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
     override fun onDestroyView() {
         summaryJob?.cancel()
         summaryJob = null
+        multiRoleSheetJob?.cancel()
+        multiRoleSheetJob = null
+        multiRoleSheet?.dismiss()
+        multiRoleSheet = null
         skipNextResumeRefresh = false
         super.onDestroyView()
     }
 
     private fun refreshContent() {
+        screenState = screenState.copy(
+            showListeningCapsuleOnMain = AppConfig.showListeningCapsuleOnMain,
+            mediaButtonOnExit = AppConfig.mediaButtonOnExit,
+            readAloudByMediaButton = AppConfig.readAloudByMediaButton,
+            ignoreAudioFocus = AppConfig.ignoreAudioFocus
+        )
         refreshMultiRoleEngineSummary()
+    }
+
+    private fun setShowListeningCapsuleOnMain(enabled: Boolean) {
+        putPrefBoolean(PreferKey.showListeningCapsuleOnMain, enabled)
+        screenState = screenState.copy(showListeningCapsuleOnMain = enabled)
+    }
+
+    private fun setMediaButtonOnExit(enabled: Boolean) {
+        putPrefBoolean("mediaButtonOnExit", enabled)
+        screenState = screenState.copy(mediaButtonOnExit = enabled)
+    }
+
+    private fun setReadAloudByMediaButton(enabled: Boolean) {
+        putPrefBoolean(PreferKey.readAloudByMediaButton, enabled)
+        screenState = screenState.copy(readAloudByMediaButton = enabled)
+    }
+
+    private fun setIgnoreAudioFocus(enabled: Boolean) {
+        putPrefBoolean(PreferKey.ignoreAudioFocus, enabled)
+        screenState = screenState.copy(ignoreAudioFocus = enabled)
     }
 
     private fun refreshMultiRoleEngineSummary() {
@@ -117,20 +155,33 @@ class ReadAloudConfigFragment : BaseFragment(R.layout.fragment_read_aloud_config
 
     private fun showMultiRoleEngineSheet() {
         val selectedId = AppConfig.multiRoleTtsEngineId
-        TtsEngineSelectionSheet(
+        multiRoleSheetJob?.cancel()
+        multiRoleSheet?.dismiss()
+        val sheet = TtsEngineSelectionSheet(
             context = requireContext(),
             title = getString(R.string.multi_role_tts_engine),
             searchHint = getString(R.string.multi_role_tts_engine_search),
             emptyText = getString(R.string.multi_role_tts_engine_empty),
-            engines = TtsEngineStore.engines().filter {
-                it.enabled && it.type == TtsEngineType.SCRIPT
-            },
+            engines = emptyList(),
             selectedEngineId = selectedId,
             onSelect = { engine -> selectMultiRoleEngine(engine.id) },
-            titleAction = selectedId?.takeIf { it.isNotBlank() }?.let {
-                getString(R.string.clear) to { selectMultiRoleEngine(null) }
+            onClear = selectedId?.takeIf { it.isNotBlank() }?.let {
+                { selectMultiRoleEngine(null) }
+            },
+            loading = true,
+        )
+        multiRoleSheet = sheet
+        sheet.show()
+        multiRoleSheetJob = viewLifecycleOwner.lifecycleScope.launch {
+            val engines = withContext(Dispatchers.IO) {
+                TtsEngineStore.engines().filter {
+                    it.enabled && it.type == TtsEngineType.SCRIPT
+                }
             }
-        ).show()
+            if (view != null && multiRoleSheet === sheet) {
+                sheet.updateEngines(engines)
+            }
+        }
     }
 
     private fun selectMultiRoleEngine(engineId: String?) {
@@ -332,7 +383,8 @@ class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts
                     refreshRunningMultiRoleReadAloud(requireContext())
                     bindCards(engineSnapshot)
                 }
-            }
+            },
+            titleActionIconRes = R.drawable.ic_clear,
         ).show()
     }
 
@@ -367,7 +419,8 @@ class DefaultTtsVoiceConfigFragment : BaseFragment(R.layout.fragment_default_tts
                     refreshRunningMultiRoleReadAloud(requireContext())
                     bindCards(engineSnapshot)
                 }
-            }
+            },
+            titleActionIconRes = R.drawable.ic_clear,
         ).show()
     }
 

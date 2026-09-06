@@ -24,6 +24,7 @@ interface BookDao {
             BookGroup.IdLocal -> flowLocal()
             BookGroup.IdAudio -> flowAudio()
             BookGroup.IdVideo -> flowVideo()
+            BookGroup.IdNoGroup -> flowNoGroup()
             else -> flowByUserGroup(groupId)
         }.map { list ->
             list.filterNot { it.isNotShelf }
@@ -34,7 +35,11 @@ interface BookDao {
         """
         select * from books where type & ${BookType.text} > 0
         and type & ${BookType.local} = 0
-        and ((SELECT sum(groupId) FROM book_groups where groupId > 0) & `group`) = 0
+        and not exists (
+            select 1 from book_groups
+            where (groupId > 0 or groupId = ${Long.MIN_VALUE})
+            and (groupId & books.`group`) != 0
+        )
         """
     )
     fun flowRoot(): Flow<List<Book>>
@@ -50,6 +55,18 @@ interface BookDao {
 
     @Query("SELECT * FROM books WHERE type & ${BookType.local} > 0")
     fun flowLocal(): Flow<List<Book>>
+
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE NOT EXISTS (
+            SELECT 1 FROM book_groups
+            WHERE (groupId > 0 OR groupId = ${Long.MIN_VALUE})
+            AND (groupId & books.`group`) != 0
+        )
+        """
+    )
+    fun flowNoGroup(): Flow<List<Book>>
 
     @Query("SELECT * FROM books WHERE (`group` & :group) > 0")
     fun flowByUserGroup(group: Long): Flow<List<Book>>

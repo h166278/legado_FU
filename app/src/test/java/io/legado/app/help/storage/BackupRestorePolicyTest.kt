@@ -11,7 +11,15 @@ class BackupRestorePolicyTest {
     fun keepsThemeAndBarAppearanceOutsideWholeBackupRestore() {
         val appearanceKeys = listOf(
             PreferKey.themeMode,
+            PreferKey.ngThemePresentationMode,
+            PreferKey.ngStandardThemeMode,
+            PreferKey.ngInternalThemeMode,
+            PreferKey.ngSoftGradientColor,
+            PreferKey.ngSoftGradientColorMode,
+            PreferKey.ngSoftGradientCustomColor,
+            PreferKey.ngSoftGradientLightField,
             PreferKey.readNightTheme,
+            PreferKey.readThemeMode,
             PreferKey.cPrimary,
             PreferKey.ngColorLightPrimary,
             PreferKey.useFloatingBottomBar,
@@ -34,9 +42,21 @@ class BackupRestorePolicyTest {
     }
 
     @Test
+    fun restoresGlobalReadingFloatingColorPreferencesFromSameVersionBackup() {
+        listOf(
+            PreferKey.readFloatingFollowAppGlobally,
+            PreferKey.readFloatingGlobalColorStyle,
+        ).forEach { key ->
+            assertTrue(BackupRestorePolicy.shouldRestorePreference(key, isMd3Backup = false))
+        }
+    }
+
+    @Test
     fun skipsMd3ReadStylesAndTheirDependentPreferences() {
         assertFalse(BackupRestorePolicy.shouldRestoreReadConfigs(isMd3Backup = true))
         assertTrue(BackupRestorePolicy.shouldRestoreReadConfigs(isMd3Backup = false))
+        assertFalse(BackupRestorePolicy.shouldRestoreHighlightRules(isMd3Backup = true))
+        assertTrue(BackupRestorePolicy.shouldRestoreHighlightRules(isMd3Backup = false))
 
         listOf(
             PreferKey.readStyleSelect,

@@ -2,6 +2,8 @@ package io.legado.app.ui.design.components.compose
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -34,7 +36,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +52,57 @@ data class NgFilterChipItem(
     val label: String,
     @param:DrawableRes val iconRes: Int? = null,
 )
+
+/** 与筛选 Chip 共用几何的紧凑一次性动作，用于示例、建议和快捷填充。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun NgActionChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    @DrawableRes iconRes: Int? = null,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val contentColor = Color.White
+    Row(
+        modifier = modifier
+            .height(CHIP_HEIGHT)
+            .widthIn(max = 360.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(NgTheme.colors.primary))
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(
+                        role = Role.Button,
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                    )
+                } else {
+                    Modifier.clickable(role = Role.Button, onClick = onClick)
+                }
+            )
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        iconRes?.let {
+            Icon(
+                painter = painterResource(it),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = contentColor,
+            )
+        }
+        Text(
+            text = text,
+            color = contentColor,
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 /**
  * NG 长列表统一的筛选标签组。
@@ -152,7 +204,7 @@ private fun NgFilterChip(
     val containerColor = if (selected) {
         Color(colors.selectedContainer)
     } else {
-        colorResource(R.color.ng_surface_card)
+        ngDrawerContentCardColor()
     }
     val contentColor = if (selected) {
         Color(colors.primary)

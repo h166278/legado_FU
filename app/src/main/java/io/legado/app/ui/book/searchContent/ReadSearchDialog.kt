@@ -57,8 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -106,8 +105,11 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadDrawerStyle
+import io.legado.app.ui.book.read.ReadFloatingAppearanceState
+import io.legado.app.ui.book.read.readFloatingGlassStyle
 import io.legado.app.ui.design.components.compose.NgGlassDefaults
 import io.legado.app.ui.design.components.compose.NgGlassSurface
+import io.legado.app.ui.design.components.compose.NgPopupToggleState
 import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.ui.design.theme.NgTheme
 import kotlinx.coroutines.Dispatchers
@@ -172,6 +174,7 @@ class ReadSearchDialog : BottomSheetDialogFragment() {
 
         query = arguments?.getString(ARG_QUERY).orEmpty()
         selectedResultIndex = arguments?.getInt(ARG_SELECTED_INDEX, -1) ?: -1
+        ReadFloatingAppearanceState.refreshFromConfig()
         val snapshot = ReadDrawerStyle.themeSnapshot(requireContext())
         (view as ComposeView).setContent {
             NgAppTheme(snapshot = snapshot, updateSystemBars = false) {
@@ -263,14 +266,15 @@ class ReadSearchDialog : BottomSheetDialogFragment() {
         ) ?: return
         sheet.setBackgroundColor(AndroidColor.TRANSPARENT)
         sheet.layoutParams = sheet.layoutParams.apply {
-            height = (resources.displayMetrics.heightPixels * 0.94f).toInt()
+            height = (resources.displayMetrics.heightPixels * 0.82f).toInt()
         }
         BottomSheetBehavior.from(sheet).apply {
             isDraggable = false
-            isHideable = false
+            isHideable = true
             skipCollapsed = true
             state = BottomSheetBehavior.STATE_EXPANDED
         }
+        ReadDrawerStyle.installImeOnlyBottomSheetInsetsAnimation(sheet)
     }
 
     override fun onDismiss(dialog: DialogInterface) {
@@ -506,14 +510,12 @@ private fun ReadSearchPanel(
     val dockColor = ReadDrawerStyle.dockSurfaceColor(alpha = 0.34f)
     val chapterCount = chapterTargets.size
     val showResultSummary = query.isNotBlank() || searching || resultCount > 0
-    var settingsExpanded by remember { mutableStateOf(false) }
+    val settingsMenuState = remember { NgPopupToggleState() }
 
     NgGlassSurface(
         modifier = Modifier.fillMaxSize(),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        style = NgGlassDefaults.style(
-            containerAlpha = maxOf(NgTheme.effects.dialogAlpha, 0.94f),
-        ).copy(shadowElevation = 0.dp),
+        style = readFloatingGlassStyle().copy(shadowElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier
@@ -534,8 +536,9 @@ private fun ReadSearchPanel(
                 dockColor = dockColor,
                 onQueryChange = onQueryChange,
                 onSearch = onSearch,
-                settingsExpanded = settingsExpanded,
-                onSettingsExpandedChange = { settingsExpanded = it },
+                settingsExpanded = settingsMenuState.expanded,
+                onSettingsAnchorClick = settingsMenuState::onAnchorClick,
+                onSettingsDismiss = settingsMenuState::onDismissRequest,
                 applyReplace = applyReplace,
                 supportRegex = supportRegex,
                 onToggleApplyReplace = onToggleApplyReplace,
@@ -651,20 +654,16 @@ private fun SearchInputRow(
     onQueryChange: (String) -> Unit,
     onSearch: (String) -> Unit,
     settingsExpanded: Boolean,
-    onSettingsExpandedChange: (Boolean) -> Unit,
+    onSettingsAnchorClick: () -> Unit,
+    onSettingsDismiss: () -> Unit,
     applyReplace: Boolean,
     supportRegex: Boolean,
     onToggleApplyReplace: () -> Unit,
     onToggleSupportRegex: () -> Unit,
 ) {
-    val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    LaunchedEffect(Unit) {
-        if (query.isBlank()) {
-            focusRequester.requestFocus()
-            keyboardController?.show()
-        }
-    }
+    var inputFocused by remember { mutableStateOf(false) }
+    val menuButtonShape = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -677,7 +676,7 @@ private fun SearchInputRow(
             modifier = Modifier
                 .weight(1f)
                 .height(40.dp)
-                .focusRequester(focusRequester),
+                .onFocusChanged { inputFocused = it.isFocused },
             enabled = !loading,
             singleLine = true,
             textStyle = TextStyle(
@@ -713,7 +712,7 @@ private fun SearchInputRow(
                     )
                     Spacer(Modifier.width(10.dp))
                     Box(modifier = Modifier.weight(1f)) {
-                        if (query.isBlank()) {
+                        if (query.isBlank() && !inputFocused) {
                             Text(
                                 text = stringResource(R.string.search_input_hint),
                                 color = mutedColor.copy(alpha = 0.72f),
@@ -746,19 +745,21 @@ private fun SearchInputRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .clickable { onSettingsExpandedChange(true) },
+                    .clip(menuButtonShape)
+                    .background(dockColor)
+                    .clickable(onClick = onSettingsAnchorClick),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_more_vert),
+                    painter = painterResource(R.drawable.ic_grid_menu),
                     contentDescription = stringResource(R.string.menu),
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(20.dp),
                     tint = contentColor,
                 )
             }
             DropdownMenu(
                 expanded = settingsExpanded,
-                onDismissRequest = { onSettingsExpandedChange(false) },
+                onDismissRequest = onSettingsDismiss,
                 modifier = Modifier.width(136.dp),
                 shape = RoundedCornerShape(18.dp),
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -773,7 +774,7 @@ private fun SearchInputRow(
                     onClick = onToggleApplyReplace,
                 )
                 HorizontalDivider(
-                    modifier = Modifier.padding(start = 40.dp, end = 10.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp),
                     color = mutedColor.copy(alpha = 0.14f),
                 )
                 SearchOptionMenuItem(

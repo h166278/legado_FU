@@ -32,6 +32,7 @@ nanoHttpd = "2.3.1"
 okhttp = "5.3.2"
 preference = "1.2.1"
 quickChineseTransfer = "0.2.17"
+quickjsKt = "1.0.4"
 
 splitties = "3.0.0"
 desugar = "2.1.5"
@@ -58,9 +59,8 @@ jsoup = "1.16.2"
 #noinspection GradleDependency,NewerVersionAvailable
 commonsText = "1.13.1"
 
-# 新版本使用了 Android 8 以下无法编译的 VarHandle.compareAndExchange 方法
-#noinspection GradleDependency
-rhino = "1.8.1"
+# 与 JS 单文件书源参考实现保持一致的 HtmlUnit Rhino 兼容分支。
+htmlunitCoreJs = "5.3.0-legado.4-android21.1"
 
 #noinspection GradleDependency,NewerVersionAvailable
 media3 = "1.8.0"
@@ -164,6 +164,7 @@ okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobufJavalite" }
 
 quick-chinese-transfer-core = { module = "com.github.liuyueyi.quick-chinese-transfer:quick-transfer-core", version.ref = "quickChineseTransfer" }
+quickjs-kt = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjsKt" }
 
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
@@ -223,7 +224,7 @@ liveeventbus = { module = "com.github.michaellee123:LiveEventBus", version.ref =
 material = { module = "com.google.android.material:material", version.ref = "material" }
 material-color-utilities = { module = "com.materialkolor:material-color-utilities-android", version.ref = "materialKolor" }
 
-mozilla-rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
+htmlunit-core-js = { module = "org.htmlunit:htmlunit-core-js", version.ref = "htmlunitCoreJs" }
 
 renderscript-intrinsics-replacement-toolkit = { module = "com.github.TomasValenta:renderscript-intrinsics-replacement-toolkit", version = "8eaa829ddd" }
 zxing-lite = { module = "com.github.jenly1314:zxing-lite", version.ref = "zxingLite" }

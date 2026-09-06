@@ -20,6 +20,8 @@ import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.exoplayer.AudioDownloadCache
+import io.legado.app.help.exoplayer.CachedAudioChapter
 import io.legado.app.help.globalExecutor
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.AudioPlayService
@@ -68,6 +70,8 @@ object AudioPlay : CoroutineScope by MainScope() {
     var durChapterPos = 0
     var durChapter: BookChapter? = null
     var durPlayUrl = ""
+    var durAudioCacheKeys: List<String> = emptyList()
+        private set
     var durLyric: String? = null
     var durAudioSize = 0
     var inBookshelf = false
@@ -96,6 +100,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             durChapterIndex = book.durChapterIndex
             durChapterPos = book.durChapterPos
             durPlayUrl = ""
+            durAudioCacheKeys = emptyList()
             durLyric = null
             durAudioSize = 0
         }
@@ -124,6 +129,7 @@ object AudioPlay : CoroutineScope by MainScope() {
         AudioPlayService.playSpeed = playSpeed
         postEvent(EventBus.AUDIO_SPEED, playSpeed)
         durPlayUrl = ""
+        durAudioCacheKeys = emptyList()
         durLyric = null
         durAudioSize = 0
         upDurChapter()
@@ -166,6 +172,31 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     /**
+     * 从已保存进度重新开始播放。
+     *
+     * Service 已退出时，内存中的播放地址可能已经失效；只清理地址并重新解析，
+     * 保留 [durChapterIndex] 与 [durChapterPos]，避免通过重新选章才能恢复播放。
+     */
+    fun playFromSavedProgress(): Boolean {
+        val canReuseActivePlayback = AudioPlayService.isRun &&
+                durPlayUrl.isNotEmpty() &&
+                AudioPlayService.url == durPlayUrl
+        when {
+            canReuseActivePlayback && status == Status.PLAY -> return true
+            canReuseActivePlayback && status == Status.PAUSE -> {
+                resume(context)
+                return true
+            }
+            !canReuseActivePlayback -> {
+                durPlayUrl = ""
+                durAudioCacheKeys = emptyList()
+            }
+        }
+        loadOrUpPlayUrl()
+        return false
+    }
+
+    /**
      * 加载播放URL
      */
     private fun loadPlayUrl() {
@@ -177,6 +208,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 upDurChapter()
                 val chapter = durChapter
                 if (chapter == null) {
+                    upLoading(false)
                     removeLoading(index)
                     return
                 }
@@ -186,24 +218,37 @@ object AudioPlay : CoroutineScope by MainScope() {
                     return
                 }
                 upLoading(true)
-                WebBook.getContent(this, bookSource, book, chapter)
-                    .onSuccess { content ->
-                        val content = content.trim()
-                        if (content.isEmpty()) {
-                            appCtx.toastOnUi("未获取到资源链接")
-                        } else {
-                            contentLoadFinish(chapter, content)
-                        }
-                    }.onError {
-                        AppLog.put("获取资源链接出错\n$it", it, true)
+                Coroutine.async(this) {
+                    runCatching {
+                        AudioDownloadCache.getCachedChapter(bookSource, book, chapter)
+                    }.getOrNull()
+                        ?: CachedAudioChapter(
+                            content = WebBook.getContentAwait(bookSource, book, chapter),
+                            cacheKeys = emptyList(),
+                        )
+                }.onSuccess { playbackSource ->
+                    val content = playbackSource.content.trim()
+                    if (content.isEmpty()) {
                         upLoading(false)
-                    }.onCancel {
-                        removeLoading(index)
-                    }.onFinally {
-                        callback?.upLyric(durLyric)
-                        removeLoading(index)
+                        appCtx.toastOnUi("未获取到资源链接")
+                    } else {
+                        contentLoadFinish(
+                            chapter,
+                            playbackSource.copy(content = content),
+                        )
                     }
+                }.onError {
+                    AppLog.put("获取资源链接出错\n$it", it, true)
+                    upLoading(false)
+                }.onCancel {
+                    upLoading(false)
+                    removeLoading(index)
+                }.onFinally {
+                    callback?.upLyric(durLyric)
+                    removeLoading(index)
+                }
             } else {
+                upLoading(false)
                 removeLoading(index)
                 appCtx.toastOnUi("book or source is null")
             }
@@ -213,9 +258,10 @@ object AudioPlay : CoroutineScope by MainScope() {
     /**
      * 加载完成
      */
-    private fun contentLoadFinish(chapter: BookChapter, content: String) {
+    private fun contentLoadFinish(chapter: BookChapter, playbackSource: CachedAudioChapter) {
         if (chapter.index == book?.durChapterIndex) {
-            durPlayUrl = content
+            durPlayUrl = playbackSource.content
+            durAudioCacheKeys = playbackSource.cacheKeys
             durLyric = chapter.getVariable("lyric")
             upPlayUrl()
         }
@@ -316,6 +362,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterIndex = index
                 durChapterPos = 0
                 durPlayUrl = ""
+                durAudioCacheKeys = emptyList()
                 durLyric = null
                 saveRead()
                 loadPlayUrl()
@@ -330,6 +377,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterIndex -= 1
                 durChapterPos = 0
                 durPlayUrl = ""
+                durAudioCacheKeys = emptyList()
                 durLyric = null
                 saveRead()
                 loadPlayUrl()
@@ -346,6 +394,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                     durChapterIndex += 1
                     durChapterPos = 0
                     durPlayUrl = ""
+                    durAudioCacheKeys = emptyList()
                     durLyric = null
                     saveRead()
                     loadPlayUrl()
@@ -355,6 +404,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             PlayMode.SINGLE_LOOP -> {
                 durChapterPos = 0
                 durPlayUrl = ""
+                durAudioCacheKeys = emptyList()
                 durLyric = null
                 saveRead()
                 loadPlayUrl()
@@ -364,6 +414,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterIndex = (0 until simulatedChapterSize).random()
                 durChapterPos = 0
                 durPlayUrl = ""
+                durAudioCacheKeys = emptyList()
                 durLyric = null
                 saveRead()
                 loadPlayUrl()
@@ -373,6 +424,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterIndex = (durChapterIndex + 1) % simulatedChapterSize
                 durChapterPos = 0
                 durPlayUrl = ""
+                durAudioCacheKeys = emptyList()
                 durLyric = null
                 saveRead()
                 loadPlayUrl()
@@ -404,6 +456,13 @@ object AudioPlay : CoroutineScope by MainScope() {
                 action = IntentAction.stopPlay
             }
         }
+    }
+
+    fun onBookCacheCleared(bookUrl: String) {
+        if (book?.bookUrl != bookUrl) return
+        durPlayUrl = ""
+        durAudioCacheKeys = emptyList()
+        if (AudioPlayService.isRun) stop()
     }
 
     fun saveRead(first: Boolean = false) {

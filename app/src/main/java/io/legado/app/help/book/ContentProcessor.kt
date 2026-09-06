@@ -19,7 +19,6 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import splitties.init.appCtx
 import java.lang.ref.WeakReference
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.regex.Pattern
 
 class ContentProcessor private constructor(
@@ -51,8 +50,8 @@ class ContentProcessor private constructor(
 
     }
 
-    private val titleReplaceRules = CopyOnWriteArrayList<ReplaceRule>()
-    private val contentReplaceRules = CopyOnWriteArrayList<ReplaceRule>()
+    @Volatile
+    private var replaceRuleSnapshot = ReplaceRuleSnapshot()
 
     private fun String.limitLogText(maxLength: Int = 80): String {
         return replace("\n", "\\n").let {
@@ -107,25 +106,27 @@ class ContentProcessor private constructor(
         upReplaceRules()
     }
 
+    @Synchronized
     fun upReplaceRules() {
-        titleReplaceRules.run {
-            clear()
-            addAll(appDb.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin))
-        }
-        contentReplaceRules.run {
-            clear()
-            addAll(appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin))
-        }
+        replaceRuleSnapshot = ReplaceRuleSnapshot(
+            titleRules = appDb.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin),
+            contentRules = appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin)
+        )
     }
 
     fun getTitleReplaceRules(): List<ReplaceRule> {
-        return titleReplaceRules
+        return replaceRuleSnapshot.titleRules
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
     fun getContentReplaceRules(): List<ReplaceRule> {
-        return contentReplaceRules
+        return replaceRuleSnapshot.contentRules
     }
+
+    private data class ReplaceRuleSnapshot(
+        val titleRules: List<ReplaceRule> = emptyList(),
+        val contentRules: List<ReplaceRule> = emptyList()
+    )
 
     fun getContent(
         book: Book,
@@ -153,7 +154,7 @@ class ContentProcessor private constructor(
                 } else if (useReplace && book.getUseReplaceRule()) {
                     title = Pattern.quote(
                         chapter.getDisplayTitle(
-                            titleReplaceRules,
+                            getTitleReplaceRules(),
                             chineseConvert = false,
                             replaceBook = replaceBook
                         )
@@ -170,7 +171,9 @@ class ContentProcessor private constructor(
             }
             if (reSegment && book.getReSegment()) {
                 //重新分段
-                mContent = ContentHelp.reSegment(mContent, chapter.title)
+                mContent = HtmlImageTags.preserveDuringTextTransform(mContent) {
+                    ContentHelp.reSegment(it, chapter.title)
+                }
             }
             if (chineseConvert) {
                 //简繁转换
@@ -194,16 +197,21 @@ class ContentProcessor private constructor(
             if (useReplace && book.getUseReplaceRule()) {
                 //替换
                 effectiveReplaceRules = arrayListOf()
-                mContent = mContent.lines().joinToString("\n") { it.trim() }
+                val replaceRules = getContentReplaceRules()
+                if (replaceRules.any { it.pattern.isNotEmpty() }) {
+                    mContent = HtmlImageTags.preserveDuringTextTransform(mContent) {
+                        it.lines().joinToString("\n") { line -> line.trim() }
+                    }
+                }
                 AppLog.putDebug(
                     "替换净化调试: 开始正文替换\n" +
                             "书籍: ${book.name}\n" +
                             "书源: ${book.origin}\n" +
                             "章节: ${chapter.title}\n" +
-                            "规则数量: ${getContentReplaceRules().size}\n" +
+                            "规则数量: ${replaceRules.size}\n" +
                             "正文长度: ${mContent.length}"
                 )
-                getContentReplaceRules().forEach { item ->
+                replaceRules.forEach { item ->
                     if (item.pattern.isEmpty()) {
                         return@forEach
                     }
@@ -248,6 +256,7 @@ class ContentProcessor private constructor(
             useHtmlMap.forEach { (placeholder, originalContent) ->
                 mContent = mContent.replace(placeholder, originalContent)
             }
+            mContent = HtmlImageTags.removeEmptySources(mContent)
         }
         if (includeTitle) {
             //重新添加标题

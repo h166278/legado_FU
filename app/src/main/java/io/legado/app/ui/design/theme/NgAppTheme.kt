@@ -26,12 +26,20 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.NgColorConfigStore
+import io.legado.app.help.config.NgThemeModeStore
+import io.legado.app.help.config.NgThemePresentationMode
 import io.legado.app.help.config.NgThemeRuntimeAssets
+import io.legado.app.help.config.NgVisualSystem
+import io.legado.app.help.config.NgVisualSystemStore
 import io.legado.app.help.config.resolveThemeNightMode
 import io.legado.app.utils.isNightMode
 
 private val LocalNgThemeSnapshot = staticCompositionLocalOf<NgThemeSnapshot> {
     error("NgThemeSnapshot is not available outside NgAppTheme")
+}
+
+private val LocalNgVisualSystem = staticCompositionLocalOf {
+    NgVisualSystem.DEFAULT
 }
 
 object NgTheme {
@@ -64,6 +72,16 @@ object NgTheme {
         @Composable
         @ReadOnlyComposable
         get() = snapshot.effects
+
+    val visualSystem: NgVisualSystem
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalNgVisualSystem.current
+
+    val usesLiquidGlass: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = visualSystem == NgVisualSystem.LIQUID_GLASS && !snapshot.isEInk
 }
 
 @Composable
@@ -76,6 +94,9 @@ fun NgAppTheme(
     val resolvedSnapshot = snapshot ?: rememberNgThemeSnapshot(darkModeOverride)
     val view = LocalView.current
     val context = LocalContext.current
+    val visualSystemFlow = remember(context) { NgVisualSystemStore.observe(context) }
+    val observedVisualSystem by visualSystemFlow.collectAsState()
+    val visualSystem = observedVisualSystem ?: NgVisualSystemStore.current(context)
     val appTypeface = NgThemeRuntimeAssets.appTypeface(context)
     val typography = remember(appTypeface) {
         Typography().withFontFamily(appTypeface?.let(::FontFamily))
@@ -94,7 +115,10 @@ fun NgAppTheme(
             }
         }
     }
-    CompositionLocalProvider(LocalNgThemeSnapshot provides resolvedSnapshot) {
+    CompositionLocalProvider(
+        LocalNgThemeSnapshot provides resolvedSnapshot,
+        LocalNgVisualSystem provides visualSystem,
+    ) {
         MaterialTheme(
             colorScheme = resolvedSnapshot.toMaterialColorScheme(),
             shapes = resolvedSnapshot.shapes.toMaterialShapes(),
@@ -109,12 +133,20 @@ private fun rememberNgThemeSnapshot(darkModeOverride: Boolean?): NgThemeSnapshot
     val context = LocalContext.current
     val systemNightMode = LocalConfiguration.current.isNightMode
     val themeMode = AppConfig.themeMode
+    val presentationMode = NgThemeModeStore.current(context)
     val isDark = resolveNgThemeNightMode(themeMode, systemNightMode, darkModeOverride)
     val colorFlow = remember(context) { NgColorConfigStore.observe(context) }
     val observedColors by colorFlow.collectAsState()
     val colors = observedColors ?: NgColorConfigStore.current(context)
-    return remember(context, themeMode, isDark, colors, darkModeOverride) {
-        if (AppConfig.isEInkMode) {
+    return remember(
+        context,
+        themeMode,
+        presentationMode,
+        isDark,
+        colors,
+        darkModeOverride,
+    ) {
+        if (presentationMode != NgThemePresentationMode.STANDARD) {
             NgThemeResolver.resolve(context)
         } else {
             NgThemeResolver.resolve(

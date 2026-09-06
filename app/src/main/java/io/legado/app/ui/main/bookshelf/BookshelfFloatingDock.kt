@@ -73,6 +73,10 @@ import io.legado.app.help.config.BookshelfFloatingDockConfig
 import io.legado.app.help.config.BookshelfFloatingDockSearchPosition
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenu
 import io.legado.app.ui.design.components.compose.NgExpandableActionMenuItem
+import io.legado.app.ui.design.components.compose.NgGlassDefaults
+import io.legado.app.ui.design.components.compose.NgGlassStyle
+import io.legado.app.ui.design.components.compose.NgMaterialRole
+import io.legado.app.ui.design.components.compose.NgVisualSurface
 import io.legado.app.ui.design.theme.NgTheme
 import kotlin.math.roundToInt
 
@@ -94,6 +98,7 @@ internal fun BookshelfFloatingDock(
     contentTopInsetPx: Int,
     transparencyPercent: Int,
     searchPosition: BookshelfFloatingDockSearchPosition,
+    backdropSource: View?,
     modifier: Modifier = Modifier
 ) {
     val snapshot = NgTheme.snapshot
@@ -109,6 +114,7 @@ internal fun BookshelfFloatingDock(
         snapshot.isDark -> Color.White.copy(alpha = 0.18f)
         else -> Color.White.copy(alpha = 0.68f)
     }
+    val materialStyle = rememberBookshelfDockStyle(surfaceColor, dockBorderColor)
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -120,35 +126,41 @@ internal fun BookshelfFloatingDock(
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp)
         ) {
-            Row(
+            NgVisualSurface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
-                    .clip(shape)
-                    .background(surfaceColor)
-                    .border(0.6.dp, dockBorderColor, shape),
-                verticalAlignment = Alignment.CenterVertically
+                    .height(58.dp),
+                role = NgMaterialRole.TOP_NAVIGATION,
+                cornerRadius = 12.dp,
+                shape = shape,
+                style = materialStyle,
+                viewBackdropSource = backdropSource,
             ) {
-                if (searchPosition == BookshelfFloatingDockSearchPosition.LEFT) {
-                    DockAction(
-                        iconRes = R.drawable.ic_bookshelf_dock_search,
-                        label = stringResource(R.string.search),
-                        onClick = onSearchClick
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (searchPosition == BookshelfFloatingDockSearchPosition.LEFT) {
+                        DockAction(
+                            iconRes = R.drawable.ic_bookshelf_dock_search,
+                            label = stringResource(R.string.search),
+                            onClick = onSearchClick
+                        )
+                    }
+                    GroupTrack(
+                        groups = groups,
+                        selectedIndex = selectedIndex,
+                        onGroupClick = onGroupClick,
+                        onGroupLongClick = onGroupLongClick,
+                        modifier = Modifier.weight(1f)
                     )
-                }
-                GroupTrack(
-                    groups = groups,
-                    selectedIndex = selectedIndex,
-                    onGroupClick = onGroupClick,
-                    onGroupLongClick = onGroupLongClick,
-                    modifier = Modifier.weight(1f)
-                )
-                if (searchPosition == BookshelfFloatingDockSearchPosition.RIGHT) {
-                    DockAction(
-                        iconRes = R.drawable.ic_bookshelf_dock_search,
-                        label = stringResource(R.string.search),
-                        onClick = onSearchClick
-                    )
+                    if (searchPosition == BookshelfFloatingDockSearchPosition.RIGHT) {
+                        DockAction(
+                            iconRes = R.drawable.ic_bookshelf_dock_search,
+                            label = stringResource(R.string.search),
+                            onClick = onSearchClick
+                        )
+                    }
                 }
             }
         }
@@ -352,6 +364,7 @@ internal fun BookshelfCompactToolbar(
     contentTopInsetPx: Int,
     transparencyPercent: Int,
     searchPosition: BookshelfFloatingDockSearchPosition,
+    backdropSource: View?,
     modifier: Modifier = Modifier,
 ) {
     val snapshot = NgTheme.snapshot
@@ -360,11 +373,12 @@ internal fun BookshelfCompactToolbar(
     val surfaceColor = colorResource(R.color.ng_floating_dock_surface).copy(
         alpha = BookshelfFloatingDockConfig.surfaceAlpha(transparencyPercent),
     )
-    val contentColor = if (snapshot.isDark) {
-        Color(snapshot.colors.onSurface)
-    } else {
-        Color(snapshot.colors.onSurfaceVariant).copy(alpha = 184f / 255f)
-    }
+    val contentColor = snapshot.backdropContent.topNavigationInactive?.let(::Color)
+        ?: if (snapshot.isDark) {
+            Color(snapshot.colors.onSurface)
+        } else {
+            Color(snapshot.colors.onSurfaceVariant).copy(alpha = 184f / 255f)
+        }
     val dividerColor = Color(snapshot.colors.outlineVariant).copy(
         alpha = if (snapshot.isDark) 0.34f else 0.24f,
     )
@@ -373,6 +387,7 @@ internal fun BookshelfCompactToolbar(
         snapshot.isDark -> Color.White.copy(alpha = 0.18f)
         else -> Color.White.copy(alpha = 0.68f)
     }
+    val materialStyle = rememberBookshelfDockStyle(surfaceColor, dockBorderColor)
     val dockTopSpacerHeight = with(LocalDensity.current) {
         (topDistancePx - contentTopInsetPx).coerceAtLeast(0).toDp()
     }
@@ -440,61 +455,90 @@ internal fun BookshelfCompactToolbar(
                 .fillMaxWidth()
                 .height(dockTopSpacerHeight),
         )
-        Row(
+        NgVisualSurface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .height(48.dp)
-                .clip(shape)
-                .background(surfaceColor)
-                .border(0.6.dp, dockBorderColor, shape),
-            verticalAlignment = Alignment.CenterVertically,
+                .height(48.dp),
+            role = NgMaterialRole.TOP_NAVIGATION,
+            cornerRadius = 12.dp,
+            shape = shape,
+            style = materialStyle,
+            viewBackdropSource = backdropSource,
         ) {
-            if (searchPosition == BookshelfFloatingDockSearchPosition.LEFT) {
-                CompactToolbarSearchAction(
-                    label = searchLabel,
-                    contentColor = contentColor,
-                    onClick = onSearchClick,
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(min = 96.dp),
-                )
-                CompactToolbarDivider(color = dividerColor)
-                if (!groupGridMode && groups.isNotEmpty()) {
-                    CompactToolbarGroupAction(
-                        groups = groups,
-                        selectedIndex = selectedIndex,
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (searchPosition == BookshelfFloatingDockSearchPosition.LEFT) {
+                    CompactToolbarSearchAction(
+                        label = searchLabel,
                         contentColor = contentColor,
-                        onGroupClick = onGroupClick,
-                        onGroupLongClick = onGroupLongClick,
+                        onClick = onSearchClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 96.dp),
                     )
                     CompactToolbarDivider(color = dividerColor)
-                }
-                actions()
-            } else {
-                actions()
-                CompactToolbarDivider(color = dividerColor)
-                if (!groupGridMode && groups.isNotEmpty()) {
-                    CompactToolbarGroupAction(
-                        groups = groups,
-                        selectedIndex = selectedIndex,
-                        contentColor = contentColor,
-                        onGroupClick = onGroupClick,
-                        onGroupLongClick = onGroupLongClick,
-                    )
+                    if (!groupGridMode && groups.isNotEmpty()) {
+                        CompactToolbarGroupAction(
+                            groups = groups,
+                            selectedIndex = selectedIndex,
+                            contentColor = contentColor,
+                            onGroupClick = onGroupClick,
+                            onGroupLongClick = onGroupLongClick,
+                        )
+                        CompactToolbarDivider(color = dividerColor)
+                    }
+                    actions()
+                } else {
+                    actions()
                     CompactToolbarDivider(color = dividerColor)
+                    if (!groupGridMode && groups.isNotEmpty()) {
+                        CompactToolbarGroupAction(
+                            groups = groups,
+                            selectedIndex = selectedIndex,
+                            contentColor = contentColor,
+                            onGroupClick = onGroupClick,
+                            onGroupLongClick = onGroupLongClick,
+                        )
+                        CompactToolbarDivider(color = dividerColor)
+                    }
+                    CompactToolbarSearchAction(
+                        label = searchLabel,
+                        contentColor = contentColor,
+                        onClick = onSearchClick,
+                        alignEnd = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 96.dp),
+                    )
                 }
-                CompactToolbarSearchAction(
-                    label = searchLabel,
-                    contentColor = contentColor,
-                    onClick = onSearchClick,
-                    alignEnd = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(min = 96.dp),
-                )
             }
         }
+    }
+}
+
+@Composable
+private fun rememberBookshelfDockStyle(
+    surfaceColor: Color,
+    borderColor: Color,
+): NgGlassStyle {
+    val base = NgGlassDefaults.flatNeutralStyle(containerAlpha = surfaceColor.alpha)
+    return remember(base, surfaceColor, borderColor) {
+        base.copy(
+            containerTop = surfaceColor,
+            containerBottom = surfaceColor,
+            accentGlow = Color.Transparent,
+            borderColor = borderColor,
+            edgeHighlight = Color.White.copy(alpha = 0.58f),
+            surfaceGloss = Color.Transparent,
+            depthEdge = Color.Transparent,
+            blurRadius = 0.dp,
+            shadowElevation = 0.dp,
+            borderWidth = 0.6.dp,
+            highlightWidth = 0.dp,
+        )
     }
 }
 
@@ -556,7 +600,7 @@ private fun CompactToolbarGroupAction(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(4.dp)
+                .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(
                     if (isPressed) colorResource(R.color.ng_bookshelf_action_pressed)
@@ -568,7 +612,7 @@ private fun CompactToolbarGroupAction(
                     onClick = { expanded = true },
                     onLongClick = { onGroupLongClick(selectedIndex) },
                 )
-                .padding(horizontal = 6.dp)
+                .padding(horizontal = 3.dp)
                 .semantics(mergeDescendants = true) {
                     contentDescription = "$groupLabel: ${selectedGroup.name}"
                     role = Role.Button
@@ -707,12 +751,15 @@ private fun CompactToolbarDivider(color: Color) {
 
 @Composable
 private fun floatingDockActiveContentColor(): Color {
-    return Color(NgTheme.colors.primary)
+    val snapshot = NgTheme.snapshot
+    return snapshot.backdropContent.topNavigationActive?.let(::Color)
+        ?: Color(snapshot.colors.primary)
 }
 
 @Composable
 private fun floatingDockInactiveContentColor(): Color {
     val snapshot = NgTheme.snapshot
+    snapshot.backdropContent.topNavigationInactive?.let { return Color(it) }
     return if (snapshot.isDark) {
         Color(snapshot.colors.onSurface)
     } else {
@@ -724,6 +771,7 @@ private fun floatingDockInactiveContentColor(): Color {
 private fun BookshelfDockGroup.builtInIconRes(): Int? {
     return when (groupId) {
         BookGroup.IdAll -> R.drawable.ic_bookshelf_dock_all
+        BookGroup.IdNoGroup -> R.drawable.ic_groups
         BookGroup.IdLocal -> R.drawable.ic_bookshelf_dock_local
         BookGroup.IdAudio -> R.drawable.ic_bookshelf_dock_audio
         BookGroup.IdVideo -> R.drawable.ic_bookshelf_dock_video

@@ -3,21 +3,22 @@ package io.legado.app.ui.config
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.text.InputType
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
-import androidx.core.view.MenuProvider
+import android.view.Window
+import androidx.activity.ComponentDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.EditTextPreference
-import androidx.preference.ListPreference
-import androidx.preference.Preference
+import androidx.preference.PreferenceManager
 import io.legado.app.R
+import io.legado.app.base.BaseFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
@@ -27,27 +28,24 @@ import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupConfig
 import io.legado.app.help.storage.ImportOldData
 import io.legado.app.help.storage.Restore
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.about.NetworkLogDialog
+import io.legado.app.ui.design.theme.NgAppTheme
+import io.legado.app.ui.widget.dialog.WaitDialog
+import io.legado.app.ui.widget.dialog.applyNgWindow
+import io.legado.app.utils.FileDoc
 import io.legado.app.utils.SelectDirectoryContract
 import io.legado.app.utils.SelectFileContract
-import io.legado.app.ui.widget.dialog.WaitDialog
-import io.legado.app.utils.FileDoc
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isContentScheme
-import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.putPrefBoolean
+import io.legado.app.utils.putPrefString
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.takePersistableReadPermission
-import io.legado.app.utils.toEditable
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -58,24 +56,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
-class BackupConfigFragment : PreferenceFragment(),
-    SharedPreferences.OnSharedPreferenceChangeListener,
-    MenuProvider {
+class BackupConfigFragment : BaseFragment(R.layout.fragment_backup_config),
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val viewModel by activityViewModels<ConfigViewModel>()
     private val waitDialog by lazy { WaitDialog(requireContext()) }
+    private var screenState by mutableStateOf(BackupConfigScreenState())
+    private lateinit var sharedPreferences: SharedPreferences
+    private var inputDialog: ComponentDialog? = null
+    private var activeBusinessDialog by mutableStateOf<BackupConfigBusinessDialog?>(null)
     private var backupJob: Job? = null
     private var restoreJob: Job? = null
 
     private val selectBackupPath = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
-            if (uri.isContentScheme()) {
-                AppConfig.backupPath = uri.toString()
-            } else {
-                AppConfig.backupPath = uri.path
-            }
+            AppConfig.backupPath = if (uri.isContentScheme()) uri.toString() else uri.path
         }
     }
+
     private val backupDir = registerForActivityResult(SelectDirectoryContract()) { result ->
         result.uri?.let { uri ->
             if (uri.isContentScheme()) {
@@ -89,6 +87,7 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
+
     private val restoreDoc = registerForActivityResult(SelectFileContract()) { uri ->
         uri?.let {
             it.takePersistableReadPermission()
@@ -104,202 +103,284 @@ class BackupConfigFragment : PreferenceFragment(),
             }
         }
     }
+
     private val restoreOld = registerForActivityResult(SelectDirectoryContract()) {
         it.uri?.let { uri ->
             ImportOldData.importUri(appCtx, uri)
         }
     }
 
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        addPreferencesFromResource(R.xml.pref_config_backup)
-        ConfigPreferenceStyle.applyTo(preferenceScreen)
-        findPreference<EditTextPreference>(PreferKey.webDavPassword)?.let {
-            it.setOnBindEditTextListener { editText ->
-                editText.inputType =
-                    InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_CLASS_TEXT
-                editText.setSelection(editText.text.length)
-            }
-        }
-        findPreference<EditTextPreference>(PreferKey.webDavDir)?.let {
-            it.setOnBindEditTextListener { editText ->
-                editText.text = AppConfig.webDavDir?.toEditable()
-                editText.setSelection(editText.text.length)
-            }
-        }
-        findPreference<EditTextPreference>(PreferKey.webDavDeviceName)?.let {
-            it.setOnBindEditTextListener { editText ->
-                editText.text = AppConfig.webDavDeviceName?.toEditable()
-                editText.setSelection(editText.text.length)
-            }
-        }
-        upPreferenceSummary(PreferKey.webDavUrl, getPrefString(PreferKey.webDavUrl))
-        upPreferenceSummary(PreferKey.webDavAccount, getPrefString(PreferKey.webDavAccount))
-        upPreferenceSummary(PreferKey.webDavPassword, getPrefString(PreferKey.webDavPassword))
-        upPreferenceSummary(PreferKey.webDavDir, AppConfig.webDavDir)
-        upPreferenceSummary(PreferKey.webDavDeviceName, AppConfig.webDavDeviceName)
-        upPreferenceSummary(PreferKey.backupPath, getPrefString(PreferKey.backupPath))
-        findPreference<io.legado.app.lib.prefs.Preference>("web_dav_restore")
-            ?.onLongClick {
-                restoreFromLocal()
-                true
-            }
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.backup_restore)
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-        ConfigPreferenceStyle.applyListStyle(this)
-        listView.setEdgeEffectColor(primaryColor)
-        activity?.addMenuProvider(this, viewLifecycleOwner)
+        setSharedTitleBarVisible(false)
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        sharedPreferences.registerOnSharedPreferenceChangeListener(this)
+        refreshContent()
+        (view as ComposeView).apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+            )
+            setContent {
+                NgAppTheme {
+                    BackupConfigScreen(
+                        state = screenState,
+                        onBack = { requireActivity().onBackPressedDispatcher.onBackPressed() },
+                        onMenuAction = ::onToolbarMenuAction,
+                        onWebDavUrlClick = ::showWebDavUrlDialog,
+                        onWebDavAccountClick = ::showWebDavAccountDialog,
+                        onWebDavPasswordClick = ::showWebDavPasswordDialog,
+                        onWebDavDirClick = ::showWebDavDirDialog,
+                        onWebDavDeviceNameClick = ::showWebDavDeviceNameDialog,
+                        onSyncBookProgressChange = {
+                            requireContext().putPrefBoolean(PreferKey.syncBookProgress, it)
+                        },
+                        onSyncBookProgressPlusChange = {
+                            requireContext().putPrefBoolean(PreferKey.syncBookProgressPlus, it)
+                        },
+                        onLocalPasswordClick = ::showLocalPasswordDialog,
+                        onBackupPathClick = { selectBackupPath.launch(null) },
+                        onBackupClick = ::backup,
+                        onRestoreClick = ::restore,
+                        onRestoreLongClick = ::restoreFromLocal,
+                        onRestoreIgnoreClick = ::backupIgnore,
+                        onImportOldClick = { restoreOld.launch(null) },
+                        onOnlyLatestBackupChange = {
+                            requireContext().putPrefBoolean(PreferKey.onlyLatestBackup, it)
+                        },
+                        onAutoCheckNewBackupChange = {
+                            requireContext().putPrefBoolean(PreferKey.autoCheckNewBackup, it)
+                        },
+                    )
+                    BackupConfigBusinessDialogHost(
+                        dialog = activeBusinessDialog,
+                        ignoreTitles = BackupConfig.ignoreTitle.toList(),
+                        cancelText = getString(R.string.cancel),
+                        confirmText = getString(R.string.ok),
+                        onDismiss = ::dismissBusinessDialog,
+                        onIgnoreChanged = ::updateIgnoreSelection,
+                        onRestoreFileSelected = { name ->
+                            activeBusinessDialog = null
+                            view?.post { restoreWebDav(name) }
+                        },
+                        onRestoreFromLocal = {
+                            activeBusinessDialog = null
+                            restoreFromLocal()
+                        },
+                    )
+                }
+            }
+        }
         if (!LocalConfig.backupHelpVersionIsLast) {
             showHelp("webDavHelp")
         }
     }
 
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.backup_restore, menu)
-        menu.applyTint(requireContext())
+    override fun onResume() {
+        super.onResume()
+        activity?.setTitle(R.string.backup_restore)
+        setSharedTitleBarVisible(false)
+        if (view != null) refreshContent()
     }
 
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
+    private fun onToolbarMenuAction(itemId: Int) {
+        when (itemId) {
             R.id.menu_help -> {
                 showHelp("webDavHelp")
-                return true
             }
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_network_log -> showDialogFragment<NetworkLogDialog>()
         }
-        return false
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
+    private fun setSharedTitleBarVisible(visible: Boolean) {
+        activity?.findViewById<View>(R.id.title_bar)?.visibility = if (visible) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        when (key) {
-            PreferKey.backupPath -> upPreferenceSummary(key, getPrefString(key))
-            PreferKey.webDavUrl,
-            PreferKey.webDavAccount,
-            PreferKey.webDavPassword,
-            PreferKey.webDavDir -> listView.post {
-                upPreferenceSummary(key, appCtx.getPrefString(key))
+        view?.post {
+            refreshContent()
+            if (
+                key == PreferKey.webDavUrl ||
+                key == PreferKey.webDavAccount ||
+                key == PreferKey.webDavPassword ||
+                key == PreferKey.webDavDir
+            ) {
                 viewModel.upWebDavConfig()
             }
-
-            PreferKey.webDavDeviceName -> upPreferenceSummary(key, getPrefString(key))
         }
     }
 
-    private fun upPreferenceSummary(preferenceKey: String, value: String?) {
-        val preference = findPreference<Preference>(preferenceKey) ?: return
-        when (preferenceKey) {
-            PreferKey.webDavUrl ->
-                if (value.isNullOrBlank()) {
-                    preference.summary = getString(R.string.web_dav_url_s)
-                } else {
-                    preference.summary = value
-                }
+    private fun refreshContent() {
+        val webDavUrl = getPrefString(PreferKey.webDavUrl)
+        val webDavAccount = getPrefString(PreferKey.webDavAccount)
+        val webDavPassword = getPrefString(PreferKey.webDavPassword)
+        screenState = BackupConfigScreenState(
+            webDavUrlSummary = webDavUrl.takeUnless { it.isNullOrBlank() }
+                ?: getString(R.string.web_dav_url_s),
+            webDavAccountSummary = webDavAccount.takeUnless { it.isNullOrBlank() }
+                ?: getString(R.string.web_dav_account_s),
+            webDavPasswordSummary = if (webDavPassword.isNullOrEmpty()) {
+                getString(R.string.web_dav_pw_s)
+            } else {
+                "*".repeat(webDavPassword.length)
+            },
+            webDavDirSummary = AppConfig.webDavDir ?: "legado",
+            webDavDeviceNameSummary = AppConfig.webDavDeviceName.orEmpty(),
+            syncBookProgress = AppConfig.syncBookProgress,
+            syncBookProgressPlus = AppConfig.syncBookProgressPlus,
+            backupPathSummary = getPrefString(PreferKey.backupPath),
+            onlyLatestBackup = AppConfig.onlyLatestBackup,
+            autoCheckNewBackup = AppConfig.autoCheckNewBackup,
+        )
+    }
 
-            PreferKey.webDavAccount ->
-                if (value.isNullOrBlank()) {
-                    preference.summary = getString(R.string.web_dav_account_s)
-                } else {
-                    preference.summary = value
-                }
+    private fun showWebDavUrlDialog() {
+        showTextInputDialog(
+            title = getString(R.string.web_dav_url),
+            initialValue = getPrefString(PreferKey.webDavUrl).orEmpty(),
+            placeholder = getString(R.string.web_dav_url_s),
+            keyboardType = KeyboardType.Uri,
+        ) { requireContext().putPrefString(PreferKey.webDavUrl, it) }
+    }
 
-            PreferKey.webDavPassword ->
-                if (value.isNullOrEmpty()) {
-                    preference.summary = getString(R.string.web_dav_pw_s)
-                } else {
-                    preference.summary = "*".repeat(value.length)
-                }
+    private fun showWebDavAccountDialog() {
+        showTextInputDialog(
+            title = getString(R.string.web_dav_account),
+            initialValue = getPrefString(PreferKey.webDavAccount).orEmpty(),
+            placeholder = getString(R.string.web_dav_account_s),
+        ) { requireContext().putPrefString(PreferKey.webDavAccount, it) }
+    }
 
-            PreferKey.webDavDir -> preference.summary = when (value) {
-                null -> "legado"
-                else -> value
+    private fun showWebDavPasswordDialog() {
+        showTextInputDialog(
+            title = getString(R.string.web_dav_pw),
+            initialValue = getPrefString(PreferKey.webDavPassword).orEmpty(),
+            placeholder = getString(R.string.web_dav_pw_s),
+            password = true,
+            keyboardType = KeyboardType.Password,
+        ) { requireContext().putPrefString(PreferKey.webDavPassword, it) }
+    }
+
+    private fun showWebDavDirDialog() {
+        showTextInputDialog(
+            title = getString(R.string.sub_dir),
+            initialValue = AppConfig.webDavDir ?: "legado",
+            placeholder = "legado",
+        ) { requireContext().putPrefString(PreferKey.webDavDir, it) }
+    }
+
+    private fun showWebDavDeviceNameDialog() {
+        showTextInputDialog(
+            title = getString(R.string.webdav_device_name),
+            initialValue = AppConfig.webDavDeviceName.orEmpty(),
+            placeholder = getString(R.string.webdav_device_name),
+        ) { requireContext().putPrefString(PreferKey.webDavDeviceName, it) }
+    }
+
+    private fun showLocalPasswordDialog() {
+        showTextInputDialog(
+            title = getString(R.string.set_local_password),
+            initialValue = "",
+            placeholder = "password",
+            password = true,
+            message = getString(R.string.set_local_password_summary),
+            keyboardType = KeyboardType.Password,
+        ) { LocalConfig.password = it }
+    }
+
+    private fun showTextInputDialog(
+        title: String,
+        initialValue: String,
+        placeholder: String,
+        password: Boolean = false,
+        message: String? = null,
+        keyboardType: KeyboardType = KeyboardType.Text,
+        onConfirm: (String) -> Unit,
+    ) {
+        inputDialog?.dismiss()
+        val dialog = ComponentDialog(requireContext())
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(
+            ComposeView(requireContext()).apply {
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+                setContent {
+                    NgAppTheme(updateSystemBars = false) {
+                        BackupTextInputDialogContent(
+                            title = title,
+                            initialValue = initialValue,
+                            placeholder = placeholder,
+                            cancelText = getString(android.R.string.cancel),
+                            confirmText = getString(android.R.string.ok),
+                            password = password,
+                            message = message,
+                            keyboardType = keyboardType,
+                            onCancel = dialog::dismiss,
+                            onConfirm = { value ->
+                                dialog.dismiss()
+                                onConfirm(value)
+                                refreshContent()
+                            },
+                        )
+                    }
+                }
             }
-
-            else -> {
-                if (preference is ListPreference) {
-                    val index = preference.findIndexOfValue(value)
-                    // Set the summary to reflect the new value.
-                    preference.summary = if (index >= 0) preference.entries[index] else null
-                } else {
-                    preference.summary = value
-                }
-            }
+        )
+        dialog.setOnDismissListener {
+            if (inputDialog === dialog) inputDialog = null
         }
+        inputDialog = dialog
+        dialog.show()
+        dialog.applyNgWindow()
     }
 
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        when (preference.key) {
-            "localPassword" -> alertLocalPassword()
-            PreferKey.backupPath -> selectBackupPath.launch(null)
-            PreferKey.restoreIgnore -> backupIgnore()
-            "web_dav_backup" -> backup()
-            "web_dav_restore" -> restore()
-            "import_old" -> restoreOld.launch(null)
-        }
-        return super.onPreferenceTreeClick(preference)
-    }
-
-    /**
-     * 备份忽略设置
-     */
     private fun backupIgnore() {
-        val checkedItems = BooleanArray(BackupConfig.ignoreKeys.size) {
-            BackupConfig.ignoreConfig[BackupConfig.ignoreKeys[it]] ?: false
-        }
-        alert(R.string.restore_ignore) {
-            multiChoiceItems(BackupConfig.ignoreTitle, checkedItems) { _, which, isChecked ->
-                BackupConfig.ignoreConfig[BackupConfig.ignoreKeys[which]] = isChecked
-            }
-            onDismiss {
-                BackupConfig.saveIgnoreConfig()
-            }
-        }
+        activeBusinessDialog = BackupConfigBusinessDialog.Ignore(
+            List(BackupConfig.ignoreKeys.size) { index ->
+                BackupConfig.ignoreConfig[BackupConfig.ignoreKeys[index]] ?: false
+            },
+        )
     }
 
-    private fun alertLocalPassword() {
-        context?.alert(R.string.set_local_password, R.string.set_local_password_summary) {
-            val editTextBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "password"
-            }
-            customView {
-                editTextBinding.root
-            }
-            okButton {
-                LocalConfig.password = editTextBinding.editView.text.toString()
-            }
-            cancelButton()
-        }
+    private fun updateIgnoreSelection(index: Int, checked: Boolean) {
+        val current = activeBusinessDialog as? BackupConfigBusinessDialog.Ignore ?: return
+        if (index !in current.selected.indices || index !in BackupConfig.ignoreKeys.indices) return
+        BackupConfig.ignoreConfig[BackupConfig.ignoreKeys[index]] = checked
+        activeBusinessDialog = current.copy(
+            selected = current.selected.toMutableList().apply {
+                this[index] = checked
+            },
+        )
     }
 
+    private fun dismissBusinessDialog() {
+        if (activeBusinessDialog is BackupConfigBusinessDialog.Ignore) {
+            BackupConfig.saveIgnoreConfig()
+        }
+        activeBusinessDialog = null
+    }
 
     fun backup() {
         val backupPath = AppConfig.backupPath
         if (backupPath.isNullOrEmpty()) {
             backupDir.launch(null)
-        } else {
-            if (backupPath.isContentScheme()) {
-                lifecycleScope.launch {
-                    val canWrite = withContext(IO) {
-                        FileDoc.fromDir(backupPath).checkWrite()
-                    }
-                    if (canWrite) {
-                        backup(backupPath)
-                    } else {
-                        backupDir.launch(null)
-                    }
+        } else if (backupPath.isContentScheme()) {
+            lifecycleScope.launch {
+                val canWrite = withContext(IO) {
+                    FileDoc.fromDir(backupPath).checkWrite()
                 }
-            } else {
-                backupUsePermission(backupPath)
+                if (canWrite) {
+                    backup(backupPath)
+                } else {
+                    backupDir.launch(null)
+                }
             }
+        } else {
+            backupUsePermission(backupPath)
         }
     }
 
@@ -318,10 +399,7 @@ class BackupConfigFragment : PreferenceFragment(),
                 ensureActive()
                 AppLog.put("备份出错\n${e.localizedMessage}", e)
                 appCtx.toastOnUi(
-                    appCtx.getString(
-                        R.string.backup_fail,
-                        e.localizedMessage
-                    )
+                    appCtx.getString(R.string.backup_fail, e.localizedMessage)
                 )
             } finally {
                 ensureActive()
@@ -351,16 +429,11 @@ class BackupConfigFragment : PreferenceFragment(),
             showRestoreDialog(requireContext())
         }.onError {
             AppLog.put("恢复备份出错WebDavError\n${it.localizedMessage}", it)
-            if (context == null) {
-                return@onError
-            }
-            alert {
-                setTitle(R.string.restore)
-                setMessage("WebDavError\n${it.localizedMessage}\n将从本地备份恢复。")
-                okButton {
-                    restoreFromLocal()
-                }
-                cancelButton()
+            if (context == null) return@onError
+            view?.post {
+                activeBusinessDialog = BackupConfigBusinessDialog.RestoreError(
+                    "WebDavError\n${it.localizedMessage}\n将从本地备份恢复。",
+                )
             }
         }.onFinally {
             waitDialog.dismiss()
@@ -375,16 +448,7 @@ class BackupConfigFragment : PreferenceFragment(),
         if (names.isNotEmpty()) {
             currentCoroutineContext().ensureActive()
             withContext(Main) {
-                context.selector(
-                    title = context.getString(R.string.select_restore_file),
-                    items = names
-                ) { _, index ->
-                    if (index in 0 until names.size) {
-                        listView.post {
-                            restoreWebDav(names[index])
-                        }
-                    }
-                }
+                activeBusinessDialog = BackupConfigBusinessDialog.RestoreFiles(names)
             }
         } else {
             throw NoStackTraceException("Web dav no back up file")
@@ -414,8 +478,17 @@ class BackupConfigFragment : PreferenceFragment(),
     }
 
     override fun onDestroyView() {
-        super.onDestroyView()
+        if (::sharedPreferences.isInitialized) {
+            sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
+        }
+        inputDialog?.dismiss()
+        inputDialog = null
+        if (activeBusinessDialog is BackupConfigBusinessDialog.Ignore) {
+            BackupConfig.saveIgnoreConfig()
+        }
+        activeBusinessDialog = null
         waitDialog.dismiss()
+        setSharedTitleBarVisible(true)
+        super.onDestroyView()
     }
-
 }

@@ -12,17 +12,23 @@ import io.legado.app.constant.AppConst.dateFormat
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.BackstageWebView
+import io.legado.app.help.http.BookSourceCookieStore
 import io.legado.app.help.http.CookieManager.cookieJarHeader
-import io.legado.app.help.http.CookieStore
+import io.legado.app.help.http.CookieManager.mergeCookies
 import io.legado.app.help.http.NetworkLog
 import io.legado.app.help.http.SSLHelper
 import io.legado.app.help.http.StrResponse
+import io.legado.app.help.source.BookSourceFileAccessPolicy
+import io.legado.app.help.source.sourceSharedCacheStoreOrNull
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.source.SourceInteractionBlockedException
+import io.legado.app.help.source.SourceInteractionKind
 import io.legado.app.help.source.SourceInteractionPolicy
+import io.legado.app.help.source.SourceInteractionRequest
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.help.source.getSourceType
 import io.legado.app.model.Debug
@@ -94,6 +100,18 @@ interface JsExtensions : JsEncodeUtils {
     fun getSource(): BaseSource?
     fun getTag(): String?
 
+    private fun bookSourceFileRoot(): File? {
+        val source = getSource() as? BookSource ?: return null
+        return BookSourceFileAccessPolicy.resolveSourceRoot(
+            appCtx.externalCache,
+            source.bookSourceUrl
+        )
+    }
+
+    private fun resolveBookSourceFile(path: String) = bookSourceFileRoot()?.let { root ->
+        BookSourceFileAccessPolicy.resolvePath(root, path)
+    }
+
     private val context: CoroutineContext
         get() = rhinoContextOrNull?.coroutineContext ?: EmptyCoroutineContext
 
@@ -104,11 +122,18 @@ interface JsExtensions : JsEncodeUtils {
         AppLog.putDebug("${getTag() ?: "书源"}已禁止弹窗：$action")
     }
 
-    private fun requireSourceDialogAllowed(action: String) {
-        if (blockSourceDialogs) {
-            logBlockedSourceDialog(action)
-            throw SourceInteractionBlockedException(action)
+    private fun blockSourceInteraction(
+        request: SourceInteractionRequest,
+        alwaysThrow: Boolean = false,
+    ): Boolean {
+        val policy = context[SourceInteractionPolicy] ?: return false
+        if (!policy.shouldBlock(request.kind)) return false
+        policy.recordBlocked(request)
+        logBlockedSourceDialog(request.actionName)
+        if (alwaysThrow || policy.throwOnBlocked) {
+            throw SourceInteractionBlockedException(request)
         }
+        return true
     }
 
     /**
@@ -188,7 +213,7 @@ interface JsExtensions : JsEncodeUtils {
             analyzeUrl.getStrResponse()
         }.onFailure {
             rhinoContextOrNull?.ensureActive()
-            AppLog.put("connect(${urlStr}) error\n${it.localizedMessage}", it)
+            logConnectFailure(urlStr, null, it)
         }.getOrElse {
             StrResponse(analyzeUrl.url, it.stackTraceStr)
         }
@@ -211,10 +236,26 @@ interface JsExtensions : JsEncodeUtils {
             analyzeUrl.getStrResponse()
         }.onFailure {
             rhinoContextOrNull?.ensureActive()
-            AppLog.put("connect($urlStr,$header) error\n${it.localizedMessage}", it)
+            logConnectFailure(urlStr, headerMap, it)
         }.getOrElse {
             StrResponse(analyzeUrl.url, it.stackTraceStr)
         }
+    }
+
+    private fun logConnectFailure(
+        url: String,
+        headers: Map<String, String>?,
+        error: Throwable,
+    ) {
+        val safeUrl = NetworkLog.redactUrlForLog(url)
+        val safeHeaders = headers?.let(NetworkLog::formatHeaders).orEmpty()
+        val headerSection = safeHeaders.takeIf(String::isNotEmpty)
+            ?.let { "\n$it" }
+            .orEmpty()
+        AppLog.put(
+            "connect($safeUrl)$headerSection error",
+            NetworkLog.redactThrowableForLog(error),
+        )
     }
 
     fun webView(html: String?, url: String?, js: String?): String? {
@@ -240,6 +281,7 @@ interface JsExtensions : JsEncodeUtils {
                 javaScript = js,
                 headerMap = getSource()?.getHeaderMap(true),
                 tag = getSource()?.getKey(),
+                source = getSource(),
                 cacheFirst = cacheFirst
             ).getStrResponse().body
         }
@@ -273,6 +315,7 @@ interface JsExtensions : JsEncodeUtils {
                 javaScript = js,
                 headerMap = getSource()?.getHeaderMap(true),
                 tag = getSource()?.getKey(),
+                source = getSource(),
                 sourceRegex = sourceRegex,
                 cacheFirst = cacheFirst,
                 delayTime = delayTime
@@ -308,6 +351,7 @@ interface JsExtensions : JsEncodeUtils {
                 javaScript = js,
                 headerMap = getSource()?.getHeaderMap(true),
                 tag = getSource()?.getKey(),
+                source = getSource(),
                 overrideUrlRegex = overrideUrlRegex,
                 cacheFirst = cacheFirst,
                 delayTime = delayTime
@@ -328,6 +372,17 @@ interface JsExtensions : JsEncodeUtils {
      */
     @JavascriptInterface
     fun openVideoPlayer(url: String, title: String, isFloat: Boolean) {
+        rhinoContext.ensureActive()
+        if (
+            blockSourceInteraction(
+                SourceInteractionRequest(
+                    kind = SourceInteractionKind.VIDEO_PLAYER,
+                    url = url,
+                    title = title,
+                    isFloat = isFloat,
+                )
+            )
+        ) return
         SourceHelp.openVideoPlayer(getSource(), url, title, isFloat)
     }
 
@@ -342,10 +397,16 @@ interface JsExtensions : JsEncodeUtils {
 
     fun startBrowser(url: String, title: String, html: String?) {
         rhinoContext.ensureActive()
-        if (blockSourceDialogs) {
-            logBlockedSourceDialog("网页")
-            return
-        }
+        if (
+            blockSourceInteraction(
+                SourceInteractionRequest(
+                    kind = SourceInteractionKind.BROWSER,
+                    url = url,
+                    title = title,
+                    html = html,
+                )
+            )
+        ) return
         SourceVerificationHelp.startBrowser(getSource(), url, title, html=html)
     }
 
@@ -362,7 +423,17 @@ interface JsExtensions : JsEncodeUtils {
 
     fun startBrowserAwait(url: String, title: String, refetchAfterSuccess: Boolean, html: String?): StrResponse {
         rhinoContext.ensureActive()
-        requireSourceDialogAllowed("验证网页")
+        blockSourceInteraction(
+            request = SourceInteractionRequest(
+                kind = SourceInteractionKind.BROWSER_VERIFICATION,
+                url = url,
+                title = title,
+                html = html,
+                saveResult = true,
+                refetchAfterSuccess = refetchAfterSuccess,
+            ),
+            alwaysThrow = true,
+        )
         val pair = SourceVerificationHelp.getVerificationResult(
             getSource(), url, title, true, refetchAfterSuccess, html
         )
@@ -375,7 +446,13 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun getVerificationCode(imageUrl: String): String {
         rhinoContext.ensureActive()
-        requireSourceDialogAllowed("验证码")
+        blockSourceInteraction(
+            request = SourceInteractionRequest(
+                kind = SourceInteractionKind.VERIFICATION_CODE,
+                url = imageUrl,
+            ),
+            alwaysThrow = true,
+        )
         return SourceVerificationHelp.getVerificationResult(getSource(), imageUrl, "", false).second
     }
 
@@ -409,14 +486,23 @@ interface JsExtensions : JsEncodeUtils {
     @JavascriptInterface
     fun cacheFile(urlStr: String, saveTime: Int): String {
         val key = md5Encode16(urlStr)
-        val cachePath = CacheManager.get(key)
+        val sourceCache = getSource().sourceSharedCacheStoreOrNull()
+        val cachePath = if (sourceCache != null) {
+            sourceCache.get(key)
+        } else {
+            CacheManager.get(key)
+        }
         return if (
             cachePath.isNullOrBlank() ||
             !getFile(cachePath).exists()
         ) {
             val path = downloadFile(urlStr)
             log("首次下载 $urlStr >> $path")
-            CacheManager.put(key, path, saveTime)
+            if (sourceCache != null) {
+                sourceCache.put(key, path, saveTime)
+            } else {
+                CacheManager.put(key, path, saveTime)
+            }
             readTxtFile(path)
         } else {
             readTxtFile(cachePath)
@@ -433,10 +519,11 @@ interface JsExtensions : JsEncodeUtils {
 
     @JavascriptInterface
     fun getCookie(tag: String, key: String?): String {
+        val cookieStore = BookSourceCookieStore.forSource(getSource())
         return if (key != null) {
-            CookieStore.getKey(tag, key)
+            cookieStore.getKey(tag, key)
         } else {
-            CookieStore.getCookie(tag)
+            cookieStore.getCookie(tag)
         }
     }
 
@@ -450,11 +537,13 @@ interface JsExtensions : JsEncodeUtils {
         rhinoContextOrNull?.ensureActive()
         val analyzeUrl = AnalyzeUrl(url, source = getSource(), coroutineContext = context)
         val type = analyzeUrl.type ?: UrlUtil.getSuffix(url)
-        val path = FileUtils.getPath(
+        val fileName = "${MD5Utils.md5Encode16(url)}.${type}"
+        val bookSourceTarget = resolveBookSourceFile(fileName)
+        val path = bookSourceTarget?.file?.absolutePath ?: FileUtils.getPath(
             File(FileUtils.getCachePath()),
-            "${MD5Utils.md5Encode16(url)}.${type}"
+            fileName
         )
-        val file = File(path)
+        val file = bookSourceTarget?.file ?: File(path)
         file.delete()
         analyzeUrl.getInputStream().use { iStream ->
             file.createFileReplace()
@@ -467,7 +556,8 @@ interface JsExtensions : JsEncodeUtils {
                 throw e
             }
         }
-        return path.substring(FileUtils.getCachePath().length)
+        return bookSourceTarget?.relativePath
+            ?: path.substring(FileUtils.getCachePath().length)
     }
 
 
@@ -486,18 +576,21 @@ interface JsExtensions : JsEncodeUtils {
         rhinoContextOrNull?.ensureActive()
         val type = AnalyzeUrl(url, source = getSource(), coroutineContext = context).type
             ?: return ""
-        val path = FileUtils.getPath(
+        val fileName = "${MD5Utils.md5Encode16(url)}.${type}"
+        val bookSourceTarget = resolveBookSourceFile(fileName)
+        val path = bookSourceTarget?.file?.absolutePath ?: FileUtils.getPath(
             FileUtils.createFolderIfNotExist(FileUtils.getCachePath()),
-            "${MD5Utils.md5Encode16(url)}.${type}"
+            fileName
         )
-        val file = File(path)
+        val file = bookSourceTarget?.file ?: File(path)
         file.createFileReplace()
         HexUtil.decodeHex(content).let {
             if (it.isNotEmpty()) {
                 file.writeBytes(it)
             }
         }
-        return path.substring(FileUtils.getCachePath().length)
+        return bookSourceTarget?.relativePath
+            ?: path.substring(FileUtils.getCachePath().length)
     }
 
     /**
@@ -508,9 +601,7 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     fun get(urlStr: String, headers: Map<String, String>, timeout: Int?): Connection.Response {
-        val requestHeaders = if (getSource()?.enabledCookieJar == true) {
-            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
-        } else headers
+        val (requestHeaders, cookieStore) = sourceRequestHeaders(urlStr, headers)
         val rateLimiter = ConcurrentRateLimiter(getSource())
         val start = System.nanoTime()
         val response = try {
@@ -539,6 +630,7 @@ interface JsExtensions : JsEncodeUtils {
             }
             throw e
         }
+        cookieStore?.saveResponse(response)
         if (NetworkLog.isEnabled) {
             NetworkLog.recordEvent(
                 type = "JS",
@@ -563,9 +655,7 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     fun head(urlStr: String, headers: Map<String, String>, timeout: Int?): Connection.Response {
-        val requestHeaders = if (getSource()?.enabledCookieJar == true) {
-            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
-        } else headers
+        val (requestHeaders, cookieStore) = sourceRequestHeaders(urlStr, headers)
         val rateLimiter = ConcurrentRateLimiter(getSource())
         val start = System.nanoTime()
         val response = try {
@@ -594,6 +684,7 @@ interface JsExtensions : JsEncodeUtils {
             }
             throw e
         }
+        cookieStore?.saveResponse(response)
         if (NetworkLog.isEnabled) {
             NetworkLog.recordEvent(
                 type = "JS",
@@ -617,9 +708,7 @@ interface JsExtensions : JsEncodeUtils {
     }
 
     fun post(urlStr: String, body: String, headers: Map<String, String>, timeout: Int?): Connection.Response {
-        val requestHeaders = if (getSource()?.enabledCookieJar == true) {
-            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
-        } else headers
+        val (requestHeaders, cookieStore) = sourceRequestHeaders(urlStr, headers)
         val rateLimiter = ConcurrentRateLimiter(getSource())
         val start = System.nanoTime()
         val response = try {
@@ -650,6 +739,7 @@ interface JsExtensions : JsEncodeUtils {
             }
             throw e
         }
+        cookieStore?.saveResponse(response)
         if (NetworkLog.isEnabled) {
             NetworkLog.recordEvent(
                 type = "JS",
@@ -665,6 +755,32 @@ interface JsExtensions : JsEncodeUtils {
             )
         }
         return response
+    }
+
+    private fun sourceRequestHeaders(
+        url: String,
+        headers: Map<String, String>
+    ): Pair<Map<String, String>, BookSourceCookieStore?> {
+        val source = getSource()
+        val bookSourceCookieStore = BookSourceCookieStore.forBookSource(source)
+        if (bookSourceCookieStore != null) {
+            val enabledCookieStore = bookSourceCookieStore.takeIf {
+                source?.enabledCookieJar == true
+            }
+            val requestHeaders = headers.toMutableMap().apply {
+                remove(cookieJarHeader)
+                enabledCookieStore?.getCookie(url)?.takeIf(String::isNotEmpty)?.let { cookie ->
+                    mergeCookies(cookie, get("Cookie"))?.let { put("Cookie", it) }
+                }
+            }
+            return requestHeaders to enabledCookieStore
+        }
+        val requestHeaders = if (source?.enabledCookieJar == true) {
+            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
+        } else {
+            headers
+        }
+        return requestHeaders to null
     }
 
     private fun networkElapsedMs(start: Long): Long {
@@ -814,6 +930,9 @@ interface JsExtensions : JsEncodeUtils {
      * @return File
      */
     fun getFile(path: String): File {
+        resolveBookSourceFile(path)?.let {
+            return it.file
+        }
         val cachePath = appCtx.externalCache.absolutePath
         val aPath = if (path.startsWith(File.separator)) {
             cachePath + path
@@ -861,6 +980,9 @@ interface JsExtensions : JsEncodeUtils {
     @JavascriptInterface
     fun deleteFile(path: String): Boolean {
         val file = getFile(path)
+        bookSourceFileRoot()?.let { root ->
+            BookSourceFileAccessPolicy.requireContainedTree(root, file)
+        }
         return FileUtils.delete(file, true)
     }
 
@@ -903,6 +1025,21 @@ interface JsExtensions : JsEncodeUtils {
     fun unArchiveFile(zipPath: String): String {
         if (zipPath.isEmpty()) return ""
         val zipFile = getFile(zipPath)
+        bookSourceFileRoot()?.let { root ->
+            val archiveTemp = BookSourceFileAccessPolicy.resolvePath(
+                root,
+                ArchiveUtils.TEMP_FOLDER_NAME
+            ).file
+            val outputRelativePath = ArchiveUtils.TEMP_FOLDER_NAME +
+                    File.separator + MD5Utils.md5Encode16(zipFile.name)
+            val output = BookSourceFileAccessPolicy.resolvePath(
+                root,
+                outputRelativePath
+            ).file
+            ArchiveUtils.deCompress(zipFile.absolutePath, archiveTemp.absolutePath)
+            BookSourceFileAccessPolicy.requireContainedTree(root, output)
+            return outputRelativePath
+        }
         return ArchiveUtils.deCompress(zipFile.absolutePath).let {
             ArchiveUtils.TEMP_FOLDER_NAME + File.separator + MD5Utils.md5Encode16(zipFile.name)
         }
@@ -917,6 +1054,9 @@ interface JsExtensions : JsEncodeUtils {
     fun getTxtInFolder(path: String): String {
         if (path.isEmpty()) return ""
         val folder = getFile(path)
+        bookSourceFileRoot()?.let { root ->
+            BookSourceFileAccessPolicy.requireContainedTree(root, folder)
+        }
         val contents = StringBuilder()
         folder.listFiles().let {
             if (it != null) {

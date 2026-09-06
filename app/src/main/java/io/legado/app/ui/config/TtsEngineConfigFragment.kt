@@ -1,56 +1,27 @@
 package io.legado.app.ui.config
 
-import android.annotation.SuppressLint
 import android.app.Dialog
-import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
-import android.text.TextUtils
-import android.util.TypedValue
-import android.view.Gravity
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.text.Editable
 import android.text.InputType
-import android.text.TextWatcher
-import android.text.method.PasswordTransformationMethod
-import android.text.method.SingleLineTransformationMethod
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.PopupWindow
-import android.widget.SeekBar
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.Toolbar
-import androidx.core.content.ContextCompat
+import androidx.activity.ComponentDialog
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.isVisible
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.databinding.FragmentTtsEngineConfigBinding
-import io.legado.app.databinding.ItemTtsConfigFieldBinding
-import io.legado.app.databinding.ItemTtsVoiceBinding
-import io.legado.app.databinding.LayoutTtsVoiceParamsPopupBinding
 import io.legado.app.constant.AppConst
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponse
@@ -71,70 +42,70 @@ import io.legado.app.help.tts.TtsVoice
 import io.legado.app.help.tts.TtsVoiceStyle
 import io.legado.app.help.tts.generateTtsRandomNumber
 import io.legado.app.help.tts.styleOptions
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.ui.design.components.view.NgFloatingTabItem
 import io.legado.app.ui.design.components.compose.NgListState
 import io.legado.app.ui.design.theme.NgAppTheme
-import io.legado.app.ui.design.theme.NgThemeResolver
-import io.legado.app.ui.widget.NgActionPopup
-import io.legado.app.ui.widget.NgActionPopupItem
 import io.legado.app.ui.widget.TitleBar
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.ui.widget.code.CodeView
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.ui.widget.dialog.applyNgWindow
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.SelectFileContract
-import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.readText
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
-class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config),
+class TtsEngineConfigFragment : BaseFragment(0),
     ConfigBackHandler {
 
     private enum class DetailTab { CONFIG, VOICES }
 
-    private val binding by viewBinding(FragmentTtsEngineConfigBinding::bind)
-    private val voiceAdapter by lazy { VoiceAdapter() }
     private val configEntities = arrayListOf<ConfigField>()
     private var currentEngineId: String? = null
     private var detailEngineSnapshot: TtsEngineSetting? = null
     private var draftEngine: TtsEngineSetting? = null
     private var configOptionsJob: Job? = null
+    private var configOptionsWarmJob: Job? = null
     private var configOptionsLoadedScript: String? = null
     private var scriptCodeLoadedEngineId: String? = null
     private var formDirty = false
-    private var detailTab = DetailTab.CONFIG
-    private var sourceMode = false
+    private var screenRoute by mutableStateOf(TtsEngineConfigRoute.ENGINE_LIST)
+    private val sourceMode: Boolean
+        get() = screenRoute == TtsEngineConfigRoute.SCRIPT_SOURCE
     private var allVoices: List<TtsVoice> = emptyList()
     private var voiceSearchQuery: String = ""
     private var voicePreviewController: TtsVoicePreviewController? = null
-    private var voiceParamPopup: PopupWindow? = null
-    private var voiceParamPopupBinding: LayoutTtsVoiceParamsPopupBinding? = null
+    private var voiceParamPanelExpanded by mutableStateOf(false)
+    private var voiceParamPanelState by mutableStateOf(TtsVoiceParamPanelState())
     private var importConflictDialog: Dialog? = null
-    private var engineMenuButton: ImageButton? = null
+    private var modalDialog: Dialog? = null
     private var showDisabledEngines = LocalConfig.ttsEngineListShowDisabled
     private var engineScreenState by mutableStateOf(TtsEngineListScreenState())
     private var engineFormScreenState by mutableStateOf(TtsEngineFormScreenState())
+    private var voiceListScreenState by mutableStateOf(TtsEngineVoiceListScreenState())
+    private var voiceControlsState by mutableStateOf(TtsEngineVoiceControlsState())
     private var engineSettingsSnapshot: List<TtsEngineSetting> = emptyList()
     private var engineOrderSaveJob: Job? = null
     private var engineConfigSaveJob: Job? = null
     private var engineConfigSaveRevision = 0L
     private var engineRefreshJob: Job? = null
+    private var voiceRefreshJob: Job? = null
+    private var voiceRefreshRevision = 0L
+    private var engineRefreshing by mutableStateOf(false)
+    private var voiceRefreshing by mutableStateOf(false)
+    private var voiceRefreshEnabled by mutableStateOf(false)
+    private var rootComposeView: ComposeView? = null
+    private var scriptEditorView: CodeView? = null
     private val engineSnapshotGate = TtsEngineSnapshotGate()
     private val autoFetchedVoiceEngineIds = hashSetOf<String>()
     private val selectedVoiceLanguageFilters = linkedSetOf<String>()
@@ -157,6 +128,17 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         var passwordVisible: Boolean = false
     ) {
         val isOption: Boolean get() = key.startsWith("option:")
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?,
+    ): View = ComposeView(requireContext()).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
     }
 
     private fun ConfigField.toFormScreenField(): TtsEngineFormFieldState {
@@ -183,73 +165,103 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.tts_engine_settings)
-        setupEngineListMenu()
-        binding.composeEngines.apply {
+        val editor = createScriptEditorView()
+        scriptEditorView = editor
+        (view as ComposeView).apply {
+            rootComposeView = this
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
             )
             setContent {
                 NgAppTheme {
-                    TtsEngineListScreen(
-                        state = engineScreenState,
-                        onAction = ::handleEngineListAction
+                    TtsEngineConfigScreen(
+                        route = screenRoute,
+                        engineRefreshing = engineRefreshing,
+                        voiceRefreshing = voiceRefreshing,
+                        voiceRefreshEnabled = voiceRefreshEnabled,
+                        scriptEditorView = editor,
+                        onRefreshEngines = ::requestEngineRefresh,
+                        onRefreshVoices = ::fetchVoices,
+                        engineListContent = { listState ->
+                            TtsEngineListScreen(
+                                state = engineScreenState,
+                                onAction = ::handleEngineListAction,
+                                listState = listState,
+                            )
+                        },
+                        formContent = {
+                            TtsEngineFormScreen(
+                                state = engineFormScreenState,
+                                onAction = ::handleEngineFormAction,
+                            )
+                        },
+                        formActions = { inSourceMode ->
+                            TtsEngineFormActions(
+                                sourceMode = inSourceMode,
+                                onToggleSourceMode = {
+                                    showConfigSourceMode(!inSourceMode)
+                                },
+                                onMeasureLatency = ::measureCurrentEngineLatency,
+                                onSaveSource = { saveSourceEngine() },
+                            )
+                        },
+                        voiceControlsContent = {
+                            TtsEngineVoiceControlsScreen(
+                                state = voiceControlsState,
+                                paramPanelState = voiceParamPanelState,
+                                paramPanelExpanded = voiceParamPanelExpanded,
+                                onBack = { onConfigBackPressed() },
+                                onQueryChange = ::updateVoiceSearchQuery,
+                                onOpenParams = ::toggleVoiceParamPanel,
+                                onDismissParams = { voiceParamPanelExpanded = false },
+                                onParamSpeedChange = { value ->
+                                    voiceParamPanelState = voiceParamPanelState.copy(speed = value)
+                                },
+                                onParamVolumeChange = { value ->
+                                    voiceParamPanelState = voiceParamPanelState.copy(volume = value)
+                                },
+                                onParamPitchChange = { value ->
+                                    voiceParamPanelState = voiceParamPanelState.copy(pitch = value)
+                                },
+                                onParamValueChangeFinished = ::saveVoiceParamPanel,
+                                onToggleLanguage = ::toggleVoiceLanguageFilter,
+                                onToggleGender = ::toggleVoiceGenderFilter,
+                                onToggleAll = ::toggleAllVoicesEnabled,
+                                onSystemSpeedChange = { value ->
+                                    voiceControlsState = voiceControlsState.copy(speed = value)
+                                },
+                                onSystemPitchChange = { value ->
+                                    voiceControlsState = voiceControlsState.copy(pitch = value)
+                                },
+                                onSystemValueChangeFinished = ::saveSystemVoiceParams,
+                            )
+                        },
+                        voiceListContent = { listState ->
+                            TtsEngineVoiceListScreen(
+                                state = voiceListScreenState,
+                                onAction = ::handleVoiceListAction,
+                                listState = listState,
+                            )
+                        },
+                        detailTabsContent = {
+                            TtsEngineDetailTabBar(
+                                selectedIndex = screenRoute.detailTabIndex,
+                                onSelected = { index ->
+                                    DetailTab.entries.getOrNull(index)?.let(::showDetailTab)
+                                },
+                            )
+                        },
                     )
                 }
             }
         }
-        binding.composeConfigForm.apply {
-            setViewCompositionStrategy(
-                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-            )
-            setContent {
-                NgAppTheme {
-                    TtsEngineFormScreen(
-                        state = engineFormScreenState,
-                        onAction = ::handleEngineFormAction
-                    )
-                }
-            }
-        }
-        binding.editScriptCode.setMaxHighlightLength(128 * 1024)
-        binding.editScriptCode.addJsPattern()
-        binding.recyclerVoices.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerVoices.setEdgeEffectColor(accentColor)
-        binding.recyclerVoices.adapter = voiceAdapter
-        binding.refreshEngines.setColorSchemeColors(accentColor)
-        // ComposeView 本身不转发 LazyColumn 的纵向滚动能力，需查询其 AndroidComposeView 子节点。
-        binding.refreshEngines.setOnChildScrollUpCallback { _, _ ->
-            binding.composeEngines.getChildAt(0)?.canScrollVertically(-1) == true
-        }
-        binding.refreshEngines.setOnRefreshListener { refreshEnginesAsync() }
-
-        binding.layoutEngineDetailTabs.setItems(
-            items = listOf(
-                NgFloatingTabItem(
-                    iconRes = R.drawable.ic_ai_tab_config,
-                    contentDescription = getString(R.string.tts_config_tab)
-                ),
-                NgFloatingTabItem(
-                    iconRes = R.drawable.ic_tts_tab_voice,
-                    contentDescription = getString(R.string.tts_voices)
-                )
-            ),
-            selectedIndex = DetailTab.CONFIG.ordinal
-        ) { index ->
-            showDetailTab(DetailTab.entries[index])
-        }
-        binding.buttonConfigSource.setOnClickListener { showConfigSourceMode(!sourceMode) }
-        binding.buttonTestConfig.setOnClickListener { measureCurrentEngineLatency() }
-        binding.buttonSaveConfig.setOnClickListener { saveSourceEngine() }
-        binding.buttonVoiceParams.setOnClickListener { toggleVoiceParamPanel() }
-        binding.buttonToggleAllVoices.setOnClickListener { toggleAllVoicesEnabled() }
-        applyVoiceToggleActionStyle()
-        binding.refreshVoices.setColorSchemeColors(accentColor)
-        binding.refreshVoices.setOnRefreshListener { fetchVoices() }
-        setupVoiceSearch()
+        navigateToRoute(TtsEngineConfigRoute.ENGINE_LIST)
         voicePreviewController = TtsVoicePreviewController(
             context = requireContext(),
             lifecycleScope = viewLifecycleOwner.lifecycleScope,
-            onStatusChanged = voiceAdapter::updatePreviewStatus
+            onStatusChanged = { status ->
+                voiceListScreenState = voiceListScreenState.copy(preview = status)
+            }
         )
 
         refreshEngines()
@@ -259,48 +271,91 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         saveFormChangesIfNeeded()
         configOptionsJob?.cancel()
         configOptionsJob = null
-        removeEngineListMenu()
-        voiceParamPopup?.dismiss()
-        voiceParamPopup = null
-        voiceParamPopupBinding = null
+        configOptionsWarmJob?.cancel()
+        configOptionsWarmJob = null
+        cancelEngineRefresh()
+        cancelVoiceRefresh()
+        voiceRefreshEnabled = false
+        voiceParamPanelExpanded = false
         importConflictDialog?.dismiss()
         importConflictDialog = null
+        modalDialog?.dismiss()
+        modalDialog = null
         voicePreviewController?.release()
         voicePreviewController = null
+        rootComposeView = null
+        scriptEditorView = null
+        setSharedTitleBarVisible(true)
         super.onDestroyView()
     }
 
     override fun onConfigBackPressed(): Boolean {
-        if (sourceMode) {
-            showConfigSourceMode(false)
-            return true
+        return when (screenRoute.backDestination()) {
+            TtsEngineConfigRoute.SCRIPT_FORM -> {
+                showConfigSourceMode(false)
+                true
+            }
+
+            TtsEngineConfigRoute.ENGINE_LIST -> {
+                showEngineList()
+                true
+            }
+
+            else -> false
         }
-        if (binding.layoutEngineDetail.isVisible) {
-            showEngineList()
-            return true
-        }
-        return false
     }
 
     private fun refreshEngines() {
+        cancelEngineRefresh()
+        if (engineSettingsSnapshot.isNotEmpty()) {
+            applyEngineSnapshot(engineSettingsSnapshot)
+        }
+        startEngineRefresh(forceReload = false, showIndicator = false)
+    }
+
+    private fun requestEngineRefresh() {
+        cancelEngineRefresh()
+        startEngineRefresh(forceReload = true, showIndicator = true)
+    }
+
+    private fun cancelEngineRefresh() {
         engineSnapshotGate.invalidate()
         engineRefreshJob?.cancel()
         engineRefreshJob = null
-        binding.refreshEngines.isRefreshing = false
-        applyEngineSnapshot(TtsEngineStore.engines())
+        engineRefreshing = false
     }
 
-    private fun refreshEnginesAsync() {
+    private fun cancelVoiceRefresh() {
+        voiceRefreshRevision++
+        voiceRefreshJob?.cancel()
+        voiceRefreshJob = null
+        voiceRefreshing = false
+    }
+
+    private fun startEngineRefresh(
+        forceReload: Boolean,
+        showIndicator: Boolean,
+    ) {
         if (engineRefreshJob?.isActive == true) return
         val snapshotToken = engineSnapshotGate.begin()
-        engineRefreshJob = lifecycleScope.launch {
+        val refreshJob = lifecycleScope.launch(start = CoroutineStart.LAZY) {
             try {
+                if (showIndicator) {
+                    // 缓存命中可能在同一帧完成；至少跨过一帧，让 PullToRefreshBox
+                    // 观察到 refreshing=true 后再收口，否则指示器会停在触发位置。
+                    delay(24L)
+                }
                 awaitEngineOrderSaves()
                 val allEngines = withContext(Dispatchers.IO) {
-                    TtsEngineStore.engines()
+                    if (forceReload) {
+                        TtsEngineStore.reloadEngines()
+                    } else {
+                        TtsEngineStore.engines()
+                    }
                 }
                 if (engineSnapshotGate.isCurrent(snapshotToken)) {
                     applyEngineSnapshot(allEngines)
+                    prewarmNextEdgeOptions(allEngines)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -311,12 +366,15 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                     )
                 }
             } finally {
-                if (engineSnapshotGate.isCurrent(snapshotToken)) {
-                    binding.refreshEngines.isRefreshing = false
+                if (engineRefreshJob === coroutineContext[Job]) {
+                    engineRefreshing = false
                     engineRefreshJob = null
                 }
             }
         }
+        engineRefreshJob = refreshJob
+        engineRefreshing = showIndicator
+        refreshJob.start()
     }
 
     private suspend fun awaitEngineOrderSaves() {
@@ -324,6 +382,19 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             val pendingSave = engineOrderSaveJob ?: return
             pendingSave.join()
             if (pendingSave === engineOrderSaveJob) return
+        }
+    }
+
+    private fun prewarmNextEdgeOptions(engines: List<TtsEngineSetting>) {
+        val engine = engines.firstOrNull {
+            it.id == TtsEngineStore.NEXT_EDGE_PROXY_ID &&
+                it.enabled &&
+                it.type == TtsEngineType.SCRIPT
+        } ?: return
+        if (TtsScriptEngineClient.cachedOptions(engine) != null) return
+        configOptionsWarmJob?.cancel()
+        configOptionsWarmJob = lifecycleScope.launch(Dispatchers.Default) {
+            runCatching { TtsScriptEngineClient.loadOptions(engine) }
         }
     }
 
@@ -375,12 +446,14 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         when (action) {
             is TtsEngineListAction.QueryChanged -> {
                 engineScreenState = engineScreenState.copy(query = action.query)
-                refreshEngines()
+                applyEngineSnapshot(engineSettingsSnapshot)
             }
 
             is TtsEngineListAction.SearchSubmitted -> Unit
             is TtsEngineListAction.OpenEngine -> {
-                TtsEngineStore.engine(action.engineId)?.let(::showEngineDetail)
+                engineSettingsSnapshot
+                    .firstOrNull { it.id == action.engineId }
+                    ?.let(::showEngineDetail)
             }
 
             is TtsEngineListAction.ReorderCommitted -> {
@@ -400,10 +473,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
                 }
             }
 
-            TtsEngineListAction.Retry -> refreshEngines()
-            TtsEngineListAction.OpenListMenu -> {
-                engineMenuButton?.let(::showEngineMoreMenu)
-            }
+            TtsEngineListAction.Retry -> requestEngineRefresh()
+            TtsEngineListAction.Back -> requireActivity().onBackPressedDispatcher.onBackPressed()
 
             TtsEngineListAction.CreateEngine -> addTtsEngine()
             TtsEngineListAction.ImportLocal -> {
@@ -459,9 +530,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             showDisabled = showDisabledEngines,
             isEnabled = TtsEngineSetting::enabled
         )
-        engineSnapshotGate.invalidate()
-        engineRefreshJob?.cancel()
-        engineRefreshJob = null
+        cancelEngineRefresh()
         engineSettingsSnapshot = mergedEngines
         engineScreenState = engineScreenState.copy(
             listState = NgListState.Content(
@@ -504,6 +573,9 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private fun showEngineList() {
         saveFormChangesIfNeeded()
         clearEngineFormFocus()
+        cancelVoiceRefresh()
+        voiceRefreshEnabled = false
+        voiceParamPanelExpanded = false
         configOptionsJob?.cancel()
         configOptionsJob = null
         configOptionsLoadedScript = null
@@ -512,17 +584,18 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         draftEngine = null
         formDirty = false
         scriptCodeLoadedEngineId = null
-        binding.editScriptCode.setText("")
+        setScriptCodeText("")
         activity?.setTitle(R.string.tts_engine_settings)
-        engineMenuButton?.isVisible = true
-        binding.layoutEngineList.isVisible = true
-        binding.layoutEngineDetail.isVisible = false
+        navigateToRoute(TtsEngineConfigRoute.ENGINE_LIST)
         refreshEngines()
     }
 
     private fun showEngineDetail(engine: TtsEngineSetting, tab: DetailTab = DetailTab.CONFIG) {
         clearEngineFormFocus()
         val isSwitchingEngine = currentEngineId != engine.id
+        if (isSwitchingEngine) {
+            cancelVoiceRefresh()
+        }
         configOptionsJob?.cancel()
         configOptionsJob = null
         configOptionsLoadedScript = null
@@ -533,16 +606,12 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             draftEngine = null
         }
         if (isSwitchingEngine) {
-            sourceMode = false
             scriptCodeLoadedEngineId = null
-            binding.editScriptCode.setText("")
+            setScriptCodeText("")
         }
         activity?.setTitle(engine.name)
-        engineMenuButton?.isVisible = false
-        binding.layoutEngineList.isVisible = false
-        binding.layoutEngineDetail.isVisible = true
         if (isSwitchingEngine) {
-            binding.searchVoice.setQuery("")
+            updateVoiceSearchQuery("")
         }
         if (engine.type == TtsEngineType.SYSTEM) {
             bindSystemEngineDetail(engine)
@@ -553,77 +622,6 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         setVoiceItems(engine.effectiveVoices())
         updateVoiceMessage(engine)
         showDetailTab(tab)
-    }
-
-    private fun setupEngineListMenu() {
-        val titleBar = requireActivity().findViewById<TitleBar>(R.id.title_bar) ?: return
-        val toolbar = titleBar.toolbar
-        toolbar.findViewById<View>(R.id.menu_tts_engine_more)?.let { toolbar.removeView(it) }
-        val button = ImageButton(requireContext()).apply {
-            id = R.id.menu_tts_engine_more
-            setImageResource(R.drawable.ic_more_vert)
-            setColorFilter(ContextCompat.getColor(requireContext(), R.color.primaryText))
-            background = null
-            contentDescription = getString(R.string.menu)
-            scaleType = ImageView.ScaleType.CENTER
-            setPadding(10.dpToPx(), 10.dpToPx(), 10.dpToPx(), 10.dpToPx())
-            setOnClickListener { showEngineMoreMenu(this) }
-        }
-        toolbar.addView(
-            button,
-            Toolbar.LayoutParams(48.dpToPx(), 48.dpToPx(), Gravity.END or Gravity.CENTER_VERTICAL)
-        )
-        engineMenuButton = button
-        engineMenuButton?.isVisible = binding.layoutEngineList.isVisible
-    }
-
-    private fun removeEngineListMenu() {
-        engineMenuButton?.let { button ->
-            (button.parent as? ViewGroup)?.removeView(button)
-        }
-        engineMenuButton = null
-    }
-
-    private fun showEngineMoreMenu(anchor: View) {
-        NgActionPopup(
-            requireContext(),
-            listOf(
-                NgActionPopupItem(
-                    R.id.menu_tts_engine_add,
-                    R.string.add_tts_engine,
-                    R.drawable.ic_add
-                ),
-                NgActionPopupItem(
-                    R.id.menu_tts_engine_import_local,
-                    R.string.import_local,
-                    R.drawable.ic_import
-                ),
-                NgActionPopupItem(
-                    R.id.menu_tts_engine_import_online,
-                    R.string.import_on_line,
-                    R.drawable.ic_add_online
-                ),
-                NgActionPopupItem(
-                    itemId = R.id.menu_show_disabled,
-                    titleRes = R.string.show_disabled_items,
-                    iconRes = R.drawable.ic_visibility,
-                    checked = showDisabledEngines,
-                    dividerBefore = true
-                )
-            ),
-            widthDp = 0
-        ) { item ->
-            when (item.itemId) {
-                R.id.menu_tts_engine_add -> addTtsEngine()
-                R.id.menu_tts_engine_import_local -> importTtsEngineFileLauncher.launch(
-                    arrayOf("text/*", "application/json", "application/javascript", "application/octet-stream")
-                )
-                R.id.menu_tts_engine_import_online -> showImportTtsEngineUrlDialog()
-                R.id.menu_show_disabled -> {
-                    toggleShowDisabledEngines()
-                }
-            }
-        }.show(anchor)
     }
 
     private fun addTtsEngine() {
@@ -646,20 +644,32 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     }
 
     private fun showImportTtsEngineUrlDialog() {
-        val editText = EditText(requireContext()).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            hint = getString(R.string.tts_engine_url_hint)
-            setSingleLine(true)
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.import_on_line)
-            .setView(editText)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                importTtsEngineFromUrl(editText.text?.toString().orEmpty())
+        modalDialog?.dismiss()
+        val dialog = ComponentDialog(requireContext())
+        val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(updateSystemBars = false) {
+                    TtsImportUrlDialogContent(
+                        initialValue = "",
+                        onCancel = dialog::dismiss,
+                        onConfirm = { value ->
+                            dialog.dismiss()
+                            importTtsEngineFromUrl(value)
+                        },
+                    )
+                }
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-            .applyTint()
+        }
+        dialog.setContentView(composeView)
+        dialog.setOnDismissListener {
+            if (modalDialog === dialog) {
+                modalDialog = null
+            }
+        }
+        modalDialog = dialog
+        dialog.show()
+        dialog.applyNgWindow()
     }
 
     private fun importTtsEngineFromUrl(url: String) {
@@ -721,31 +731,36 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         conflict: TtsEngineImportConflictException
     ) {
         importConflictDialog?.dismiss()
-        val dialog = Dialog(requireContext()).apply {
-            setContentView(R.layout.dialog_tts_engine_import_conflict)
-            setCanceledOnTouchOutside(true)
-        }
         val names = conflict.conflicts
             .map { it.existingName }
             .distinct()
             .take(3)
             .joinToString("、") { "“$it”" }
-        dialog.findViewById<TextView>(R.id.tv_import_conflict_message).text = getString(
+        val message = getString(
             R.string.tts_engine_import_conflict_message,
             names
         )
-        dialog.findViewById<TextView>(R.id.tv_import_keep_both).setOnClickListener {
-            dialog.dismiss()
-            importTtsEngineText(content, TtsEngineImportConflictAction.KEEP_BOTH)
-        }
-        dialog.findViewById<TextView>(R.id.tv_import_overwrite).apply {
-            isVisible = conflict.conflicts.all { it.canOverwrite }
-            setOnClickListener {
-                dialog.dismiss()
-                importTtsEngineText(content, TtsEngineImportConflictAction.OVERWRITE)
+        val dialog = ComponentDialog(requireContext())
+        val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(updateSystemBars = false) {
+                    TtsImportConflictDialogContent(
+                        message = message,
+                        canOverwrite = conflict.conflicts.all { it.canOverwrite },
+                        onKeepBoth = {
+                            dialog.dismiss()
+                            importTtsEngineText(content, TtsEngineImportConflictAction.KEEP_BOTH)
+                        },
+                        onOverwrite = {
+                            dialog.dismiss()
+                            importTtsEngineText(content, TtsEngineImportConflictAction.OVERWRITE)
+                        },
+                    )
+                }
             }
         }
-        dialog.setOnShowListener { dialog.applyNgWindow() }
+        dialog.setContentView(composeView)
         dialog.setOnDismissListener {
             if (importConflictDialog === dialog) {
                 importConflictDialog = null
@@ -753,24 +768,20 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         }
         importConflictDialog = dialog
         dialog.show()
+        dialog.applyNgWindow()
     }
 
-    private fun bindSystemEngineDetail(engine: TtsEngineSetting) = binding.run {
-        detailTab = DetailTab.VOICES
-        sourceMode = false
-        voiceParamPopup?.dismiss()
-        scrollConfig.isVisible = false
-        layoutConfigActions.isVisible = false
-        layoutEngineDetailTabs.isVisible = false
-        layoutVoices.isVisible = true
-        layoutVoiceSearch.isVisible = false
-        layoutSystemVoiceParams.isVisible = true
-        textVoiceMessage.isVisible = false
-        layoutVoiceHeader.isVisible = false
-        refreshVoices.isRefreshing = false
-        refreshVoices.isEnabled = false
-        bindSystemVoiceParams(engine)
+    private fun bindSystemEngineDetail(engine: TtsEngineSetting) {
+        cancelVoiceRefresh()
+        voiceRefreshEnabled = false
+        voiceParamPanelExpanded = false
+        voiceControlsState = TtsEngineVoiceControlsState(
+            mode = TtsEngineVoiceControlsMode.SYSTEM,
+            speed = engine.effectiveSpeed(),
+            pitch = engine.effectivePitch(),
+        )
         setVoiceItems(listOf(systemDefaultVoice(engine)))
+        navigateToRoute(TtsEngineConfigRoute.SYSTEM_DETAIL)
     }
 
     private fun showDetailTab(tab: DetailTab) {
@@ -778,23 +789,37 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             saveFormChangesIfNeeded()
             clearEngineFormFocus()
         }
-        detailTab = tab
-        if (tab != DetailTab.CONFIG && sourceMode) {
-            sourceMode = false
+        if (tab != DetailTab.VOICES) {
+            voiceParamPanelExpanded = false
         }
-        binding.scrollConfig.isVisible = tab == DetailTab.CONFIG
-        binding.layoutConfigActions.isVisible = tab == DetailTab.CONFIG
-        binding.layoutVoices.isVisible = tab == DetailTab.VOICES
-        binding.layoutEngineDetailTabs.isVisible = !sourceMode
-        binding.layoutVoiceSearch.isVisible = tab == DetailTab.VOICES
-        binding.layoutSystemVoiceParams.isVisible = false
-        binding.layoutEngineDetailTabs.select(tab.ordinal)
+        navigateToRoute(
+            if (tab == DetailTab.CONFIG) {
+                TtsEngineConfigRoute.SCRIPT_FORM
+            } else {
+                TtsEngineConfigRoute.SCRIPT_VOICES
+            }
+        )
+        if (tab == DetailTab.VOICES) {
+            voiceControlsState = voiceControlsState.copy(
+                mode = TtsEngineVoiceControlsMode.SCRIPT,
+                query = voiceSearchQuery,
+            )
+        }
         if (tab == DetailTab.VOICES) {
             maybeAutoFetchVoices()
         }
     }
 
-    private fun bindEngineForm(engine: TtsEngineSetting) = binding.run {
+    private fun navigateToRoute(route: TtsEngineConfigRoute) {
+        screenRoute = route
+        setSharedTitleBarVisible(route.showsSharedTitleBar)
+    }
+
+    private fun setSharedTitleBarVisible(visible: Boolean) {
+        activity?.findViewById<TitleBar>(R.id.title_bar)?.isVisible = visible
+    }
+
+    private fun bindEngineForm(engine: TtsEngineSetting) {
         bindConfigEntities(engine)
         if (sourceMode) {
             ensureScriptCodeLoaded(engine)
@@ -806,9 +831,8 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             engineEnabled = engine.enabled,
             formEnabled = scriptEnabled
         )
-        editScriptCode.isEnabled = scriptEnabled
-        refreshVoices.isEnabled = engine.supportsVoiceFetch()
-        showConfigSourceMode(sourceMode)
+        scriptEditorView?.isEnabled = scriptEnabled
+        voiceRefreshEnabled = engine.supportsVoiceFetch()
     }
 
     private fun handleEngineFormAction(action: TtsEngineFormScreenAction) {
@@ -885,6 +909,9 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
 
     private fun showConfigSourceMode(enabled: Boolean) {
         if (enabled) {
+            voiceParamPanelExpanded = false
+        }
+        if (enabled) {
             clearEngineFormFocus()
             saveFormChangesIfNeeded()
         }
@@ -899,36 +926,45 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             activity?.setTitle(source.name)
             formDirty = false
         }
-        sourceMode = enabled
-        moveConfigActions(sourceMode = enabled)
-        binding.scrollConfigForm.isVisible = !enabled
-        binding.layoutScriptEditor.isVisible = enabled
-        binding.layoutEngineDetailTabs.isVisible = !enabled
-        binding.buttonSaveConfig.isVisible = enabled
-        binding.buttonConfigSource.setText(
-            if (enabled) R.string.tts_form_mode else R.string.tts_source_mode
+        navigateToRoute(
+            if (enabled) {
+                TtsEngineConfigRoute.SCRIPT_SOURCE
+            } else {
+                TtsEngineConfigRoute.SCRIPT_FORM
+            }
         )
     }
 
     private fun clearEngineFormFocus() {
-        binding.composeConfigForm.clearFocus()
-        binding.composeConfigForm.hideSoftInput()
+        rootComposeView?.clearFocus()
+        rootComposeView?.hideSoftInput()
     }
 
-    private fun moveConfigActions(sourceMode: Boolean) = binding.run {
-        val target = if (sourceMode) layoutScriptEditor else layoutConfigFormContent
-        if (layoutConfigActions.parent !== target) {
-            (layoutConfigActions.parent as? ViewGroup)?.removeView(layoutConfigActions)
-            target.addView(layoutConfigActions)
+    private fun createScriptEditorView(): CodeView {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).roundToInt()
+        return CodeView(requireContext()).apply {
+            setMaxHighlightLength(128 * 1024)
+            addJsPattern()
+            background = AppCompatResources.getDrawable(
+                context,
+                R.drawable.ng_bg_outlined_field,
+            )
+            gravity = Gravity.TOP
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minimumHeight = dp(220)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            setTextColor(ContextCompat.getColor(context, R.color.ng_on_surface))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
         }
     }
 
     private fun setScriptCodeText(script: String?) {
         val text = script.orEmpty()
         if (text.isBlank()) {
-            binding.editScriptCode.setText("")
+            scriptEditorView?.setText("")
         } else {
-            binding.editScriptCode.setTextHighlighted(text)
+            scriptEditorView?.setTextHighlighted(text)
         }
     }
 
@@ -943,24 +979,36 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private fun bindConfigEntities(engine: TtsEngineSetting) {
         configOptionsJob?.cancel()
         configOptionsLoadedScript = null
-        applyConfigEntities(engine, emptyList())
         if (engine.type != TtsEngineType.SCRIPT) {
+            applyConfigEntities(engine, emptyList())
             return
         }
+        TtsScriptEngineClient.cachedOptions(engine)?.let { options ->
+            applyConfigEntities(engine, options)
+            configOptionsLoadedScript = engine.script
+            return
+        }
+        engineFormScreenState = TtsEngineFormScreenState(
+            engineId = engine.id,
+            engineEnabled = engine.enabled,
+            formEnabled = false,
+            loading = true,
+        )
         val requestedEngineId = engine.id
         val requestedScript = engine.script
         configOptionsJob = lifecycleScope.launch {
             val result = withContext(Dispatchers.Default) {
                 runCatching { TtsScriptEngineClient.loadOptions(engine) }
             }
-            val current = currentDisplayedEngine()
+            val current = currentDisplayedEngine() ?: return@launch
             if (
                 currentEngineId != requestedEngineId ||
-                current?.script != requestedScript
+                current.script != requestedScript
             ) {
                 return@launch
             }
             val options = result.getOrElse {
+                applyConfigEntities(current, emptyList())
                 configOptionsLoadedScript = null
                 return@launch
             }
@@ -1004,6 +1052,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             engineId = engine.id,
             engineEnabled = engine.enabled,
             formEnabled = engine.type == TtsEngineType.SCRIPT,
+            loading = false,
             fields = entities.map { it.toFormScreenField() }
         )
     }
@@ -1030,7 +1079,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         val source = currentDisplayedEngine()
             ?: draftEngine?.takeIf { it.id == currentEngineId }
             ?: return null
-        val script = binding.editScriptCode.text?.toString()?.takeIf { it.isNotBlank() }
+        val script = scriptEditorView?.text?.toString()?.takeIf { it.isNotBlank() }
         if (script == null) {
             requireContext().toastOnUi("源码不能为空")
             return null
@@ -1147,268 +1196,67 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     }
 
     private fun bindVoiceParams(engine: TtsEngineSetting) {
-        voiceParamPopupBinding?.let { bindVoiceParamPopup(it, engine) }
+        voiceParamPanelState = TtsVoiceParamPanelState(
+            speed = engine.effectiveSpeed(),
+            volume = engine.effectiveVolume(),
+            pitch = engine.effectivePitch(),
+            languages = availableVoiceLanguageLabels(),
+            selectedLanguages = selectedVoiceLanguageFilters.toSet(),
+            selectedGenders = selectedVoiceGenderFilters.toSet(),
+            showFilters = engine.type != TtsEngineType.SYSTEM,
+            showGenderFilters = allVoices.isNotEmpty(),
+        )
     }
 
-    private fun bindSystemVoiceParams(engine: TtsEngineSetting) = binding.run {
-        tintSystemVoiceParamSeekBars()
-        seekSystemSpeed.setOnSeekBarChangeListener(null)
-        seekSystemPitch.setOnSeekBarChangeListener(null)
-        seekSystemSpeed.progress = engine.effectiveSpeed()
-        seekSystemPitch.progress = engine.effectivePitch()
-        updateSystemVoiceParamTexts()
-        val listener = object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    updateSystemVoiceParamTexts()
-                }
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                currentEngineId?.let { engineId ->
-                    TtsEngineStore.saveRuntimeParams(
-                        engineId = engineId,
-                        speed = seekSystemSpeed.progress,
-                        volume = engine.effectiveVolume(),
-                        pitch = seekSystemPitch.progress
-                    )
-                }
-            }
-        }
-        seekSystemSpeed.setOnSeekBarChangeListener(listener)
-        seekSystemPitch.setOnSeekBarChangeListener(listener)
-    }
-
-    private fun tintSystemVoiceParamSeekBars() {
-        val accent = accentColor
-        val trackTint = ColorStateList.valueOf(ColorUtils.adjustAlpha(accent, 0.35f))
-        val thumbTint = ColorStateList.valueOf(accent)
-        listOf(
-            binding.seekSystemSpeed,
-            binding.seekSystemPitch
-        ).forEach { seekBar ->
-            seekBar.progressTintList = trackTint
-            seekBar.progressBackgroundTintList = trackTint
-            seekBar.secondaryProgressTintList = trackTint
-            seekBar.thumbTintList = thumbTint
-        }
-    }
-
-    private fun updateSystemVoiceParamTexts() = binding.run {
-        textSystemSpeedValue.text = seekSystemSpeed.progress.toString()
-        textSystemPitchValue.text = seekSystemPitch.progress.toString()
+    private fun saveSystemVoiceParams() {
+        val engine = currentDisplayedEngine()?.takeIf { it.type == TtsEngineType.SYSTEM }
+            ?: return
+        TtsEngineStore.saveRuntimeParams(
+            engineId = engine.id,
+            speed = voiceControlsState.speed,
+            volume = engine.effectiveVolume(),
+            pitch = voiceControlsState.pitch,
+        )
     }
 
     private fun toggleVoiceParamPanel() {
-        voiceParamPopup?.takeIf { it.isShowing }?.dismiss() ?: showVoiceParamPopup()
-    }
-
-    private fun showVoiceParamPopup() {
         val engine = currentDisplayedEngine() ?: return
-        val popupBinding = LayoutTtsVoiceParamsPopupBinding.inflate(layoutInflater)
-        attachVoiceParamPopupOwners(popupBinding.root)
-        val popup = PopupWindow(
-            popupBinding.root,
-            binding.layoutVoiceSearch.width,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        ).apply {
-            isOutsideTouchable = true
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            elevation = 6.dpToPx().toFloat()
-            setOnDismissListener {
-                if (voiceParamPopup === this) {
-                    voiceParamPopup = null
-                    voiceParamPopupBinding = null
-                }
-            }
+        if (!voiceParamPanelExpanded) {
+            bindVoiceParams(engine)
         }
-        voiceParamPopup = popup
-        voiceParamPopupBinding = popupBinding
-        popup.showAsDropDown(binding.layoutVoiceSearch, 0, 8.dpToPx())
-        (popupBinding.root.parent as? View)?.let(::attachVoiceParamPopupOwners)
-        attachVoiceParamPopupOwners(popupBinding.root.rootView)
-        bindVoiceParamPopup(popupBinding, engine)
-        popup.update(binding.layoutVoiceSearch.width, ViewGroup.LayoutParams.WRAP_CONTENT)
+        voiceParamPanelExpanded = !voiceParamPanelExpanded
     }
 
-    private fun attachVoiceParamPopupOwners(view: View) {
-        view.setViewTreeLifecycleOwner(viewLifecycleOwner)
-        view.setViewTreeViewModelStoreOwner(this@TtsEngineConfigFragment)
-        view.setViewTreeSavedStateRegistryOwner(this@TtsEngineConfigFragment)
+    private fun saveVoiceParamPanel() {
+        val engineId = currentEngineId ?: return
+        TtsEngineStore.saveRuntimeParams(
+            engineId = engineId,
+            speed = voiceParamPanelState.speed,
+            volume = voiceParamPanelState.volume,
+            pitch = voiceParamPanelState.pitch,
+        )?.let { updated ->
+            detailEngineSnapshot = updated
+        }
     }
 
-    private fun bindVoiceParamPopup(
-        popupBinding: LayoutTtsVoiceParamsPopupBinding,
-        engine: TtsEngineSetting
-    ) = popupBinding.run {
-        var speed by mutableStateOf(engine.effectiveSpeed())
-        var volume by mutableStateOf(engine.effectiveVolume())
-        var pitch by mutableStateOf(engine.effectivePitch())
-        composeVoiceParams.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-            setContent {
-                NgAppTheme {
-                    TtsVoiceParamsSliderPanel(
-                        speed = speed,
-                        volume = volume,
-                        pitch = pitch,
-                        onSpeedChange = { speed = it },
-                        onVolumeChange = { volume = it },
-                        onPitchChange = { pitch = it },
-                        onValueChangeFinished = {
-                            TtsEngineStore.saveRuntimeParams(
-                                engineId = engine.id,
-                                speed = speed,
-                                volume = volume,
-                                pitch = pitch
-                            )
-                        }
-                    )
-                }
-            }
+    private fun toggleVoiceLanguageFilter(label: String) {
+        if (!selectedVoiceLanguageFilters.add(label)) {
+            selectedVoiceLanguageFilters.remove(label)
         }
-        bindVoiceFilterChips(this)
-    }
-
-    private fun bindVoiceFilterChips(popupBinding: LayoutTtsVoiceParamsPopupBinding) {
-        if (currentDisplayedEngine()?.type == TtsEngineType.SYSTEM) {
-            popupBinding.layoutLanguageFilterSection.isVisible = false
-            popupBinding.layoutGenderFilterSection.isVisible = false
-            return
-        }
-        val languageLabels = availableVoiceLanguageLabels()
-        selectedVoiceLanguageFilters.retainAll(languageLabels.toSet())
-        bindVoiceFilterSection(
-            section = popupBinding.layoutLanguageFilterSection,
-            container = popupBinding.layoutVoiceLanguageFilters,
-            labels = languageLabels,
-            selectedLabels = selectedVoiceLanguageFilters
+        voiceParamPanelState = voiceParamPanelState.copy(
+            selectedLanguages = selectedVoiceLanguageFilters.toSet()
         )
-        bindVoiceGenderFilterSection(popupBinding)
+        applyVoiceFilter()
     }
 
-    private fun bindVoiceFilterSection(
-        section: View,
-        container: ViewGroup,
-        labels: List<String>,
-        selectedLabels: MutableSet<String>
-    ) {
-        section.isVisible = labels.isNotEmpty()
-        container.removeAllViews()
-        labels.forEach { label ->
-            container.addView(
-                createVoiceFilterChip(
-                    container = container,
-                    label = label,
-                    selected = label in selectedLabels
-                ) {
-                    if (!selectedLabels.add(label)) {
-                        selectedLabels.remove(label)
-                    }
-                    voiceParamPopupBinding?.let { bindVoiceFilterChips(it) }
-                    applyVoiceFilter()
-                }
-            )
+    private fun toggleVoiceGenderFilter(label: String) {
+        if (!selectedVoiceGenderFilters.add(label)) {
+            selectedVoiceGenderFilters.remove(label)
         }
-    }
-
-    private fun createVoiceFilterChip(
-        container: ViewGroup,
-        label: String,
-        selected: Boolean,
-        onClick: () -> Unit
-    ): TextView {
-        val context = container.context
-        val textColor = ContextCompat.getColor(
-            context,
-            if (selected) R.color.ng_tts_language else R.color.ng_on_surface_variant
+        voiceParamPanelState = voiceParamPanelState.copy(
+            selectedGenders = selectedVoiceGenderFilters.toSet()
         )
-        return TextView(context).apply {
-            text = label
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(textColor)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setBackgroundResource(
-                if (selected) R.drawable.ng_bg_tts_language_tag else R.drawable.ng_bg_tag_neutral
-            )
-            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
-            minWidth = 28.dpToPx()
-            setOnClickListener { onClick() }
-            layoutParams = if (container is FlexboxLayout) {
-                FlexboxLayout.LayoutParams(
-                    FlexboxLayout.LayoutParams.WRAP_CONTENT,
-                    24.dpToPx()
-                ).apply {
-                    rightMargin = 6.dpToPx()
-                    topMargin = 3.dpToPx()
-                    bottomMargin = 3.dpToPx()
-                }
-            } else {
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    24.dpToPx()
-                ).apply {
-                    marginEnd = 6.dpToPx()
-                }
-            }
-        }
-    }
-
-    private fun bindVoiceGenderFilterSection(popupBinding: LayoutTtsVoiceParamsPopupBinding) {
-        popupBinding.layoutGenderFilterSection.isVisible = allVoices.isNotEmpty()
-        popupBinding.layoutVoiceGenderFilters.removeAllViews()
-        listOf(
-            VoiceGenderFilter("男", R.drawable.ic_tts_gender_male, R.color.ng_tts_gender_male),
-            VoiceGenderFilter("女", R.drawable.ic_tts_gender_female, R.color.ng_tts_gender_female)
-        ).forEach { filter ->
-            popupBinding.layoutVoiceGenderFilters.addView(
-                createVoiceGenderFilterChip(
-                    container = popupBinding.layoutVoiceGenderFilters,
-                    filter = filter,
-                    selected = filter.label in selectedVoiceGenderFilters
-                )
-            )
-        }
-    }
-
-    private fun createVoiceGenderFilterChip(
-        container: LinearLayout,
-        filter: VoiceGenderFilter,
-        selected: Boolean
-    ): ImageView {
-        val context = container.context
-        return ImageView(context).apply {
-            contentDescription = filter.label
-            setImageResource(filter.iconRes)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            imageTintList = ColorStateList.valueOf(
-                ContextCompat.getColor(
-                    context,
-                    if (selected) filter.colorRes else R.color.ng_on_surface_variant
-                )
-            )
-            setBackgroundResource(
-                if (selected) R.drawable.ng_bg_tts_language_tag else R.drawable.ng_bg_tag_neutral
-            )
-            setPadding(5.dpToPx(), 3.dpToPx(), 5.dpToPx(), 3.dpToPx())
-            setOnClickListener {
-                if (!selectedVoiceGenderFilters.add(filter.label)) {
-                    selectedVoiceGenderFilters.remove(filter.label)
-                }
-                voiceParamPopupBinding?.let { bindVoiceFilterChips(it) }
-                applyVoiceFilter()
-            }
-            layoutParams = LinearLayout.LayoutParams(
-                34.dpToPx(),
-                24.dpToPx()
-            ).apply {
-                marginEnd = 6.dpToPx()
-            }
-        }
+        applyVoiceFilter()
     }
 
     private fun pruneVoiceFilters() {
@@ -1419,37 +1267,18 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         return TtsVoiceFilterSupport.availableLanguageLabels(allVoices)
     }
 
-    private fun setupVoiceSearch() {
-        binding.searchVoice.editText.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(
-                s: CharSequence,
-                start: Int,
-                count: Int,
-                after: Int
-            ) {
-            }
-
-            override fun onTextChanged(
-                s: CharSequence,
-                start: Int,
-                before: Int,
-                count: Int
-            ) {
-            }
-
-            override fun afterTextChanged(s: Editable?) {
-                voiceSearchQuery = s?.toString()?.trim().orEmpty()
-                applyVoiceFilter()
-            }
-        })
+    private fun updateVoiceSearchQuery(query: String) {
+        voiceSearchQuery = query.trim()
+        voiceControlsState = voiceControlsState.copy(query = query)
+        applyVoiceFilter()
     }
 
     private fun setVoiceItems(voices: List<TtsVoice>) {
         allVoices = voices
         pruneVoiceFilters()
-        voiceParamPopupBinding?.let { bindVoiceFilterChips(it) }
+        currentDisplayedEngine()?.let(::bindVoiceParams)
         applyVoiceFilter()
-        updateVoiceHeader()
+        updateVoiceToggleState()
     }
 
     private fun applyVoiceFilter() {
@@ -1468,14 +1297,96 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         } else {
             filteredVoices
         }
-        voiceAdapter.setItems(displayVoices)
+        voiceListScreenState = voiceListScreenState.copy(
+            items = engine?.let { currentEngine ->
+                displayVoices.map { voice -> voice.toVoiceListItemUiModel(currentEngine) }
+            }.orEmpty(),
+        )
         if (allVoices.isNotEmpty()) {
-            binding.textVoiceMessage.isVisible = filteredVoices.isEmpty()
-            if (filteredVoices.isEmpty()) {
-                binding.textVoiceMessage.setText(R.string.tts_voice_no_match)
+            voiceControlsState = voiceControlsState.copy(
+                message = getString(R.string.tts_voice_no_match)
+                    .takeIf { filteredVoices.isEmpty() }
+            )
+        }
+        updateVoiceToggleState()
+    }
+
+    private fun TtsVoice.toVoiceListItemUiModel(
+        engine: TtsEngineSetting,
+    ): TtsEngineVoiceListItemUiModel {
+        val isSystemEngine = engine.type == TtsEngineType.SYSTEM
+        val checked = if (isSystemEngine) engine.enabled else engine.isVoiceEnabled(this)
+        val styleLabel = takeUnless { isSystemEngine }
+            ?.style
+            ?.takeIf { it.isNotBlank() }
+        val detailTags = if (isSystemEngine) {
+            listOf(engine.name.ifBlank { id })
+        } else {
+            tags.filter { it.isNotBlank() }
+                .distinct()
+                .ifEmpty {
+                    if (styleLabel == null) listOf(id) else emptyList()
+                }
+        }
+        return TtsEngineVoiceListItemUiModel(
+            id = id,
+            previewKey = TtsVoicePreviewController.keyOf(
+                engine = engine,
+                voice = this,
+                systemDefault = isSystemEngine,
+            ),
+            name = name,
+            genderLabel = takeUnless { isSystemEngine }
+                ?.gender
+                ?.let(TtsVoiceFilterSupport::genderLabel),
+            languageLabels = takeUnless { isSystemEngine }
+                ?.language
+                ?.let(TtsVoiceFilterSupport::languageLabels)
+                .orEmpty(),
+            style = styleLabel,
+            tags = detailTags,
+            checked = checked,
+            dimmed = !isSystemEngine && !checked,
+        )
+    }
+
+    private fun handleVoiceListAction(action: TtsEngineVoiceListAction) {
+        val voiceId = when (action) {
+            is TtsEngineVoiceListAction.EnabledChanged -> action.voiceId
+            is TtsEngineVoiceListAction.Preview -> action.voiceId
+            is TtsEngineVoiceListAction.PreviewStyle -> action.voiceId
+        }
+        val voice = allVoices.firstOrNull { it.id == voiceId } ?: return
+        when (action) {
+            is TtsEngineVoiceListAction.EnabledChanged -> {
+                val engine = currentDisplayedEngine() ?: return
+                if (engine.type == TtsEngineType.SYSTEM) {
+                    saveEnabledState(action.checked)
+                } else {
+                    val updated = TtsEngineStore.setVoiceEnabled(
+                        engineId = engine.id,
+                        voiceId = voice.id,
+                        enabled = action.checked,
+                    )
+                    if (updated != null) {
+                        detailEngineSnapshot = updated
+                    }
+                }
+                applyVoiceFilter()
+                refreshEngines()
+            }
+
+            is TtsEngineVoiceListAction.Preview -> previewCurrentVoice(voice)
+            is TtsEngineVoiceListAction.PreviewStyle -> {
+                val engine = currentDisplayedEngine() ?: return
+                val styles = voice.styleOptions()
+                if (styles.isEmpty()) {
+                    requireContext().toastOnUi("当前发音人没有可选风格")
+                } else {
+                    showPreviewStyleSelector(engine, voice, styles)
+                }
             }
         }
-        updateVoiceHeader()
     }
 
     private fun matchesVoiceSearch(voice: TtsVoice, query: String): Boolean {
@@ -1498,33 +1409,21 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             ?.let { it in selectedVoiceGenderFilters } == true
     }
 
-    private fun updateVoiceHeader() {
+    private fun updateVoiceToggleState() {
         val engine = currentDisplayedEngine()
         val hasVoices = allVoices.isNotEmpty()
         if (engine?.type == TtsEngineType.SYSTEM) {
-            binding.layoutVoiceHeader.isVisible = false
+            voiceControlsState = voiceControlsState.copy(canToggleAll = false)
             return
         }
-        binding.layoutVoiceHeader.isVisible = hasVoices
         if (!hasVoices || engine == null) {
+            voiceControlsState = voiceControlsState.copy(canToggleAll = false)
             return
         }
         val allEnabled = allVoices.all { engine.isVoiceEnabled(it) }
-        binding.buttonToggleAllVoices.setText(
-            if (allEnabled) R.string.tts_disable_all_voices else R.string.tts_enable_all_voices
-        )
-        applyVoiceToggleActionStyle()
-    }
-
-    private fun applyVoiceToggleActionStyle() {
-        val snapshot = NgThemeResolver.resolve(requireContext())
-        binding.buttonToggleAllVoices.background = null
-        binding.buttonToggleAllVoices.setTextColor(
-            if (snapshot.isDark) {
-                snapshot.colors.onSurface
-            } else {
-                snapshot.colors.primary
-            }
+        voiceControlsState = voiceControlsState.copy(
+            canToggleAll = true,
+            allEnabled = allEnabled,
         )
     }
 
@@ -1560,62 +1459,66 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     }
 
     private fun fetchVoices() {
+        if (voiceRefreshJob?.isActive == true) return
         val source = currentDisplayedEngine() ?: return
         val engineDraft = engineFromForm(source).takeIf { it.isScriptEngine } ?: return
         if (!engineDraft.supportsVoiceFetch()) {
-            binding.refreshVoices.isRefreshing = false
-            binding.textVoiceMessage.isVisible = false
+            voiceRefreshing = false
+            voiceRefreshEnabled = false
+            voiceControlsState = voiceControlsState.copy(message = null)
             return
         }
-        binding.refreshVoices.isRefreshing = true
-        binding.textVoiceMessage.isVisible = allVoices.isEmpty()
+        val requestedEngineId = engineDraft.id
+        val refreshRevision = ++voiceRefreshRevision
+        voiceRefreshing = true
+        voiceRefreshEnabled = true
         if (allVoices.isEmpty()) {
-            binding.textVoiceMessage.setText(R.string.tts_voice_loading)
+            voiceControlsState = voiceControlsState.copy(
+                message = getString(R.string.tts_voice_loading)
+            )
         }
-        lifecycleScope.launch {
+        voiceRefreshJob = lifecycleScope.launch {
             try {
-                val engine = withContext(Dispatchers.IO) {
-                    TtsEngineStore.saveEngine(engineDraft, restartReadAloud = false)
-                    TtsEngineStore.engine(engineDraft.id) ?: engineDraft
-                }
-                detailEngineSnapshot = engine
-                draftEngine = null
-                activity?.setTitle(engine.name)
-                bindVoiceParams(engine)
-
-                val voices = withContext(Dispatchers.IO) {
-                    TtsScriptEngineClient.fetchVoices(engine)
-                }
-                if (voices.isEmpty()) {
-                    binding.textVoiceMessage.isVisible = true
-                    binding.textVoiceMessage.text = "接口返回为空或暂不支持解析"
-                    requireContext().toastOnUi("未获取到发音人")
-                    return@launch
-                }
+                awaitEngineConfigSaves()
                 val updated = withContext(Dispatchers.IO) {
-                    TtsEngineStore.upsertVoiceList(
-                        engine.id,
-                        voices,
+                    TtsEngineStore.ensureVoiceCatalog(
+                        engineId = engineDraft.id,
+                        forceRefresh = true,
                         restartReadAloud = false
                     )
-                } ?: return@launch
+                }
+                if (
+                    refreshRevision != voiceRefreshRevision ||
+                    currentEngineId != requestedEngineId
+                ) {
+                    return@launch
+                }
                 detailEngineSnapshot = updated
+                draftEngine = null
+                activity?.setTitle(updated.name)
+                bindVoiceParams(updated)
                 val effectiveVoices = updated.effectiveVoices()
-                binding.refreshVoices.isRefreshing = false
                 setVoiceItems(effectiveVoices)
                 updateVoiceMessage(updated)
                 requireContext().toastOnUi("已获取 ${effectiveVoices.size} 个发音人")
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                val message = error.localizedMessage ?: error.javaClass.simpleName
-                binding.textVoiceMessage.isVisible = true
-                binding.textVoiceMessage.text = "获取失败：$message"
-                requireContext().toastOnUi("获取发音人失败")
+                if (
+                    refreshRevision == voiceRefreshRevision &&
+                    currentEngineId == requestedEngineId
+                ) {
+                    val message = error.localizedMessage ?: error.javaClass.simpleName
+                    voiceControlsState = voiceControlsState.copy(message = "获取失败：$message")
+                    requireContext().toastOnUi("获取发音人失败")
+                }
             } finally {
-                binding.refreshVoices.isRefreshing = false
-                binding.refreshVoices.isEnabled =
-                    currentDisplayedEngine()?.supportsVoiceFetch() == true
+                if (refreshRevision == voiceRefreshRevision) {
+                    voiceRefreshing = false
+                    voiceRefreshEnabled = currentEngineId == requestedEngineId &&
+                        currentDisplayedEngine()?.supportsVoiceFetch() == true
+                    voiceRefreshJob = null
+                }
             }
         }
     }
@@ -1644,22 +1547,44 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
         voice: TtsVoice,
         styles: List<TtsVoiceStyle>
     ) {
-        val context = context ?: return
-        val items = buildList<CharSequence> {
+        if (context == null) return
+        val items = buildList {
             add("默认")
             styles.forEach { add(it.displayName) }
         }
-        context.selector("试听风格", items) { _, index ->
-            previewVoice(
-                engine = engine,
-                voice = voice,
-                styleId = styles.getOrNull(index - 1)?.id
-            )
-            requireContext().putPrefString(
-                previewStylePrefKey(engine),
-                styles.getOrNull(index - 1)?.id.orEmpty()
-            )
+        modalDialog?.dismiss()
+        val dialog = ComponentDialog(requireContext())
+        val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(updateSystemBars = false) {
+                    TtsPreviewStyleDialogContent(
+                        items = items,
+                        onSelect = { index ->
+                            dialog.dismiss()
+                            previewVoice(
+                                engine = engine,
+                                voice = voice,
+                                styleId = styles.getOrNull(index - 1)?.id
+                            )
+                            requireContext().putPrefString(
+                                previewStylePrefKey(engine),
+                                styles.getOrNull(index - 1)?.id.orEmpty()
+                            )
+                        },
+                    )
+                }
+            }
         }
+        dialog.setContentView(composeView)
+        dialog.setOnDismissListener {
+            if (modalDialog === dialog) {
+                modalDialog = null
+            }
+        }
+        modalDialog = dialog
+        dialog.show()
+        dialog.applyNgWindow()
     }
 
     private fun savedPreviewStyleId(
@@ -1696,7 +1621,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
     private fun measureCurrentEngineLatency() {
         val source = currentDisplayedEngine() ?: return
         val engine = if (sourceMode) {
-            val script = binding.editScriptCode.text?.toString()?.takeIf { it.isNotBlank() }
+            val script = scriptEditorView?.text?.toString()?.takeIf { it.isNotBlank() }
                 ?: source.script
             engineFromState(source, script)
         } else {
@@ -1756,10 +1681,7 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             engine.effectiveVoices().isEmpty() -> getString(R.string.tts_voice_not_loaded)
             else -> null
         }
-        binding.textVoiceMessage.isVisible = message != null
-        if (message != null) {
-            binding.textVoiceMessage.text = message
-        }
+        voiceControlsState = voiceControlsState.copy(message = message)
     }
 
     private fun confirmDeleteEngine(
@@ -1771,532 +1693,41 @@ class TtsEngineConfigFragment : BaseFragment(R.layout.fragment_tts_engine_config
             onCancel()
             return
         }
-        alert(getString(R.string.delete)) {
-            setMessage(getString(R.string.sure_del_any, engine.name))
-            okButton { dialog ->
-                dialog.dismiss()
-                if (TtsEngineStore.deleteEngine(engine.id)) {
-                    requireContext().toastOnUi("已删除朗读引擎")
-                    onDeleted()
-                } else {
-                    onCancel()
-                }
-            }
-            cancelButton {
-                onCancel()
-            }
-        }
-    }
-
-    private inner class ConfigRuleAdapter :
-        RecyclerView.Adapter<ConfigRuleAdapter.ViewHolder>() {
-
-        var enabled: Boolean = true
-            @SuppressLint("NotifyDataSetChanged")
-            set(value) {
-                field = value
-                notifyDataSetChanged()
-            }
-
-        var editEntities: ArrayList<ConfigField> = ArrayList()
-            @SuppressLint("NotifyDataSetChanged")
-            set(value) {
-                field = value
-                notifyDataSetChanged()
-            }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            return ViewHolder(
-                ItemTtsConfigFieldBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            )
-        }
-
-        override fun getItemCount(): Int = editEntities.size
-
-        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(editEntities[position])
-        }
-
-        inner class ViewHolder(private val binding: ItemTtsConfigFieldBinding) :
-            RecyclerView.ViewHolder(binding.root) {
-
-            fun bind(field: ConfigField) = binding.run {
-                editText.getTag(R.id.tag2)?.let {
-                    if (it is TextWatcher) {
-                        editText.removeTextChangedListener(it)
-                    }
-                }
-                editText.setTag(R.id.tag2, null)
-                editPassword.getTag(R.id.tag2)?.let {
-                    if (it is TextWatcher) {
-                        editPassword.removeTextChangedListener(it)
-                    }
-                }
-                editPassword.setTag(R.id.tag2, null)
-                spinnerValue.onItemSelectedListener = null
-                switchValue.setOnCheckedChangeListener(null)
-                buttonTogglePassword.setOnClickListener(null)
-
-                textLabel.text = field.label
-                textLabel.isVisible = true
-                editText.isVisible = false
-                layoutPassword.isVisible = false
-                spinnerValue.isVisible = false
-                layoutSwitch.isVisible = false
-
-                when (field.type) {
-                    "select" -> bindSelectField(field)
-                    "boolean" -> bindBooleanField(field)
-                    "password" -> bindPasswordField(field)
-                    "number" -> bindTextField(
-                        field = field,
-                        inputType = InputType.TYPE_CLASS_NUMBER or
-                                InputType.TYPE_NUMBER_FLAG_DECIMAL or
-                                InputType.TYPE_NUMBER_FLAG_SIGNED
-                    )
-                    else -> bindTextField(
-                        field = field,
-                        inputType = InputType.TYPE_CLASS_TEXT or
-                                InputType.TYPE_TEXT_VARIATION_NORMAL
+        modalDialog?.dismiss()
+        val dialog = ComponentDialog(requireContext())
+        val composeView = androidx.compose.ui.platform.ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setContent {
+                NgAppTheme(updateSystemBars = false) {
+                    TtsConfirmDialogContent(
+                        title = getString(R.string.delete),
+                        message = getString(R.string.sure_del_any, engine.name),
+                        onCancel = {
+                            dialog.dismiss()
+                            onCancel()
+                        },
+                        onConfirm = {
+                            dialog.dismiss()
+                            if (TtsEngineStore.deleteEngine(engine.id)) {
+                                requireContext().toastOnUi("已删除朗读引擎")
+                                onDeleted()
+                            } else {
+                                onCancel()
+                            }
+                        },
                     )
                 }
             }
-
-            private fun bindTextField(
-                field: ConfigField,
-                inputType: Int
-            ) = binding.run {
-                editText.isVisible = true
-                editText.setBackgroundResource(R.drawable.ng_bg_tts_config_field)
-                editText.backgroundTintList = null
-                editText.setTag(R.id.tag, field.key)
-                editText.maxLines = 1
-                editText.inputType = inputType
-                editText.transformationMethod = SingleLineTransformationMethod.getInstance()
-                editText.isEnabled = enabled
-                editText.setText(field.value.orEmpty())
-                val textWatcher = object : TextWatcher {
-                    override fun beforeTextChanged(
-                        s: CharSequence,
-                        start: Int,
-                        count: Int,
-                        after: Int
-                    ) {
-                    }
-
-                    override fun onTextChanged(
-                        s: CharSequence,
-                        start: Int,
-                        before: Int,
-                        count: Int
-                    ) {
-                    }
-
-                    override fun afterTextChanged(s: Editable?) {
-                        field.value = s?.toString()
-                    }
-                }
-                editText.addTextChangedListener(textWatcher)
-                editText.setTag(R.id.tag2, textWatcher)
-                editText.clearFocus()
-            }
-
-            private fun bindPasswordField(field: ConfigField) = binding.run {
-                layoutPassword.isVisible = true
-                layoutPassword.isEnabled = enabled
-                editPassword.isEnabled = enabled
-                editPassword.setTag(R.id.tag, field.key)
-                updatePasswordVisibility(field)
-                editPassword.setText(field.value.orEmpty())
-                val textWatcher = object : TextWatcher {
-                    override fun beforeTextChanged(
-                        s: CharSequence,
-                        start: Int,
-                        count: Int,
-                        after: Int
-                    ) {
-                    }
-
-                    override fun onTextChanged(
-                        s: CharSequence,
-                        start: Int,
-                        before: Int,
-                        count: Int
-                    ) {
-                    }
-
-                    override fun afterTextChanged(s: Editable?) {
-                        field.value = s?.toString()
-                    }
-                }
-                editPassword.addTextChangedListener(textWatcher)
-                editPassword.setTag(R.id.tag2, textWatcher)
-                buttonTogglePassword.isEnabled = enabled
-                buttonTogglePassword.setOnClickListener {
-                    field.passwordVisible = !field.passwordVisible
-                    updatePasswordVisibility(field)
-                }
-                editPassword.clearFocus()
-            }
-
-            private fun updatePasswordVisibility(field: ConfigField) = binding.run {
-                val selection = editPassword.selectionStart.coerceAtLeast(0)
-                editPassword.inputType = if (field.passwordVisible) {
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                } else {
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                }
-                editPassword.transformationMethod = if (field.passwordVisible) {
-                    SingleLineTransformationMethod.getInstance()
-                } else {
-                    PasswordTransformationMethod.getInstance()
-                }
-                buttonTogglePassword.setImageResource(
-                    if (field.passwordVisible) {
-                        R.drawable.ic_visibility
-                    } else {
-                        R.drawable.ic_visibility_off
-                    }
-                )
-                editPassword.setSelection(selection.coerceAtMost(editPassword.text?.length ?: 0))
-            }
-
-            private fun bindSelectField(field: ConfigField) = binding.run {
-                spinnerValue.isVisible = true
-                spinnerValue.setBackgroundResource(R.drawable.ng_bg_tts_spinner_compact)
-                spinnerValue.backgroundTintList = null
-                spinnerValue.isEnabled = enabled
-                val currentValue = field.value.orEmpty()
-                val items = buildList {
-                    if (currentValue.isNotBlank() && field.values.none { it.value == currentValue }) {
-                        add(TtsScriptOptionValue(label = currentValue, value = currentValue))
-                    }
-                    addAll(field.values)
-                }.distinctBy { it.value }
-                    .ifEmpty { listOf(TtsScriptOptionValue(label = currentValue, value = currentValue)) }
-                spinnerValue.adapter = ArrayAdapter(
-                    requireContext(),
-                    R.layout.item_tts_spinner_text,
-                    items.map { it.label }
-                ).apply {
-                    setDropDownViewResource(R.layout.item_tts_spinner_dropdown)
-                }
-                val selectedIndex = items.indexOfFirst { it.value == currentValue }.coerceAtLeast(0)
-                field.value = items.getOrNull(selectedIndex)?.value.orEmpty()
-                spinnerValue.setSelection(selectedIndex)
-                spinnerValue.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(
-                        parent: AdapterView<*>?,
-                        view: View?,
-                        position: Int,
-                        id: Long
-                    ) {
-                        field.value = items.getOrNull(position)?.value.orEmpty()
-                    }
-
-                    override fun onNothingSelected(parent: AdapterView<*>?) {
-                    }
-                }
-            }
-
-            private fun bindBooleanField(field: ConfigField) = binding.run {
-                textLabel.isVisible = false
-                layoutSwitch.isVisible = true
-                textSwitchLabel.text = field.label
-                switchValue.isEnabled = enabled
-                switchValue.isChecked = field.value.toBooleanOption()
-                switchValue.setOnCheckedChangeListener { _, isChecked ->
-                    field.value = isChecked.toString()
-                }
+        }
+        dialog.setContentView(composeView)
+        dialog.setOnDismissListener {
+            if (modalDialog === dialog) {
+                modalDialog = null
             }
         }
+        modalDialog = dialog
+        dialog.show()
+        dialog.applyNgWindow()
     }
 
-    private fun String?.toBooleanOption(): Boolean {
-        return when (this?.trim()?.lowercase()) {
-            "true", "1", "yes", "y", "on", "enable", "enabled", "启用", "是" -> true
-            else -> false
-        }
-    }
-
-    private inner class VoiceAdapter :
-        RecyclerAdapter<TtsVoice, ItemTtsVoiceBinding>(requireContext()) {
-
-        private var previewStatus = TtsVoicePreviewStatus(
-            key = null,
-            state = TtsVoicePreviewState.IDLE
-        )
-
-        fun updatePreviewStatus(status: TtsVoicePreviewStatus) {
-            val affectedKeys = listOfNotNull(previewStatus.key, status.key).distinct()
-            previewStatus = status
-            affectedKeys.forEach { key ->
-                val position = getItems().indexOfFirst { item -> previewKey(item) == key }
-                if (position >= 0) notifyItemChanged(position)
-            }
-        }
-
-        override fun getViewBinding(parent: ViewGroup): ItemTtsVoiceBinding {
-            return ItemTtsVoiceBinding.inflate(inflater, parent, false)
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemTtsVoiceBinding,
-            item: TtsVoice,
-            payloads: MutableList<Any>
-        ) {
-            val engine = currentDisplayedEngine()
-            val isSystemEngine = engine?.type == TtsEngineType.SYSTEM
-            val enabled = if (isSystemEngine) {
-                engine.enabled
-            } else {
-                engine?.isVoiceEnabled(item) != false
-            }
-            binding.root.alpha = when {
-                isSystemEngine -> 1f
-                enabled -> 1f
-                else -> 0.48f
-            }
-            TtsVoiceCardBinder.bind(
-                context = requireContext(),
-                binding = binding,
-                item = item,
-                engine = engine,
-                isSystemEngine = isSystemEngine,
-                showControls = true
-            )
-            TtsVoiceCardBinder.bindPreviewState(
-                context = requireContext(),
-                binding = binding,
-                state = previewStatus.takeIf { it.key == previewKey(item) }
-                    ?.state
-                    ?: TtsVoicePreviewState.IDLE
-            )
-            binding.switchEnabled.setOnCheckedChangeListener(null)
-            binding.switchEnabled.isChecked = enabled
-            binding.switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-                if (isSystemEngine) {
-                    saveEnabledState(isChecked)
-                    refreshEngines()
-                } else {
-                    val engineId = currentEngineId ?: return@setOnCheckedChangeListener
-                    val updated = TtsEngineStore.setVoiceEnabled(engineId, item.id, isChecked)
-                    if (updated != null) {
-                        detailEngineSnapshot = updated
-                    }
-                    binding.root.alpha = if (isChecked) 1f else 0.48f
-                    updateVoiceHeader()
-                    refreshEngines()
-                }
-            }
-        }
-
-        private fun bindVoiceHeaderTags(
-            binding: ItemTtsVoiceBinding,
-            item: TtsVoice,
-            isSystemEngine: Boolean
-        ) {
-            bindGenderIcon(binding, item.takeUnless { isSystemEngine }?.gender)
-            val languageLabels = item.takeUnless { isSystemEngine }
-                ?.language
-                ?.let { TtsVoiceFilterSupport.languageLabels(it) }
-                .orEmpty()
-            binding.layoutLanguageTags.removeAllViews()
-            binding.layoutLanguageTags.isVisible = languageLabels.isNotEmpty()
-            languageLabels.forEach { label ->
-                binding.layoutLanguageTags.addView(
-                    createLanguageTagView(binding.layoutLanguageTags, label)
-                )
-            }
-            binding.layoutHeaderTags.removeAllViews()
-            val style = item.takeUnless { isSystemEngine }?.style?.takeIf { it.isNotBlank() }
-            binding.layoutHeaderTags.isVisible = style != null
-            style?.let {
-                binding.layoutHeaderTags.addView(
-                    createVoiceTagView(binding.layoutHeaderTags, coloredVoiceTag(it, 0))
-                )
-            }
-        }
-
-        private fun bindGenderIcon(binding: ItemTtsVoiceBinding, gender: String?) {
-            when (gender?.takeIf { it.isNotBlank() }?.lowercase()) {
-                "male", "man" -> {
-                    binding.imageGender.isVisible = true
-                    binding.imageGender.setImageResource(R.drawable.ic_tts_gender_male)
-                    binding.imageGender.imageTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(requireContext(), R.color.ng_tts_gender_male)
-                    )
-                }
-                "female", "woman" -> {
-                    binding.imageGender.isVisible = true
-                    binding.imageGender.setImageResource(R.drawable.ic_tts_gender_female)
-                    binding.imageGender.imageTintList = ColorStateList.valueOf(
-                        ContextCompat.getColor(requireContext(), R.color.ng_tts_gender_female)
-                    )
-                }
-                else -> {
-                    binding.imageGender.isVisible = false
-                    binding.imageGender.setImageDrawable(null)
-                    binding.imageGender.imageTintList = null
-                }
-            }
-        }
-
-        private fun bindVoiceTags(
-            binding: ItemTtsVoiceBinding,
-            item: TtsVoice,
-            engine: TtsEngineSetting?,
-            isSystemEngine: Boolean
-        ) {
-            val container = binding.layoutTags
-            container.removeAllViews()
-            val tags = if (isSystemEngine) {
-                listOf(VoiceTag(engine?.name.orEmpty().ifBlank { item.id }))
-            } else {
-                buildVoiceTags(item)
-            }
-            binding.scrollTags.isVisible = tags.isNotEmpty()
-            tags.forEach { tag ->
-                container.addView(createVoiceTagView(container, tag))
-            }
-        }
-
-        private fun buildVoiceTags(item: TtsVoice): List<VoiceTag> {
-            val values = item.tags.filter { it.isNotBlank() }.distinct()
-            if (values.isEmpty() && item.style.isNullOrBlank()) {
-                return listOf(VoiceTag(item.id))
-            }
-            return values.mapIndexed { index, value -> coloredVoiceTag(value, index) }
-        }
-
-        private fun coloredVoiceTag(text: String, index: Int): VoiceTag {
-            return when (index % 5) {
-                0 -> VoiceTag(
-                    text = text,
-                    backgroundRes = R.drawable.ng_bg_tts_voice_tag_blue,
-                    colorRes = R.color.ng_tts_tag_blue
-                )
-                1 -> VoiceTag(
-                    text = text,
-                    backgroundRes = R.drawable.ng_bg_tts_voice_tag_purple,
-                    colorRes = R.color.ng_tts_tag_purple
-                )
-                2 -> VoiceTag(
-                    text = text,
-                    backgroundRes = R.drawable.ng_bg_tts_voice_tag_orange,
-                    colorRes = R.color.ng_tts_tag_orange
-                )
-                3 -> VoiceTag(
-                    text = text,
-                    backgroundRes = R.drawable.ng_bg_tts_voice_tag_green,
-                    colorRes = R.color.ng_tts_tag_green
-                )
-                else -> VoiceTag(
-                    text = text,
-                    backgroundRes = R.drawable.ng_bg_tts_voice_tag_pink,
-                    colorRes = R.color.ng_tts_tag_pink
-                )
-            }
-        }
-
-        private fun createLanguageTagView(container: LinearLayout, text: String): TextView {
-            val context = container.context
-            return TextView(context).apply {
-                this.text = text
-                gravity = Gravity.CENTER
-                includeFontPadding = false
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-                setTextColor(ContextCompat.getColor(context, R.color.ng_tts_language))
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setBackgroundResource(R.drawable.ng_bg_tts_language_tag)
-                layoutParams = LinearLayout.LayoutParams(
-                    if (text.length <= 1) 24.dpToPx() else 34.dpToPx(),
-                    LinearLayout.LayoutParams.MATCH_PARENT
-                ).apply {
-                    marginEnd = 4.dpToPx()
-                }
-            }
-        }
-
-        private fun createVoiceTagView(container: LinearLayout, tag: VoiceTag): TextView {
-            val context = container.context
-            val textColor = ContextCompat.getColor(context, tag.colorRes)
-            return TextView(context).apply {
-                text = tag.text
-                gravity = Gravity.CENTER
-                includeFontPadding = false
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-                setTextColor(textColor)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setBackgroundResource(tag.backgroundRes)
-                setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
-                minWidth = 0
-                maxWidth = 116.dpToPx()
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.MATCH_PARENT
-                ).apply {
-                    marginEnd = 6.dpToPx()
-                }
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemTtsVoiceBinding) {
-            binding.layoutPreviewButton.setOnClickListener {
-                showPreviewClickFeedback(binding.imagePreview)
-                getItemByLayoutPosition(holder.layoutPosition)?.let {
-                    previewCurrentVoice(it)
-                }
-            }
-            binding.layoutPreviewButton.setOnLongClickListener {
-                showPreviewClickFeedback(binding.imagePreview)
-                getItemByLayoutPosition(holder.layoutPosition)?.let { voice ->
-                    val engine = currentDisplayedEngine()
-                        ?: return@setOnLongClickListener true
-                    val styles = voice.styleOptions()
-                    if (styles.isEmpty()) {
-                        requireContext().toastOnUi("当前发音人没有可选风格")
-                    } else {
-                        showPreviewStyleSelector(engine, voice, styles)
-                    }
-                }
-                true
-            }
-        }
-
-        private fun previewKey(item: TtsVoice): String? {
-            val engine = currentDisplayedEngine() ?: return null
-            return TtsVoicePreviewController.keyOf(
-                engine = engine,
-                voice = item,
-                systemDefault = engine.type == TtsEngineType.SYSTEM
-            )
-        }
-
-        private fun showPreviewClickFeedback(view: ImageView) {
-            view.animate().cancel()
-            view.scaleX = 0.88f
-            view.scaleY = 0.88f
-            view.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(180L)
-                .start()
-        }
-    }
-
-    private data class VoiceGenderFilter(
-        val label: String,
-        val iconRes: Int,
-        val colorRes: Int
-    )
-
-    private data class VoiceTag(
-        val text: String,
-        val backgroundRes: Int = R.drawable.ng_bg_tag_neutral,
-        val colorRes: Int = R.color.ng_on_surface_variant
-    )
 }

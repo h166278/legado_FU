@@ -150,6 +150,16 @@ object BackupConfig {
 internal object BackupRestorePolicy {
 
     val themeConfigPreferenceKeys = setOf(
+        PreferKey.ngThemePresentationMode,
+        PreferKey.ngStandardThemeMode,
+        PreferKey.ngInternalThemeMode,
+        PreferKey.ngDynamicScenePreset,
+        PreferKey.ngDynamicSceneSakuraColors,
+        PreferKey.ngDynamicSceneCatsColors,
+        PreferKey.ngSoftGradientColor,
+        PreferKey.ngSoftGradientColorMode,
+        PreferKey.ngSoftGradientCustomColor,
+        PreferKey.ngSoftGradientLightField,
         PreferKey.cPrimary,
         PreferKey.cAccent,
         PreferKey.cBackground,
@@ -205,8 +215,14 @@ internal object BackupRestorePolicy {
 
     fun shouldRestoreReadConfigs(isMd3Backup: Boolean): Boolean = !isMd3Backup
 
+    fun shouldRestoreHighlightRules(isMd3Backup: Boolean): Boolean = !isMd3Backup
+
     fun shouldRestorePreference(key: String, isMd3Backup: Boolean): Boolean {
-        if (key == PreferKey.themeMode || key == PreferKey.readNightTheme) return false
+        if (
+            key == PreferKey.themeMode ||
+            key == PreferKey.readNightTheme ||
+            key == PreferKey.readThemeMode
+        ) return false
         if (key in themeConfigPreferenceKeys) return false
         return !isMd3Backup || key !in md3ReadStylePreferenceKeys
     }

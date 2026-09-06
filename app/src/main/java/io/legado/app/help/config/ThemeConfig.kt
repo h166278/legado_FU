@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.util.DisplayMetrics
@@ -15,6 +16,7 @@ import io.legado.app.constant.Theme
 import io.legado.app.help.DefaultData
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.model.BookCover
+import io.legado.app.ui.design.theme.NgThemeGradientDrawable
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.design.theme.NgColorGenerationMode
 import io.legado.app.utils.BitmapUtils
@@ -117,6 +119,7 @@ internal fun resolveReinstalledThemeBackgroundPath(
 object ThemeConfig {
     const val configFileName = "themeConfig.json"
     private const val ASSET_BACKGROUND_PREFIX = "asset://"
+    private const val DYNAMIC_SCENE_BACKGROUND_CACHE_KEY = "ngDynamicSceneBackground"
     private const val THEME_MODE_FOLLOW_SYSTEM = "0"
     private const val THEME_MODE_DARK = "2"
     private const val THEME_MODE_EINK = "3"
@@ -132,6 +135,21 @@ object ThemeConfig {
     }
 
     private var needClearImg = true
+    private data class BackgroundBitmapCacheKey(
+        val path: String,
+        val lastModified: Long,
+        val width: Int,
+        val height: Int,
+        val blur: Int,
+    )
+
+    private data class BackgroundBitmapCache(
+        val key: BackgroundBitmapCacheKey,
+        val bitmap: Bitmap,
+    )
+
+    @Volatile
+    private var backgroundBitmapCache: BackgroundBitmapCache? = null
 
     private fun resolveTheme(isNightTheme: Boolean) = when {
         AppConfig.isEInkMode -> Theme.EInk
@@ -148,12 +166,23 @@ object ThemeConfig {
     }
 
     fun isReadingNgBackgroundTheme(context: Context): Boolean {
+        if (AppConfig.isEInkMode) return false
+        if (NgThemeModeStore.current(context) != NgThemePresentationMode.STANDARD) {
+            return false
+        }
         val backgroundKey = if (getTheme(context) == Theme.Dark) {
             PreferKey.bgImageN
         } else {
             PreferKey.bgImage
         }
         return !context.getPrefString(backgroundKey).isNullOrBlank()
+    }
+
+    fun getGradientBgImage(context: Context): Drawable? {
+        if (NgThemeModeStore.current(context) != NgThemePresentationMode.SOFT_GRADIENT) {
+            return null
+        }
+        return NgThemeGradientDrawable(NgSoftGradientTheme.gradient(context))
     }
 
     fun getReadingNgImageSurfaceColor(context: Context): Int {
@@ -306,14 +335,27 @@ object ThemeConfig {
             }
     }
 
+    @Synchronized
     fun getBgImage(context: Context, metrics: DisplayMetrics): Drawable? {
+        val presentationMode = NgThemeModeStore.current(context)
+        if (presentationMode == NgThemePresentationMode.SOFT_GRADIENT) {
+            return null
+        }
         val themeMode = getTheme(context)
         val preferenceKey = when (themeMode) {
             Theme.Light -> PreferKey.bgImage
             Theme.Dark -> PreferKey.bgImageN
             else -> return  null
         }
-        var path = context.getPrefString(preferenceKey)
+        val sceneBackground = if (
+            presentationMode == NgThemePresentationMode.DYNAMIC_SCENE
+        ) {
+            val theme = NgDynamicSceneTheme.theme(context)
+            if (themeMode == Theme.Dark) theme.darkBackground else theme.lightBackground
+        } else {
+            null
+        }
+        var path = sceneBackground?.path ?: context.getPrefString(preferenceKey)
         if (path.isNullOrBlank()) return null
         if (path.startsWith("http")) {
             val name = getUrlToFile(path)
@@ -326,23 +368,44 @@ object ThemeConfig {
             path = filePath
         }
         if (path.startsWith(ASSET_BACKGROUND_PREFIX)) {
-            path = copyAssetBackgroundIfNeed(context, preferenceKey, path)
+            path = copyAssetBackgroundIfNeed(
+                context,
+                if (sceneBackground != null) {
+                    DYNAMIC_SCENE_BACKGROUND_CACHE_KEY
+                } else {
+                    preferenceKey
+                },
+                path,
+            )
         }
         if (path.endsWith(".9.png")) {
             val bgDrawable = BitmapUtils.decodeNinePatchDrawable(path)
             return bgDrawable
         }
-        val bgImgBlu = when (themeMode) {
+        val bgImgBlu = sceneBackground?.blur ?: when (themeMode) {
             Theme.Light -> context.getPrefInt(PreferKey.bgImageBlurring, 0)
             Theme.Dark -> context.getPrefInt(PreferKey.bgImageNBlurring, 0)
             Theme.EInk -> 0
         }
-        val bgImage = BitmapUtils
-            .decodeBitmap(path, metrics.widthPixels, metrics.heightPixels)
-        if (bgImgBlu == 0) {
-            return bgImage?.toDrawable(context.resources)
-        }
-        return bgImage?.stackBlur(bgImgBlu)?.toDrawable(context.resources)
+        val cacheKey = BackgroundBitmapCacheKey(
+            path = path,
+            lastModified = File(path).lastModified(),
+            width = metrics.widthPixels,
+            height = metrics.heightPixels,
+            blur = bgImgBlu,
+        )
+        backgroundBitmapCache
+            ?.takeIf { it.key == cacheKey && !it.bitmap.isRecycled }
+            ?.let { return it.bitmap.toDrawable(context.resources) }
+
+        val decoded = BitmapUtils.decodeBitmap(
+            path,
+            metrics.widthPixels,
+            metrics.heightPixels,
+        ) ?: return null
+        val rendered = if (bgImgBlu == 0) decoded else decoded.stackBlur(bgImgBlu)
+        backgroundBitmapCache = BackgroundBitmapCache(cacheKey, rendered)
+        return rendered.toDrawable(context.resources)
     }
 
     fun upConfig() {
@@ -745,20 +808,29 @@ object ThemeConfig {
                     .apply()
             return@with
         }
-        val colorConfig = NgColorConfigStore.current(this)
+        val presentationMode = NgThemeModeStore.current(this)
+        val softGradient = presentationMode == NgThemePresentationMode.SOFT_GRADIENT
+        val dynamicScene = presentationMode == NgThemePresentationMode.DYNAMIC_SCENE
+        val colorConfig = when {
+            softGradient -> NgSoftGradientTheme.colors(this)
+            dynamicScene -> NgDynamicSceneTheme.colors(this)
+            else -> NgColorConfigStore.current(this)
+        }
         val colors = NgThemeResolver.resolveColorScheme(
             context = this,
             colors = colorConfig,
-            isDark = isNightTheme
+            isDark = if (softGradient) false else isNightTheme
         )
         val manual = colorConfig.takeIf { it.mode == NgColorGenerationMode.MANUAL }
-            ?.manualColors(isNightTheme)
+            ?.manualColors(if (softGradient) false else isNightTheme)
         ThemeStore.editTheme(this)
             .primaryColor(manual?.secondary ?: colors.topBarContainer)
             .accentColor(colors.primary)
             .backgroundColor(colors.background)
             .bottomBackground(manual?.labelContainer ?: colors.surfaceContainerLow)
-            .transparentNavBar(getPrefBoolean(PreferKey.tNavBar, false))
+            .transparentNavBar(
+                softGradient || dynamicScene || getPrefBoolean(PreferKey.tNavBar, false)
+            )
             .apply()
     }
 

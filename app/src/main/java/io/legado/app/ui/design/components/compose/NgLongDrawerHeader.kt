@@ -3,6 +3,7 @@ package io.legado.app.ui.design.components.compose
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,10 +43,19 @@ fun NgLongDrawerHeader(
     actionContentDescription: String? = null,
     actionActive: Boolean = false,
     onActionClick: (() -> Unit)? = null,
+    trailingActionText: String? = null,
+    onTrailingActionClick: (() -> Unit)? = null,
+    secondaryTrailingActionText: String? = null,
+    onSecondaryTrailingActionClick: (() -> Unit)? = null,
+    @DrawableRes secondaryActionIconRes: Int? = null,
+    secondaryActionContentDescription: String? = null,
+    secondaryActionActive: Boolean = false,
+    onSecondaryActionClick: (() -> Unit)? = null,
     centerTitle: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = NgTheme.colors
+    val hasSecondaryAction = secondaryActionIconRes != null && onSecondaryActionClick != null
     Column(modifier = modifier.fillMaxWidth()) {
         NgDrawerDragHandle(variant = NgDrawerDragHandleVariant.COMPACT)
         Row(
@@ -54,12 +65,14 @@ fun NgLongDrawerHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (centerTitle) {
-                DrawerHeaderIconSlot(
-                    iconRes = navigationIconRes,
-                    contentDescription = navigationContentDescription,
-                    active = false,
-                    onClick = onNavigationClick,
-                )
+                repeat(if (hasSecondaryAction) 2 else 1) { index ->
+                    DrawerHeaderIconSlot(
+                        iconRes = navigationIconRes.takeIf { index == 0 },
+                        contentDescription = navigationContentDescription.takeIf { index == 0 },
+                        active = false,
+                        onClick = onNavigationClick.takeIf { index == 0 },
+                    )
+                }
             } else if (navigationIconRes != null && onNavigationClick != null) {
                 DrawerHeaderIconSlot(
                     iconRes = navigationIconRes,
@@ -99,6 +112,14 @@ fun NgLongDrawerHeader(
                     )
                 }
             }
+            if (hasSecondaryAction) {
+                DrawerHeaderIconSlot(
+                    iconRes = secondaryActionIconRes,
+                    contentDescription = secondaryActionContentDescription,
+                    active = secondaryActionActive,
+                    onClick = onSecondaryActionClick,
+                )
+            }
             if (centerTitle) {
                 DrawerHeaderIconSlot(
                     iconRes = actionIconRes,
@@ -114,7 +135,37 @@ fun NgLongDrawerHeader(
                     onClick = onActionClick,
                 )
             }
+            DrawerHeaderTextAction(
+                text = secondaryTrailingActionText,
+                onClick = onSecondaryTrailingActionClick,
+            )
+            DrawerHeaderTextAction(
+                text = trailingActionText,
+                onClick = onTrailingActionClick,
+            )
         }
+    }
+}
+
+@Composable
+private fun DrawerHeaderTextAction(
+    text: String?,
+    onClick: (() -> Unit)?,
+) {
+    if (text.isNullOrBlank() || onClick == null) return
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.height(40.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp),
+    ) {
+        Text(
+            text = text,
+            color = Color(NgTheme.colors.primary),
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
     }
 }
 

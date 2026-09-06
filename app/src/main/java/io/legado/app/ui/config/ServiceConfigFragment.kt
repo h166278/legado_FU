@@ -3,89 +3,107 @@ package io.legado.app.ui.config
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
-import androidx.preference.Preference
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.preference.PreferenceManager
 import io.legado.app.R
+import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.prefs.SwitchPreference
-import io.legado.app.lib.prefs.fragment.PreferenceFragment
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.service.McpService
 import io.legado.app.service.WebService
-import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.ui.design.theme.NgAppTheme
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.observeEventSticky
+import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.openUrl
 
-class ServiceConfigFragment : PreferenceFragment(),
+class ServiceConfigFragment : BaseFragment(R.layout.fragment_service_config),
     SharedPreferences.OnSharedPreferenceChangeListener {
 
-    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+    private var screenState by mutableStateOf(ServiceConfigScreenState())
+    private var activeDialog by mutableStateOf<ServiceConfigDialog?>(null)
+    private lateinit var sharedPreferences: SharedPreferences
+
+    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        activity?.setTitle(R.string.service_manage)
         putPrefBoolean(PreferKey.webService, WebService.isRun)
         putPrefBoolean(PreferKey.mcpService, McpService.isRun)
-        addPreferencesFromResource(R.xml.pref_config_service)
-        ConfigPreferenceStyle.applyTo(preferenceScreen)
-        updateWebPreference()
-        updateMcpPreference()
-        upPortSummary(PreferKey.webPort, AppConfig.webPort)
-        upPortSummary(PreferKey.mcpPort, AppConfig.mcpPort)
-        findPreference<SwitchPreference>(PreferKey.webService)?.onLongClick {
-            if (!WebService.isRun) return@onLongClick false
-            showAddressMenu(it.summary.toString())
-            true
-        }
-        findPreference<SwitchPreference>(PreferKey.mcpService)?.onLongClick {
-            if (!McpService.isRun) return@onLongClick false
-            showAddressMenu(it.summary.toString())
-            true
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        sharedPreferences.registerOnSharedPreferenceChangeListener(this)
+        refreshContent()
+        (view as ComposeView).apply {
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+            )
+            setContent {
+                NgAppTheme {
+                    ServiceConfigScreen(
+                        state = screenState,
+                        onWebServiceChanged = ::setWebService,
+                        onWebServiceLongClick = {
+                            if (WebService.isRun) {
+                                activeDialog = ServiceConfigDialog.WEB_ADDRESS
+                            }
+                        },
+                        onWebPortChanged = ::setWebPortDraft,
+                        onWebPortChangeFinished = ::saveWebPort,
+                        onWebServiceWakeLockChanged = ::setWebServiceWakeLock,
+                        onMcpServiceChanged = ::setMcpService,
+                        onMcpServiceLongClick = {
+                            if (McpService.isRun) {
+                                activeDialog = ServiceConfigDialog.MCP_ADDRESS
+                            }
+                        },
+                        onMcpPortChanged = ::setMcpPortDraft,
+                        onMcpPortChangeFinished = ::saveMcpPort,
+                    )
+                    ServiceConfigDialogHost(
+                        dialog = activeDialog,
+                        webAddress = WebService.hostAddress,
+                        mcpAddress = McpService.hostAddress,
+                        onDismiss = { activeDialog = null },
+                        onAddressAction = { address, action ->
+                            activeDialog = null
+                            when (action) {
+                                ServiceAddressAction.COPY -> {
+                                    requireContext().sendToClip(address)
+                                }
+
+                                ServiceAddressAction.OPEN -> {
+                                    requireContext().openUrl(address)
+                                }
+                            }
+                        },
+                    )
+                }
+            }
         }
         observeEventSticky<String>(EventBus.WEB_SERVICE) {
-            updateWebPreference()
+            refreshContent()
         }
         observeEventSticky<String>(EventBus.MCP_SERVICE) {
-            updateMcpPreference()
+            refreshContent()
         }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
+    override fun onResume() {
+        super.onResume()
         activity?.setTitle(R.string.service_manage)
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
-        ConfigPreferenceStyle.applyListStyle(this)
-        listView.setEdgeEffectColor(primaryColor)
+        if (view != null) refreshContent()
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
-    }
-
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        when (preference.key) {
-            PreferKey.webPort -> NumberPickerDialog(requireContext())
-                .setTitle(getString(R.string.web_port_title))
-                .setMaxValue(60000)
-                .setMinValue(1024)
-                .setValue(AppConfig.webPort)
-                .show {
-                    AppConfig.webPort = it
-                }
-
-            PreferKey.mcpPort -> NumberPickerDialog(requireContext())
-                .setTitle(getString(R.string.mcp_port_title))
-                .setMaxValue(60000)
-                .setMinValue(1024)
-                .setValue(AppConfig.mcpPort)
-                .show {
-                    AppConfig.mcpPort = it
-                }
+    override fun onDestroyView() {
+        if (::sharedPreferences.isInitialized) {
+            sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
         }
-        return super.onPreferenceTreeClick(preference)
+        activeDialog = null
+        super.onDestroyView()
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
@@ -107,7 +125,7 @@ class ServiceConfigFragment : PreferenceFragment(),
             }
 
             PreferKey.webPort -> {
-                upPortSummary(PreferKey.webPort, AppConfig.webPort)
+                updatePortSummaries()
                 if (WebService.isRun) {
                     WebService.stop(requireContext())
                     WebService.start(requireContext())
@@ -115,50 +133,99 @@ class ServiceConfigFragment : PreferenceFragment(),
             }
 
             PreferKey.mcpPort -> {
-                upPortSummary(PreferKey.mcpPort, AppConfig.mcpPort)
+                updatePortSummaries()
                 if (McpService.isRun) {
                     McpService.stop(requireContext())
                     McpService.start(requireContext())
                 }
             }
+
+            PreferKey.webServiceWakeLock -> {
+                screenState = screenState.copy(
+                    webServiceWakeLock = getPrefBoolean(PreferKey.webServiceWakeLock),
+                )
+            }
         }
     }
 
-    private fun updateWebPreference() {
-        findPreference<SwitchPreference>(PreferKey.webService)?.let {
-            it.isChecked = WebService.isRun
-            it.summary = if (WebService.isRun) {
+    private fun refreshContent() {
+        screenState = ServiceConfigScreenState(
+            webServiceEnabled = WebService.isRun,
+            webServiceSummary = if (WebService.isRun) {
                 WebService.hostAddress
             } else {
                 getString(R.string.web_service_desc)
-            }
-        }
-    }
-
-    private fun updateMcpPreference() {
-        findPreference<SwitchPreference>(PreferKey.mcpService)?.let {
-            it.isChecked = McpService.isRun
-            it.summary = if (McpService.isRun) {
+            },
+            webPort = AppConfig.webPort,
+            webPortSummary = getString(
+                R.string.web_port_summary,
+                AppConfig.webPort.toString(),
+            ),
+            webServiceWakeLock = getPrefBoolean(PreferKey.webServiceWakeLock),
+            mcpServiceEnabled = McpService.isRun,
+            mcpServiceSummary = if (McpService.isRun) {
                 McpService.hostAddress
             } else {
                 getString(R.string.mcp_service_desc)
-            }
-        }
+            },
+            mcpPort = AppConfig.mcpPort,
+            mcpPortSummary = getString(
+                R.string.mcp_port_summary,
+                AppConfig.mcpPort.toString(),
+            ),
+        )
     }
 
-    private fun upPortSummary(key: String, port: Int) {
-        findPreference<Preference>(key)?.summary = when (key) {
-            PreferKey.mcpPort -> getString(R.string.mcp_port_summary, port.toString())
-            else -> getString(R.string.web_port_summary, port.toString())
-        }
+    private fun updatePortSummaries() {
+        screenState = screenState.copy(
+            webPort = AppConfig.webPort,
+            webPortSummary = getString(
+                R.string.web_port_summary,
+                AppConfig.webPort.toString(),
+            ),
+            mcpPort = AppConfig.mcpPort,
+            mcpPortSummary = getString(
+                R.string.mcp_port_summary,
+                AppConfig.mcpPort.toString(),
+            ),
+        )
     }
 
-    private fun showAddressMenu(address: String) {
-        context?.selector(arrayListOf("复制地址", "浏览器打开")) { _, i ->
-            when (i) {
-                0 -> context?.sendToClip(address)
-                1 -> context?.openUrl(address)
-            }
-        }
+    private fun setWebService(enabled: Boolean) {
+        screenState = screenState.copy(webServiceEnabled = enabled)
+        putPrefBoolean(PreferKey.webService, enabled)
     }
+
+    private fun setMcpService(enabled: Boolean) {
+        screenState = screenState.copy(mcpServiceEnabled = enabled)
+        putPrefBoolean(PreferKey.mcpService, enabled)
+    }
+
+    private fun setWebServiceWakeLock(enabled: Boolean) {
+        screenState = screenState.copy(webServiceWakeLock = enabled)
+        putPrefBoolean(PreferKey.webServiceWakeLock, enabled)
+    }
+
+    private fun setWebPortDraft(value: Int) {
+        screenState = screenState.copy(
+            webPort = value,
+            webPortSummary = getString(R.string.web_port_summary, value.toString()),
+        )
+    }
+
+    private fun saveWebPort() {
+        AppConfig.webPort = screenState.webPort
+    }
+
+    private fun setMcpPortDraft(value: Int) {
+        screenState = screenState.copy(
+            mcpPort = value,
+            mcpPortSummary = getString(R.string.mcp_port_summary, value.toString()),
+        )
+    }
+
+    private fun saveMcpPort() {
+        AppConfig.mcpPort = screenState.mcpPort
+    }
+
 }

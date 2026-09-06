@@ -43,6 +43,7 @@ import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.model.ListeningPlaybackCoordinator
 import io.legado.app.receiver.MediaButtonReceiver
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.entities.TextChapter
@@ -463,6 +464,7 @@ abstract class BaseReadAloudService : BaseService(),
     @SuppressLint("WakelockTimeout")
     open fun play() {
         if (playbackStateOwner !== this) return
+        ListeningPlaybackCoordinator.beforeReadAloud()
         if (useWakeLock) {
             wakeLock.acquire()
             wifiLock?.acquire()
@@ -512,6 +514,7 @@ abstract class BaseReadAloudService : BaseService(),
     @SuppressLint("WakelockTimeout")
     @CallSuper
     open fun resumeReadAloud() {
+        ListeningPlaybackCoordinator.beforeReadAloud()
         resumeReadAloudInternal()
     }
 
@@ -527,21 +530,23 @@ abstract class BaseReadAloudService : BaseService(),
 
     /**
      * 以播放器真实状态校正服务事件。服务重建时，旧实例的迟到回调不会覆盖新实例。
+     * @return 当前实例是否接受了这次真实播放状态。
      */
-    protected fun syncActualPlaybackState(isPlaying: Boolean) {
-        if (playbackStateOwner !== this) return
+    protected fun syncActualPlaybackState(isPlaying: Boolean): Boolean {
+        if (playbackStateOwner !== this) return false
+        if (isPlaying && pause) {
+            actualPlaybackConfirmed = false
+            return false
+        }
         val stateChanged = actualPlaybackConfirmed != isPlaying
         actualPlaybackConfirmed = isPlaying
-        if (isPlaying && pause) {
-            pause = false
-            needResumeOnAudioFocusGain = false
-            needResumeOnCallStateIdle = false
-            upReadAloudNotification()
-            upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
-            postEvent(EventBus.ALOUD_STATE, Status.PLAY)
-        } else if (isPlaying && stateChanged) {
+        if (isPlaying) {
+            preparationStage = PREPARATION_NONE
+        }
+        if (isPlaying && stateChanged) {
             postEvent(EventBus.ALOUD_STATE, Status.PLAY)
         }
+        return true
     }
 
     protected fun updatePreparationStage(stage: Int) {
@@ -664,6 +669,11 @@ abstract class BaseReadAloudService : BaseService(),
     /**
      * 定时
      */
+    protected fun notifySeamlessChapterChanged() {
+        postEvent(EventBus.READ_ALOUD_DS, timeMinute)
+        upReadAloudNotification()
+    }
+
     @Synchronized
     private fun doDs() {
         postEvent(EventBus.READ_ALOUD_DS, timeMinute)

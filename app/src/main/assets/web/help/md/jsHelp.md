@@ -1,13 +1,13 @@
 # js变量和函数
-> 阅读使用[Rhino v1.8.1](https://github.com/mozilla/rhino) 作为JavaScript引擎以便于[调用Java类和方法](https://m.jb51.net/article/92138.htm)，查看[ECMAScript兼容性表格](https://mozilla.github.io/rhino/compat/engines.html)　
+> 阅读使用 [HtmlUnit Core JS 5.3.0-legado.4](https://github.com/mgz0227/htmlunit-core-js/tree/3eb5071cdca4a357119d1063a53d5f2d47984ed2) 提供的 Rhino 兼容 JavaScript 引擎，以便于[调用Java类和方法](https://m.jb51.net/article/92138.htm)
 
-> [Rhino运行时](https://github.com/mozilla/rhino/blob/master/rhino/src/main/java/org/mozilla/javascript/ScriptRuntime.java)懒加载导入的Java类和方法
+> [JavaScript运行时](https://github.com/mgz0227/htmlunit-rhino-fork/blob/76460c0312bfd351df6f2bb11168102cdb54170a/rhino/src/main/java/org/mozilla/javascript/ScriptRuntime.java)懒加载导入的Java类和方法
 
 |构造函数|函数|对象|调用类|简要说明|
 |------|-----|------|----|------|
-|JavaImporter|importClass importPackage| |[ImporterTopLevel](https://github.com/mozilla/rhino/blob/master/rhino/src/main/java/org/mozilla/javascript/ImporterTopLevel.java)|导入Java类到JavaScript|
-||getClass|Packages java javax ...|[NativeJavaTopPackage](https://github.com/mozilla/rhino/blob/master/rhino/src/main/java/org/mozilla/javascript/NativeJavaTopPackage.java)|默认导入JavaScript中的Java类|
-|JavaAdapter|||[JavaAdapter](https://github.com/mozilla/rhino/blob/master/rhino/src/main/java//org/mozilla/javascript/JavaAdapter.java)|继承Java类|
+|JavaImporter|importClass importPackage| |[ImporterTopLevel](https://github.com/HtmlUnit/htmlunit-core-js/blob/master/src/main/java/org/htmlunit/corejs/javascript/ImporterTopLevel.java)|导入Java类到JavaScript|
+||getClass|Packages java javax ...|[NativeJavaTopPackage](https://github.com/HtmlUnit/htmlunit-core-js/blob/master/src/main/java/org/htmlunit/corejs/javascript/NativeJavaTopPackage.java)|默认导入JavaScript中的Java类|
+|JavaAdapter|||[JavaAdapter](https://github.com/HtmlUnit/htmlunit-core-js/blob/master/src/main/java/org/htmlunit/corejs/javascript/JavaAdapter.java)|继承Java类|
 
 > 注意`java`变量指向已经被阅读修改，如果想要调用`java.*`下的包，请使用`Packages.java.*`
 
@@ -29,7 +29,7 @@
 |chapter|[章节类](https://github.com/joestar817/legado_NG/blob/main/app/src/main/java/io/legado/app/data/entities/BookChapter.kt)|
 |source|[基础书源类](https://github.com/joestar817/legado_NG/blob/main/app/src/main/java/io/legado/app/data/entities/BaseSource.kt)|
 |cookie|[cookie操作类](https://github.com/joestar817/legado_NG/blob/main/app/src/main/java/io/legado/app/help/http/CookieStore.kt)|
-|cache|[缓存操作类](https://github.com/joestar817/legado_NG/blob/main/app/src/main/java/io/legado/app/help/CacheManager.kt)|
+|cache|[源共享缓存操作类](https://github.com/joestar817/legado_NG/blob/main/app/src/main/java/io/legado/app/help/source/SourceSharedCacheStore.kt)|
 |title|章节当前标题 String|
 |src| 请求返回的源码|
 |nextChapterUrl|下一章节url|
@@ -517,6 +517,8 @@ source.refreshExplore()
 source.refreshJSLib()
 ```
 ## cookie对象的部分可用函数
+
+> 在书源规则中，Cookie 按完整书源 URL 独立保存；同 URL 更新继续使用原登录状态，不同书源不会共享 Cookie。
 ```js
 获取全部cookie
 cookie.getCookie(url: String)
@@ -533,6 +535,8 @@ cookie.setWebCookie(url: String, cookie: String)
 ```
 
 ## cache对象的部分可用函数
+
+> 书源（含发现）与订阅源共享同一源级缓存；相同 key 可以跨源读写，但不能访问 App 内部缓存键。
 > saveTime单位:秒，可省略  
 > 保存至数据库和缓存文件(50M)，保存的内容较大时请使用`getFile putFile`
 ```js
@@ -567,3 +571,107 @@ java.openUrl(url: String, mimeType: String = null)
 * @param isFloat 是否悬浮窗打开
 java.openVideoPlayer(url: String, title: String, isFloat: Boolean = false)
 ```
+
+## JavaScript 单文件书源
+
+JavaScript 单文件书源使用一个 `.js` 文件描述书源。它与原有 JSON 规则书源并存，
+不使用 `ruleSearch`、`ruleBookInfo`、`ruleToc` 等声明式规则。
+
+### 基本结构
+
+脚本顶层必须提供 `config` 配置对象和 `search` 函数。文本、音频、图片与视频源还必须提供
+`getChapters`、`getContent`；文件源（`bookSourceType: 3`）必须提供 `getBookInfo`。
+`getBookInfo`、`explore` 和登录函数按配置与源类型决定是否需要。
+
+```js
+var config = {
+    bookSourceUrl: "https://example.com",
+    bookSourceName: "示例 JS 书源",
+    bookSourceType: 0,
+    bookSourceGroup: "",
+    exploreUrl: [
+        { title: "分类", url: "https://example.com/list" }
+    ],
+    lastUpdateTime: 0
+};
+
+function search(key, page) {
+    return [];
+}
+
+function explore(url, page) {
+    return [];
+}
+
+function getBookInfo(book) {
+    return { tocUrl: book.bookUrl };
+}
+
+function getChapters(book) {
+    return [];
+}
+
+function getContent(chapter, book, nextChapterUrl) {
+    return String(java.ajax(chapter.url) || "");
+}
+```
+
+保存或导入时，应用会先在不含 `java`、`source`、`sourceApi` 等运行时绑定的安全作用域中
+执行脚本，提取配置并检查函数。因此网络请求和其他运行时代码应写在函数内部，不要放在顶层。
+旧脚本可以继续使用顶层 `source` 作为配置对象，并通过 `sourceApi` 访问运行时书源；新脚本应使用
+`config`，运行时通过 `source` 访问登录信息、变量等能力。
+
+### 函数契约
+
+|函数|要求|返回值|
+|---|---|---|
+|`search(key, page)`|必选，页码从 1 开始|书籍数组|
+|`explore(url, page)`|`exploreUrl` 非空时必选|书籍数组|
+|`getBookInfo(book)`|文件源必选，其他类型可选|详情字段对象|
+|`getChapters(book)`|非文件源必选|非空章节数组|
+|`getContent(chapter, book, nextChapterUrl)`|非文件源必选|非空正文字符串|
+|`login()`|旧版表单登录配置非空时必选|失败时可抛出错误|
+|`loginUi(state)`|动态登录，与 `loginAction` 成对声明|`{rows:[...]}`|
+|`loginAction(action, state, form)`|动态登录，与 `loginUi` 成对声明|命令对象或空值|
+
+返回值可直接使用 JavaScript 对象／数组，也可以返回 `JSON.stringify(...)` 后的字符串。
+搜索结果至少需要非空 `name`、`bookUrl`；章节至少需要非空 `title`、`url`。
+详情允许返回 `name`、`author`、`intro`、`coverUrl`、`kind`、`wordCount`、
+`latestChapterTitle`、`tocUrl`、`variable`、`type` 和 `downloadUrls`。
+
+### 登录
+
+- WebView 登录：配置 `loginUrl`。
+- 静态表单登录：配置非空 `loginUi` 行数组，并实现 `login()`。
+- 动态登录：实现 `loginUi(state)` 与 `loginAction(action, state, form)`，不要再配置 `config.loginUi`。
+
+动态行支持 `text`、`password`、`label`、`select`、`toggle`、`button`。
+`loginAction` 可返回 `state`（重新渲染）、`error`（字段错误）、`login`（保存登录数据）和
+`close: true`（关闭弹窗）。
+
+### 运行环境与兼容
+
+函数运行时可使用 `java`、`source`、`sourceApi`、`baseUrl`、`cookie`、`cache` 和当前函数参数。
+Cookie、缓存、共享 `jsLib` 与文件访问均按完整书源 URL 隔离。内置 `CryptoJS` 可直接使用，例如：
+
+```js
+CryptoJS.MD5("text").toString();
+```
+
+`java.getQuickJsSandbox().evalString(script)` 用于 Rhino 语义无法兼容的少量纯 JavaScript
+计算。它会在全新的
+QuickJS 运行时中执行字符串，并只返回字符串；QuickJS 看不到 `java`、`source`、`cookie`、
+`cache`、`Packages`、网络或文件能力。该能力仅支持 Android 6.0 及以上，限制单次脚本不超过
+384000 个字符、结果不超过 65536 个字符，并受独立进程的内存、栈和执行时限保护。执行失败会
+直接抛错；单次执行最长 15 秒，超时会终止沙箱进程且不会降级到 Rhino。网络请求、Cookie 与
+缓存仍应由外层书源函数处理。
+
+每次业务调用都会建立局部作用域并重新执行主脚本。不要依赖顶层可变变量跨请求保存状态；
+持久状态请使用 `cache`、`source.put/get` 或书源变量。来自 Java 对象的方法返回值可能仍是
+Java 字符串包装对象，需要 JavaScript 字符串语义时先使用 `String(value)` 转换。
+
+### 导入与导出
+
+- 书源管理菜单可分别新建规则书源和 JavaScript 书源。
+- 本地 `.js`／`.txt`、在线脚本文本和直接粘贴的脚本均可导入。
+- 选择单个 JavaScript 书源导出或分享时生成 `.js` 原文；多选或混合选择时生成 JSON 容器。

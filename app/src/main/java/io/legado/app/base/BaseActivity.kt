@@ -12,6 +12,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.Window
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.annotation.RequiresApi
@@ -22,6 +23,9 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.NgDynamicSceneTheme
+import io.legado.app.help.config.NgThemeModeStore
+import io.legado.app.help.config.NgThemePresentationMode
 import io.legado.app.help.config.NgThemeRuntimeAssets
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.ThemeStore
@@ -29,6 +33,9 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.ui.book.read.aloud.ReadAloudMiniPlayer
+import io.legado.app.ui.design.theme.NgThemeGradientDrawable
+import io.legado.app.ui.design.theme.NgThemeGradientHostView
+import io.legado.app.ui.design.theme.NgThemeSceneHostView
 import io.legado.app.ui.design.theme.NgThemeResolver
 import io.legado.app.ui.widget.NgMenuPopup
 import io.legado.app.ui.widget.TitleBar
@@ -58,6 +65,10 @@ abstract class BaseActivity<VB : ViewBinding>(
     protected abstract val binding: VB
 
     protected open val bindNgToolbarMenu: Boolean = true
+
+    private var ngThemeSceneHost: NgThemeSceneHostView? = null
+    private var ngThemeScenePoster: ImageView? = null
+    private var ngThemeGradientBackground: NgThemeGradientHostView? = null
 
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
@@ -101,7 +112,7 @@ abstract class BaseActivity<VB : ViewBinding>(
         initTheme()
         super.onCreate(savedInstanceState)
         setupSystemBar()
-        setContentView(binding.root)
+        setContentView(createContentRoot(binding.root))
         upBackgroundImage()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             findViewById<TitleBar>(R.id.title_bar)
@@ -132,9 +143,74 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     abstract fun onActivityCreated(savedInstanceState: Bundle?)
 
+    private fun createContentRoot(content: View): View {
+        if (!imageBg) return content
+        val root = FrameLayout(this)
+        val sceneSource = FrameLayout(this).apply {
+            id = R.id.ng_liquid_glass_backdrop_source
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            isClickable = false
+            isFocusable = false
+        }
+        val scenePoster = ImageView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            isClickable = false
+            isFocusable = false
+            visibility = View.GONE
+        }
+        val gradientBackground = NgThemeGradientHostView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            )
+            scaleType = ImageView.ScaleType.FIT_XY
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            isClickable = false
+            isFocusable = false
+            visibility = View.GONE
+        }
+        val sceneHost = NgThemeSceneHostView(this)
+        sceneSource.addView(gradientBackground)
+        sceneSource.addView(scenePoster)
+        sceneSource.addView(
+            sceneHost,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        root.addView(
+            sceneSource,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        root.addView(
+            content,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        ngThemeScenePoster = scenePoster
+        ngThemeSceneHost = sceneHost
+        ngThemeGradientBackground = gradientBackground
+        return root
+    }
+
     final override fun onCreateOptionsMenu(menu: Menu): Boolean {
         val bool = onCompatCreateOptionsMenu(menu)
-        if (transparentNavBar) {
+        val titleBar = findViewById<TitleBar>(R.id.title_bar)
+        val titleBarContentColor = titleBar?.currentContentColor
+        if (titleBarContentColor != null) {
+            menu.applyTint(this, titleBarContentColor)
+        } else if (transparentNavBar) {
             menu.applyTint(this, NgThemeResolver.resolve(this).colors.onTopBar)
         } else {
             menu.applyTint(this, toolBarTheme)
@@ -151,6 +227,7 @@ abstract class BaseActivity<VB : ViewBinding>(
                 onItemClick = { onCompatOptionsItemSelected(it) }
             )
         }
+        titleBar?.refreshContentColor()
         return bool
     }
 
@@ -202,8 +279,38 @@ abstract class BaseActivity<VB : ViewBinding>(
     open fun upBackgroundImage() {
         if (imageBg) {
             try {
-                ThemeConfig.getBgImage(this, windowManager.windowSize)?.let { drawable ->
-                   window.decorView.background = drawable
+                val drawable = ThemeConfig.getBgImage(this, windowManager.windowSize)
+                val gradientDrawable = ThemeConfig.getGradientBgImage(this)
+                val usesDynamicScene =
+                    NgThemeModeStore.current(this) ==
+                        NgThemePresentationMode.DYNAMIC_SCENE
+                val scenePoster = ngThemeScenePoster
+                ngThemeGradientBackground?.run {
+                    setGradientDrawable(gradientDrawable as? NgThemeGradientDrawable)
+                    visibility = if (drawable == null && gradientDrawable != null) {
+                        View.VISIBLE
+                    } else {
+                        View.GONE
+                    }
+                }
+                if (drawable != null && scenePoster != null) {
+                    // Every image background belongs to the shared backdrop source. Dynamic scenes
+                    // use the renderer's center-cover geometry; static themes keep the old fill.
+                    window.decorView.setBackgroundColor(backgroundColor)
+                    scenePoster.scaleType = if (usesDynamicScene) {
+                        ImageView.ScaleType.CENTER_CROP
+                    } else {
+                        ImageView.ScaleType.FIT_XY
+                    }
+                    scenePoster.setImageDrawable(drawable)
+                    scenePoster.visibility = View.VISIBLE
+                } else {
+                    scenePoster?.setImageDrawable(null)
+                    scenePoster?.visibility = View.GONE
+                    drawable?.let { window.decorView.background = it }
+                }
+                if (gradientDrawable != null) {
+                    window.decorView.setBackgroundColor(backgroundColor)
                 }
             } catch (_: OutOfMemoryError) {
                 toastOnUi("背景图片太大,内存溢出")
@@ -243,20 +350,48 @@ abstract class BaseActivity<VB : ViewBinding>(
     }
 
     private fun observeReadAloudMiniPlayer() {
-        observeEvent<Int>(io.legado.app.constant.EventBus.ALOUD_STATE) {
-            ReadAloudMiniPlayer.refresh(this)
+        observeEvent<Int>(io.legado.app.constant.EventBus.ALOUD_STATE) { state ->
+            ReadAloudMiniPlayer.onReadAloudStateChanged(this, state)
         }
         observeEvent<Int>(io.legado.app.constant.EventBus.TTS_PROGRESS) {
             ReadAloudMiniPlayer.refresh(this)
+        }
+        observeEvent<Int>(io.legado.app.constant.EventBus.AUDIO_STATE) { state ->
+            ReadAloudMiniPlayer.onAudioStateChanged(this, state)
         }
     }
 
     override fun onResume() {
         super.onResume()
+        ngThemeGradientBackground?.setHostActive(true)
+        ngThemeSceneHost?.run {
+            val profile = if (
+                NgThemeModeStore.current(this@BaseActivity) ==
+                NgThemePresentationMode.DYNAMIC_SCENE
+            ) {
+                NgDynamicSceneTheme.sceneProfile(this@BaseActivity)
+            } else {
+                null
+            }
+            bind(profile)
+            setHostActive(profile != null)
+        }
         ReadAloudMiniPlayer.attach(this)
     }
 
+    override fun onPause() {
+        ngThemeGradientBackground?.setHostActive(false)
+        ngThemeSceneHost?.setHostActive(false)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        ngThemeGradientBackground?.setHostActive(false)
+        ngThemeSceneHost?.setHostActive(false)
+        ngThemeScenePoster?.setImageDrawable(null)
+        ngThemeScenePoster = null
+        ngThemeGradientBackground?.setGradientDrawable(null)
+        ngThemeGradientBackground = null
         ReadAloudMiniPlayer.detach(this)
         super.onDestroy()
     }

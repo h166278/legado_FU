@@ -310,7 +310,7 @@ data class TextPage(
     }
 
     fun draw(view: ContentTextView, canvas: Canvas, relativeOffset: Float) {
-        if (AppConfig.optimizeRender) {
+        if (AppConfig.optimizeRender && !view.hasTextHighlightNoteSpacers(this)) {
             render(view)
             canvas.withTranslation(0f, relativeOffset) {
                 canvasRecorder.draw(this)
@@ -348,6 +348,7 @@ data class TextPage(
 
     fun render(view: ContentTextView): Boolean {
         if (!isCompleted) return false
+        if (view.hasTextHighlightNoteSpacers(this)) return false
         return canvasRecorder.recordIfNeeded(view.width, renderHeight + 10.dpToPx()) { //高度留余，避免图片过高时被截断 下划线最远10dp
             drawPage(view, this)
         }
