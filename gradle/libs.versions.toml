@@ -1,7 +1,7 @@
 [versions]
 
-kotlin = "2.3.10"
-ksp = "2.3.4"
+kotlin = "2.4.10"
+ksp = "2.3.11"
 agp = "8.13.2"
 roborazzi = "1.59.0"
 robolectric = "4.16.1"
